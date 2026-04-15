@@ -7,7 +7,11 @@ from unittest.mock import patch
 
 import yaml
 
-from agent_reach.integrations.codex import export_codex_integration
+from agent_reach.integrations.codex import (
+    export_codex_integration,
+    render_codex_integration_powershell,
+    render_codex_integration_text,
+)
 
 
 def _repo_root() -> Path:
@@ -103,6 +107,19 @@ def test_export_runtime_minimal_omits_bootstrap_payloads():
     assert payload["channel_names"] == ["twitter"]
     assert any("--profile runtime-minimal" in command for command in payload["verification_commands"])
     assert any("runtime-minimal omits full channel contracts" in note for note in payload["notes"])
+
+
+def test_export_renderers_support_twitter_only_payload():
+    payload = export_codex_integration()
+
+    text = render_codex_integration_text(payload)
+    powershell = render_codex_integration_powershell(payload)
+
+    assert "Channels: twitter" in text
+    assert "agent-reach collect --channel twitter" in text
+    assert "$pluginManifestJson = @'" in powershell
+    assert "$mcpConfigJson = $null" in powershell
+    assert "agent-reach doctor --json --probe" in powershell
 
 
 def test_export_tool_install_omits_dead_paths(tmp_path):

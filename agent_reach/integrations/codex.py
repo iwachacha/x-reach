@@ -433,10 +433,94 @@ def export_codex_integration(profile: str = "full") -> dict[str, Any]:
     return payload
 
 
+def render_codex_integration_text(payload: dict[str, Any]) -> str:
+    """Render a human-readable integration summary."""
+
+    channel_names = [channel["name"] for channel in payload.get("channels", [])]
+    if not channel_names:
+        channel_names = list(payload.get("channel_names", []))
+
+    lines = [
+        "Agent Reach integration export for Codex on Windows",
+        "========================================",
+        "",
+        f"Execution context: {payload['execution_context']}",
+        f"Profile: {payload['profile']}",
+        f"Channels: {', '.join(channel_names) if channel_names else 'none'}",
+        "",
+    ]
+    plugin_manifest = payload.get("plugin_manifest")
+    suggested_destinations = payload.get("suggested_destinations", {})
+    if plugin_manifest:
+        lines.append(f"Plugin manifest: {plugin_manifest}")
+    elif suggested_destinations.get("plugin_manifest"):
+        lines.append("Plugin manifest: not bundled in this install")
+        lines.append(f"Suggested destination: {suggested_destinations['plugin_manifest']}")
+    else:
+        lines.append("Plugin manifest: unavailable")
+
+    lines.append(f"Skill source: {payload['skill']['source']}")
+    lines.append("Skill targets:")
+    for target in payload["skill"].get("targets", []):
+        lines.append(f"  {target}")
+
+    recommended_docs = payload.get("recommended_docs", [])
+    if recommended_docs:
+        lines.extend(["", "Recommended docs:"])
+        for path in recommended_docs:
+            lines.append(f"  {path}")
+    else:
+        lines.extend(["", "Documentation summary:"])
+        for line in payload.get("documentation_summary", []):
+            lines.append(f"  {line}")
+
+    lines.extend(["", "Required commands:"])
+    for command in payload.get("required_commands", []):
+        lines.append(f"  {command}")
+
+    lines.extend(["", "Verification commands:"])
+    for command in payload.get("verification_commands", []):
+        lines.append(f"  {command}")
+    return "\n".join(lines)
+
+
+def render_codex_integration_powershell(payload: dict[str, Any]) -> str:
+    """Render a PowerShell-oriented export snippet."""
+
+    skill_targets = ",\n".join(f'  "{target}"' for target in payload["skill"].get("targets", []))
+    plugin_manifest_json = json.dumps(payload.get("plugin_manifest_inline"), indent=2, ensure_ascii=False)
+    plugin_manifest_path = payload.get("plugin_manifest") or payload["suggested_destinations"]["plugin_manifest"]
+    return "\n".join(
+        [
+            "# Agent Reach integration export for Codex on Windows",
+            f'$executionContext = "{payload["execution_context"]}"',
+            f'$profile = "{payload["profile"]}"',
+            f'$pluginManifestPath = "{plugin_manifest_path}"',
+            f'$skillSource = "{payload["skill"]["source"]}"',
+            "$skillTargets = @(",
+            skill_targets,
+            ")",
+            "",
+            "# Write the inline plugin manifest if the file does not exist yet.",
+            "$pluginManifestJson = @'",
+            plugin_manifest_json,
+            "'@",
+            "",
+            "# This Twitter-only fork does not ship a repo-local .mcp.json payload.",
+            "$mcpConfigJson = $null",
+            "",
+            "# Verification commands",
+            *payload.get("verification_commands", []),
+        ]
+    )
+
+
 __all__ = [
     "FORK_REPO_URL",
     "INTEGRATION_PROFILES",
     "PACKAGED_SKILL_NAMES",
     "export_codex_integration",
+    "render_codex_integration_powershell",
+    "render_codex_integration_text",
     "packaged_skill_source",
 ]
