@@ -84,10 +84,11 @@ def test_export_points_at_existing_checkout_artifacts():
     assert all(Path(path).exists() for path in payload["recommended_docs"])
     channel_contracts = {channel["name"]: channel for channel in payload["channels"]}
     assert list(channel_contracts) == ["twitter"]
-    assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][0]["name"] == "since"
-    assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][1]["name"] == "until"
-    assert channel_contracts["twitter"]["probe_operations"] == ["user", "search"]
-    assert channel_contracts["twitter"]["probe_coverage"] == "partial"
+    assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][0]["name"] == "from"
+    assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][-1]["name"] == "min_views"
+    assert channel_contracts["twitter"]["operation_contracts"]["hashtag"]["input_kind"] == "hashtag"
+    assert channel_contracts["twitter"]["probe_operations"] == ["search", "hashtag", "user", "user_posts", "tweet"]
+    assert channel_contracts["twitter"]["probe_coverage"] == "full"
     assert payload["skill"]["names"]
     assert Path(payload["skill"]["source"]).exists()
     assert payload["python_sdk"]["availability"] == "project_env_only"
@@ -117,7 +118,7 @@ def test_export_renderers_support_twitter_only_payload():
     powershell = render_codex_integration_powershell(payload)
 
     assert "Channels: twitter" in text
-    assert "x-reach collect --channel twitter" in text
+    assert "x-reach collect --operation search" in text
     assert "$pluginManifestJson = @'" in powershell
     assert "$mcpConfigJson = $null" in powershell
     assert "x-reach doctor --json --probe" in powershell

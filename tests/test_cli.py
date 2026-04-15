@@ -124,6 +124,172 @@ class TestCLI:
         assert payload["ok"] is True
         assert payload["channel"] == "twitter"
 
+    def test_collect_defaults_to_twitter_and_passes_search_filters(self, capsys, monkeypatch):
+        captured = {}
+
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                captured["channel"] = channel
+                captured["kwargs"] = kwargs
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+
+        assert (
+            main(
+                [
+                    "collect",
+                    "--operation",
+                    "search",
+                    "--input",
+                    "OpenAI",
+                    "--from",
+                    "OpenAI",
+                    "--min-likes",
+                    "10",
+                    "--min-views",
+                    "1000",
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        assert captured["channel"] == "twitter"
+        assert captured["kwargs"]["from_user"] == "OpenAI"
+        assert captured["kwargs"]["min_likes"] == 10
+        assert captured["kwargs"]["min_views"] == 1000
+
+    def test_collect_passes_originals_only_for_user_posts(self, capsys, monkeypatch):
+        captured = {}
+
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                captured["channel"] = channel
+                captured["operation"] = operation
+                captured["kwargs"] = kwargs
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+
+        assert (
+            main(
+                [
+                    "collect",
+                    "--operation",
+                    "user_posts",
+                    "--input",
+                    "OpenAI",
+                    "--originals-only",
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        assert captured["channel"] == "twitter"
+        assert captured["operation"] == "user_posts"
+        assert captured["kwargs"]["originals_only"] is True
+
+    def test_search_shortcut_routes_to_collect(self, capsys, monkeypatch):
+        captured = {}
+
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                captured["channel"] = channel
+                captured["operation"] = operation
+                captured["value"] = value
+                captured["kwargs"] = kwargs
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+
+        assert main(["search", "OpenAI", "--min-views", "1000", "--json"]) == 0
+
+        assert captured["channel"] == "twitter"
+        assert captured["operation"] == "search"
+        assert captured["value"] == "OpenAI"
+        assert captured["kwargs"]["min_views"] == 1000
+
+    def test_hashtag_shortcut_routes_to_collect(self, capsys, monkeypatch):
+        captured = {}
+
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                captured["channel"] = channel
+                captured["operation"] = operation
+                captured["value"] = value
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+
+        assert main(["hashtag", "OpenAI", "--json"]) == 0
+
+        assert captured["channel"] == "twitter"
+        assert captured["operation"] == "hashtag"
+        assert captured["value"] == "OpenAI"
+
+    def test_posts_shortcut_routes_to_user_posts_with_originals_only(self, capsys, monkeypatch):
+        captured = {}
+
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                captured["channel"] = channel
+                captured["operation"] = operation
+                captured["value"] = value
+                captured["kwargs"] = kwargs
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+
+        assert main(["posts", "OpenAI", "--limit", "5", "--originals-only", "--json"]) == 0
+
+        assert captured["channel"] == "twitter"
+        assert captured["operation"] == "user_posts"
+        assert captured["value"] == "OpenAI"
+        assert captured["kwargs"]["limit"] == 5
+        assert captured["kwargs"]["originals_only"] is True
+
     def test_collect_unknown_channel_returns_exit_2(self, capsys, monkeypatch):
         class _FakeClient:
             def collect(self, channel, operation, value, **kwargs):

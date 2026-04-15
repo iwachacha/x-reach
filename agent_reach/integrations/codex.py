@@ -333,16 +333,16 @@ def _verification_commands(profile: str) -> list[str]:
         return [
             "x-reach channels --json",
             "x-reach doctor --json",
-            'x-reach collect --channel twitter --operation search --input "OpenAI" --limit 3 --json',
+            'x-reach collect --operation search --input "OpenAI" --limit 3 --json',
             "x-reach export-integration --client codex --format json --profile runtime-minimal",
         ]
     return [
         "x-reach channels --json",
         "x-reach doctor --json",
         "x-reach doctor --json --probe",
-        'x-reach collect --channel twitter --operation search --input "OpenAI" --limit 3 --json',
-        'x-reach collect --channel twitter --operation user --input "openai" --json',
-        'x-reach collect --channel twitter --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
+        'x-reach collect --operation search --input "OpenAI" --limit 3 --json',
+        'x-reach collect --operation user --input "openai" --json',
+        'x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
         "x-reach export-integration --client codex --format json",
         "x-reach export-integration --client codex --format json --profile runtime-minimal",
     ]

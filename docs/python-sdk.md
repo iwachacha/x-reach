@@ -30,6 +30,8 @@ from x_reach import XReachClient
 client = XReachClient()
 
 twitter_posts = client.twitter.user_posts("openai", limit=5)
+original_posts = client.twitter.user_posts("openai", limit=5, originals_only=True)
+hashtag_posts = client.twitter.hashtag("OpenAI", limit=5)
 windowed_search = client.collect(
     "twitter",
     "search",
@@ -38,9 +40,13 @@ windowed_search = client.collect(
     since="2026-01-01",
     until="2026-12-31",
 )
+quality_search = client.twitter.search(
+    "OpenAI",
+    min_likes=100,
+    min_views=10000,
+    has=["links"],
+)
 ```
-
-Legacy compatibility imports such as `from agent_reach import XReachClient` still work when a downstream project has not switched yet.
 
 If your host project only needs a machine-readable subprocess interface, prefer `x-reach collect --json`.
 

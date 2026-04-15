@@ -86,6 +86,130 @@ def _print_json(payload: object) -> None:
     print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
+def _add_collect_render_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--json", action="store_true", help="Print machine-readable collection output")
+    parser.add_argument(
+        "--max-text-chars",
+        type=int,
+        help="Show text snippets up to N characters in text mode only",
+    )
+    parser.add_argument(
+        "--item-text-mode",
+        choices=["full", "snippet", "none"],
+        help="Control normalized item text retention in CollectionResult output. Defaults to full",
+    )
+    parser.add_argument(
+        "--item-text-max-chars",
+        type=int,
+        help="When item-text-mode is snippet, keep at most N characters per item text. Defaults to 500",
+    )
+    parser.add_argument(
+        "--raw-mode",
+        choices=["full", "minimal", "none"],
+        default="full",
+        help="Control raw payload retention in printed and saved CollectionResult JSON. Defaults to full",
+    )
+    parser.add_argument(
+        "--raw-max-bytes",
+        type=int,
+        help="Replace raw with a preview summary when its UTF-8 JSON size exceeds N bytes",
+    )
+
+
+def _add_collect_persistence_args(parser: argparse.ArgumentParser) -> None:
+    collect_save_group = parser.add_mutually_exclusive_group()
+    collect_save_group.add_argument(
+        "--save",
+        help="Append the raw CollectionResult envelope to an evidence ledger JSONL file",
+    )
+    collect_save_group.add_argument(
+        "--save-dir",
+        help="Write one JSONL shard per collect execution; merge later with ledger merge",
+    )
+    parser.add_argument(
+        "--run-id",
+        help="Evidence ledger run ID. Defaults to AGENT_REACH_RUN_ID or a UTC timestamp",
+    )
+    parser.add_argument(
+        "--intent",
+        help="Optional evidence ledger intent label. Requires --save or --save-dir",
+    )
+    parser.add_argument(
+        "--query-id",
+        help="Optional evidence ledger query ID. Requires --save or --save-dir",
+    )
+    parser.add_argument(
+        "--source-role",
+        help="Optional evidence ledger source role label. Requires --save or --save-dir",
+    )
+
+
+def _add_search_filter_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--since", help="Optional lower time boundary for operations that support it")
+    parser.add_argument("--until", help="Optional upper time boundary for operations that support it")
+    parser.add_argument("--from", dest="from_user", help="Restrict search results to one author")
+    parser.add_argument("--to", dest="to_user", help="Restrict search results to one mentioned recipient")
+    parser.add_argument("--lang", help="Restrict search results to one language code")
+    parser.add_argument(
+        "--type",
+        dest="search_type",
+        choices=["top", "latest", "photos", "videos"],
+        help="Choose the search tab for twitter-cli backed searches",
+    )
+    parser.add_argument(
+        "--has",
+        action="append",
+        choices=["links", "images", "videos", "media"],
+        help="Require a content type. Repeat to require multiple.",
+    )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        choices=["retweets", "replies", "links"],
+        help="Exclude a content type. Repeat to exclude multiple.",
+    )
+    parser.add_argument("--min-likes", type=int, help="Minimum likes threshold for search")
+    parser.add_argument("--min-retweets", type=int, help="Minimum retweets threshold for search")
+    parser.add_argument("--min-views", type=int, help="Minimum views threshold applied after search")
+
+
+def _shortcut_collect_namespace(args, *, operation: str, input_value: str) -> argparse.Namespace:
+    return argparse.Namespace(
+        channel="twitter",
+        operation=operation,
+        input=input_value,
+        limit=getattr(args, "limit", None),
+        since=getattr(args, "since", None),
+        until=getattr(args, "until", None),
+        from_user=getattr(args, "from_user", None),
+        to_user=getattr(args, "to_user", None),
+        lang=getattr(args, "lang", None),
+        search_type=getattr(args, "search_type", None),
+        has=getattr(args, "has", None),
+        exclude=getattr(args, "exclude", None),
+        min_likes=getattr(args, "min_likes", None),
+        min_retweets=getattr(args, "min_retweets", None),
+        min_views=getattr(args, "min_views", None),
+        originals_only=getattr(args, "originals_only", False),
+        json=getattr(args, "json", False),
+        max_text_chars=getattr(args, "max_text_chars", None),
+        item_text_mode=getattr(args, "item_text_mode", None),
+        item_text_max_chars=getattr(args, "item_text_max_chars", None),
+        raw_mode=getattr(args, "raw_mode", "full"),
+        raw_max_bytes=getattr(args, "raw_max_bytes", None),
+        save=getattr(args, "save", None),
+        save_dir=getattr(args, "save_dir", None),
+        run_id=getattr(args, "run_id", None),
+        intent=getattr(args, "intent", None),
+        query_id=getattr(args, "query_id", None),
+        source_role=getattr(args, "source_role", None),
+    )
+
+
+def _cmd_shortcut_collect(args, *, operation: str, input_value: str) -> int:
+    return _cmd_collect(_shortcut_collect_namespace(args, operation=operation, input_value=input_value))
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="x-reach",
@@ -164,16 +288,49 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     p_collect = sub.add_parser("collect", help="Run a read-only collection operation")
-    p_collect.add_argument("--channel", required=True, help="Stable channel name")
+    p_collect.add_argument(
+        "--channel",
+        default="twitter",
+        help="Stable channel name. Defaults to twitter.",
+    )
     p_collect.add_argument("--operation", required=True, help="Supported operation for the channel")
-    p_collect.add_argument("--input", required=True, help="Input value such as a URL, repo, or query")
-    p_collect.add_argument("--limit", type=int, help="Optional item limit for search/read operations")
-    p_collect.add_argument("--page-size", type=int, help="Optional per-request page size for operations that support pagination")
-    p_collect.add_argument("--max-pages", type=int, help="Optional request-count guardrail for operations that support pagination")
-    p_collect.add_argument("--cursor", help="Optional backend continuation token for cursor-based operations")
-    p_collect.add_argument("--page", type=int, help="Optional starting page number for page-based operations")
+    p_collect.add_argument(
+        "--input",
+        required=True,
+        help="Input value such as a search query, profile handle, or tweet URL",
+    )
+    p_collect.add_argument("--limit", type=int, help="Optional item limit for returned tweets or replies")
     p_collect.add_argument("--since", help="Optional lower time boundary for operations that support it")
     p_collect.add_argument("--until", help="Optional upper time boundary for operations that support it")
+    p_collect.add_argument("--from", dest="from_user", help="Restrict search results to one author")
+    p_collect.add_argument("--to", dest="to_user", help="Restrict search results to one mentioned recipient")
+    p_collect.add_argument("--lang", help="Restrict search results to one language code")
+    p_collect.add_argument(
+        "--type",
+        dest="search_type",
+        choices=["top", "latest", "photos", "videos"],
+        help="Choose the search tab for twitter-cli backed searches",
+    )
+    p_collect.add_argument(
+        "--has",
+        action="append",
+        choices=["links", "images", "videos", "media"],
+        help="Require a content type. Repeat to require multiple.",
+    )
+    p_collect.add_argument(
+        "--exclude",
+        action="append",
+        choices=["retweets", "replies", "links"],
+        help="Exclude a content type. Repeat to exclude multiple.",
+    )
+    p_collect.add_argument("--min-likes", type=int, help="Minimum likes threshold for search")
+    p_collect.add_argument("--min-retweets", type=int, help="Minimum retweets threshold for search")
+    p_collect.add_argument("--min-views", type=int, help="Minimum views threshold applied after search")
+    p_collect.add_argument(
+        "--originals-only",
+        action="store_true",
+        help="Only keep authored posts for user_posts by filtering out retweets client-side",
+    )
     p_collect.add_argument("--json", action="store_true", help="Print machine-readable collection output")
     p_collect.add_argument(
         "--max-text-chars",
@@ -226,15 +383,42 @@ def _build_parser() -> argparse.ArgumentParser:
         "--source-role",
         help="Optional evidence ledger source role label. Requires --save or --save-dir",
     )
-    p_collect.add_argument(
-        "--body-mode",
-        choices=["none", "snippet", "full"],
-        help="Reserved operation-specific option for compatibility",
+
+    p_search = sub.add_parser("search", help="Shortcut for twitter search")
+    p_search.add_argument("query", help="Search query text")
+    p_search.add_argument("--limit", type=int, help="Optional item limit for returned tweets")
+    _add_search_filter_args(p_search)
+    _add_collect_render_args(p_search)
+    _add_collect_persistence_args(p_search)
+
+    p_hashtag = sub.add_parser("hashtag", help="Shortcut for twitter hashtag collection")
+    p_hashtag.add_argument("tag", help='Hashtag value with or without "#"')
+    p_hashtag.add_argument("--limit", type=int, help="Optional item limit for returned tweets")
+    _add_search_filter_args(p_hashtag)
+    _add_collect_render_args(p_hashtag)
+    _add_collect_persistence_args(p_hashtag)
+
+    p_user = sub.add_parser("user", help="Shortcut for twitter profile lookup")
+    p_user.add_argument("handle", help="Profile handle or URL")
+    _add_collect_render_args(p_user)
+    _add_collect_persistence_args(p_user)
+
+    p_posts = sub.add_parser("posts", help="Shortcut for twitter timeline lookup")
+    p_posts.add_argument("handle", help="Profile handle or URL")
+    p_posts.add_argument("--limit", type=int, help="Optional item limit for returned tweets")
+    p_posts.add_argument(
+        "--originals-only",
+        action="store_true",
+        help="Only keep authored posts by filtering out retweets client-side",
     )
-    p_collect.add_argument(
-        "--query",
-        help="Reserved operation-specific option for compatibility",
-    )
+    _add_collect_render_args(p_posts)
+    _add_collect_persistence_args(p_posts)
+
+    p_tweet = sub.add_parser("tweet", help="Shortcut for one tweet or thread lookup")
+    p_tweet.add_argument("value", help="Tweet URL or tweet ID")
+    p_tweet.add_argument("--limit", type=int, help="Optional item limit for returned tweets or replies")
+    _add_collect_render_args(p_tweet)
+    _add_collect_persistence_args(p_tweet)
 
     p_plan = sub.add_parser("plan", help="Build lightweight plans from evidence ledgers")
     plan_sub = p_plan.add_subparsers(dest="plan_command", help="Planning commands")
@@ -245,7 +429,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_candidates.add_argument("--input", required=True, help="Evidence ledger JSONL input path")
     p_candidates.add_argument(
         "--by",
-        choices=["url", "normalized_url", "id", "source_item_id", "domain", "repo"],
+        choices=["url", "normalized_url", "id", "source_item_id", "domain", "author", "post"],
         default="url",
         help="Dedupe mode. Defaults to URL, then falls back to source + id",
     )
@@ -435,6 +619,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _cmd_doctor(args)
     if args.command == "collect":
         return _cmd_collect(args)
+    if args.command == "search":
+        return _cmd_shortcut_collect(args, operation="search", input_value=args.query)
+    if args.command == "hashtag":
+        return _cmd_shortcut_collect(args, operation="hashtag", input_value=args.tag)
+    if args.command == "user":
+        return _cmd_shortcut_collect(args, operation="user", input_value=args.handle)
+    if args.command == "posts":
+        return _cmd_shortcut_collect(args, operation="user_posts", input_value=args.handle)
+    if args.command == "tweet":
+        return _cmd_shortcut_collect(args, operation="tweet", input_value=args.value)
     if args.command == "plan":
         return _cmd_plan(args)
     if args.command == "scout":
@@ -954,22 +1148,30 @@ def _cmd_collect(args) -> int:
     collect_kwargs = {}
     if args.limit is not None:
         collect_kwargs["limit"] = args.limit
-    if args.body_mode is not None:
-        collect_kwargs["body_mode"] = args.body_mode
-    if args.query is not None:
-        collect_kwargs["crawl_query"] = args.query
-    if args.page_size is not None:
-        collect_kwargs["page_size"] = args.page_size
-    if args.max_pages is not None:
-        collect_kwargs["max_pages"] = args.max_pages
-    if args.cursor is not None:
-        collect_kwargs["cursor"] = args.cursor
-    if args.page is not None:
-        collect_kwargs["page"] = args.page
     if args.since is not None:
         collect_kwargs["since"] = args.since
     if args.until is not None:
         collect_kwargs["until"] = args.until
+    if args.from_user is not None:
+        collect_kwargs["from_user"] = args.from_user
+    if args.to_user is not None:
+        collect_kwargs["to_user"] = args.to_user
+    if args.lang is not None:
+        collect_kwargs["lang"] = args.lang
+    if args.search_type is not None:
+        collect_kwargs["search_type"] = args.search_type
+    if args.has is not None:
+        collect_kwargs["has"] = args.has
+    if args.exclude is not None:
+        collect_kwargs["exclude"] = args.exclude
+    if args.min_likes is not None:
+        collect_kwargs["min_likes"] = args.min_likes
+    if args.min_retweets is not None:
+        collect_kwargs["min_retweets"] = args.min_retweets
+    if args.min_views is not None:
+        collect_kwargs["min_views"] = args.min_views
+    if getattr(args, "originals_only", False):
+        collect_kwargs["originals_only"] = True
     payload = client.collect(args.channel, args.operation, args.input, **collect_kwargs)
     try:
         payload = apply_item_text_mode(

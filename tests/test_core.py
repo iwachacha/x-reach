@@ -4,7 +4,6 @@
 import pytest
 
 from agent_reach.config import Config
-from agent_reach.core import AgentReach
 from x_reach.core import XReach, XReachClient
 
 
@@ -17,10 +16,6 @@ def eyes(tmp_path):
 class TestXReach:
     def test_init(self, eyes):
         assert eyes.config is not None
-
-    def test_legacy_core_alias_still_resolves(self, eyes):
-        legacy = AgentReach(config=eyes.config)
-        assert isinstance(legacy, XReachClient)
 
     def test_doctor(self, eyes):
         results = eyes.doctor()

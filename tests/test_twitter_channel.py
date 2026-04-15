@@ -23,7 +23,7 @@ def test_check_reports_warn_when_not_installed():
     assert "uv tool install twitter-cli" in message
     assert extra["probe_run_coverage"] == "not_run"
     assert extra["probed_operations"] == []
-    assert extra["unprobed_operations"] == ["search", "user", "user_posts", "tweet"]
+    assert extra["unprobed_operations"] == ["search", "hashtag", "user", "user_posts", "tweet"]
     assert extra["operation_statuses"]["search"]["status"] == "off"
 
 
@@ -52,7 +52,7 @@ def test_check_reports_warn_when_live_operations_are_unverified():
     assert extra["usability_hint"] == "authenticated_but_unprobed"
     assert extra["recommended_probe_command"] == "x-reach doctor --json --probe"
     assert extra["probe_run_coverage"] == "not_run"
-    assert extra["unprobed_operations"] == ["search", "user", "user_posts", "tweet"]
+    assert extra["unprobed_operations"] == ["search", "hashtag", "user", "user_posts", "tweet"]
     assert extra["operation_statuses"]["search"]["status"] == "unknown"
     assert extra["operation_statuses"]["search"]["usability_hint"] == "authenticated_but_unprobed"
 
@@ -130,18 +130,45 @@ def test_probe_uses_live_user_lookup():
             "meta": {"count": 1},
             "error": None,
         },
-    ) as mocked_search:
+    ) as mocked_search, patch(
+        "agent_reach.channels.twitter.TwitterAdapter.user_posts",
+        return_value={
+            "ok": True,
+            "channel": "twitter",
+            "operation": "user_posts",
+            "items": [{"id": "tweet-2", "url": "https://x.com/openai/status/2"}],
+            "raw": {"ok": True},
+            "meta": {"count": 1},
+            "error": None,
+        },
+    ) as mocked_user_posts, patch(
+        "agent_reach.channels.twitter.TwitterAdapter.tweet",
+        return_value={
+            "ok": True,
+            "channel": "twitter",
+            "operation": "tweet",
+            "items": [{"id": "tweet-2"}],
+            "raw": {"ok": True},
+            "meta": {"count": 1},
+            "error": None,
+        },
+    ) as mocked_tweet:
         status, message, extra = channel.probe_detailed()
 
     assert status == "ok"
-    assert "user lookup and search both succeeded" in message
-    assert extra["probe_run_coverage"] == "partial"
-    assert extra["probed_operations"] == ["user", "search"]
-    assert extra["unprobed_operations"] == ["user_posts", "tweet"]
+    assert "user posts lookup" in message
+    assert extra["probe_run_coverage"] == "full"
+    assert extra["probed_operations"] == ["search", "hashtag", "user", "user_posts", "tweet"]
+    assert extra["unprobed_operations"] == []
     assert extra["operation_statuses"]["user"]["status"] == "ok"
     assert extra["operation_statuses"]["search"]["status"] == "ok"
+    assert extra["operation_statuses"]["hashtag"]["status"] == "ok"
+    assert extra["operation_statuses"]["user_posts"]["status"] == "ok"
+    assert extra["operation_statuses"]["tweet"]["status"] == "ok"
     mocked_user.assert_called_once_with("openai")
     mocked_search.assert_called_once_with("OpenAI", limit=1)
+    mocked_user_posts.assert_called_once_with("openai", limit=1)
+    mocked_tweet.assert_called_once_with("https://x.com/openai/status/2", limit=1)
 
 
 def test_probe_reports_search_failure_separately_from_live_user_lookup():
@@ -178,14 +205,37 @@ def test_probe_reports_search_failure_separately_from_live_user_lookup():
                 "details": {"returncode": 1},
             },
         },
+    ), patch(
+        "agent_reach.channels.twitter.TwitterAdapter.user_posts",
+        return_value={
+            "ok": True,
+            "channel": "twitter",
+            "operation": "user_posts",
+            "items": [{"id": "tweet-2", "url": "https://x.com/openai/status/2"}],
+            "raw": {"ok": True},
+            "meta": {"count": 1},
+            "error": None,
+        },
+    ), patch(
+        "agent_reach.channels.twitter.TwitterAdapter.tweet",
+        return_value={
+            "ok": True,
+            "channel": "twitter",
+            "operation": "tweet",
+            "items": [{"id": "tweet-2"}],
+            "raw": {"ok": True},
+            "meta": {"count": 1},
+            "error": None,
+        },
     ):
         status, message, extra = channel.probe_detailed()
 
     assert status == "warn"
-    assert "Live user lookup succeeded, but live search failed" in message
-    assert extra["probe_run_coverage"] == "partial"
-    assert extra["probed_operations"] == ["user", "search"]
-    assert extra["unprobed_operations"] == ["user_posts", "tweet"]
+    assert "search=not_found" in message
+    assert extra["probe_run_coverage"] == "full"
+    assert extra["probed_operations"] == ["search", "hashtag", "user", "user_posts", "tweet"]
+    assert extra["unprobed_operations"] == []
     assert extra["operation_statuses"]["user"]["status"] == "ok"
     assert extra["operation_statuses"]["search"]["error_code"] == "not_found"
+    assert extra["operation_statuses"]["hashtag"]["error_code"] == "not_found"
 

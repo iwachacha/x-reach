@@ -15,7 +15,7 @@ x-reach skill --install
 x-reach channels --json
 x-reach doctor --json
 x-reach doctor --json --probe
-x-reach collect --channel twitter --operation search --input "OpenAI" --limit 3 --json
+x-reach collect --operation search --input "OpenAI" --limit 3 --json
 x-reach export-integration --client codex --format json --profile runtime-minimal
 ```
 

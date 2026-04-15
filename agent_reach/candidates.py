@@ -71,7 +71,7 @@ def build_candidates_payload(
 ) -> dict[str, Any]:
     """Read evidence JSONL and return a deduped candidate payload."""
 
-    if by not in {"url", "normalized_url", "id", "source_item_id", "domain", "repo"}:
+    if by not in {"url", "normalized_url", "id", "source_item_id", "domain", "author", "post"}:
         raise CandidatePlanError(f"Unsupported dedupe mode: {by}")
     if limit < 1:
         raise CandidatePlanError("limit must be greater than or equal to 1")
@@ -376,7 +376,8 @@ def _dedupe_key(
     url = _normalized_url(item)
     source_item_id = item.get("source_item_id") or item_id
     domain = _identifier_value(item, "domain")
-    repo = _identifier_value(item, "repo_full_name")
+    author_handle = _identifier_value(item, "author_handle") or item.get("author")
+    post_id = _identifier_value(item, "post_id") or source_item_id
     if by == "id":
         if item_id:
             return f"id:{source}:{item_id}"
@@ -391,9 +392,13 @@ def _dedupe_key(
         if domain:
             return f"domain:{domain}"
         return None
-    if by == "repo":
-        if repo:
-            return f"repo:{repo}"
+    if by == "author":
+        if author_handle:
+            return f"author:{source}:{author_handle}"
+        return None
+    if by == "post":
+        if post_id:
+            return f"post:{source}:{post_id}"
         return None
     if by == "normalized_url":
         if url:

@@ -42,16 +42,8 @@ class Config:
     def load(self) -> None:
         """Load config from YAML file."""
 
-        load_path = self.config_path
-        if (
-            self.config_path == self.CONFIG_FILE
-            and not self.config_path.exists()
-            and self.legacy_config_path.exists()
-        ):
-            load_path = self.legacy_config_path
-
-        if load_path.exists():
-            with open(load_path, "r", encoding="utf-8") as handle:
+        if self.config_path.exists():
+            with open(self.config_path, "r", encoding="utf-8") as handle:
                 self.data = yaml.safe_load(handle) or {}
         else:
             self.data = {}

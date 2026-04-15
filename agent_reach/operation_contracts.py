@@ -91,17 +91,36 @@ def validate_operation_options(
             )
 
         choices = descriptor.get("choices")
-        if value is not None and choices and value not in choices:
-            raise OperationContractError(
-                code="invalid_input",
-                message=f"{descriptor['name']} must be one of: {', '.join(str(choice) for choice in choices)}",
-                details={
-                    "option": descriptor["name"],
-                    "choices": list(choices),
-                    "value": value,
-                    "operation": f"{channel}:{operation}",
-                },
-            )
+        if value is not None and choices:
+            if descriptor.get("repeatable"):
+                values = value if isinstance(value, (list, tuple, set)) else [value]
+                invalid = [item for item in values if item not in choices]
+                if invalid:
+                    raise OperationContractError(
+                        code="invalid_input",
+                        message=(
+                            f"{descriptor['name']} must only include: "
+                            f"{', '.join(str(choice) for choice in choices)}"
+                        ),
+                        details={
+                            "option": descriptor["name"],
+                            "choices": list(choices),
+                            "value": value,
+                            "invalid_values": invalid,
+                            "operation": f"{channel}:{operation}",
+                        },
+                    )
+            elif value not in choices:
+                raise OperationContractError(
+                    code="invalid_input",
+                    message=f"{descriptor['name']} must be one of: {', '.join(str(choice) for choice in choices)}",
+                    details={
+                        "option": descriptor["name"],
+                        "choices": list(choices),
+                        "value": value,
+                        "operation": f"{channel}:{operation}",
+                    },
+                )
 
         minimum = descriptor.get("minimum")
         if value is not None and minimum is not None:
@@ -136,11 +155,20 @@ def batch_option_values(query: dict[str, Any]) -> dict[str, Any]:
     """Extract operation-specific option values from a normalized batch query."""
 
     options: dict[str, Any] = {}
-    if "body_mode" in query:
-        options["body_mode"] = query.get("body_mode")
-    if "crawl_query" in query or "query" in query:
-        options["crawl_query"] = query.get("crawl_query") if query.get("crawl_query") is not None else query.get("query")
-    for key in ("page_size", "max_pages", "cursor", "page", "since", "until"):
+    for key in (
+        "since",
+        "until",
+        "from_user",
+        "to_user",
+        "lang",
+        "search_type",
+        "has",
+        "exclude",
+        "min_likes",
+        "min_retweets",
+        "min_views",
+        "originals_only",
+    ):
         if key in query:
             options[key] = query.get(key)
     return options

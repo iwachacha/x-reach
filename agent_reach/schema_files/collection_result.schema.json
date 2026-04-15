@@ -6,7 +6,7 @@
   "additionalProperties": true,
   "required": [
     "schema_version",
-    "agent_reach_version",
+    "x_reach_version",
     "ok",
     "channel",
     "operation",
@@ -19,7 +19,7 @@
     "schema_version": {
       "type": "string"
     },
-    "agent_reach_version": {
+    "x_reach_version": {
       "type": "string"
     },
     "ok": {
@@ -138,11 +138,7 @@
               "replies",
               "quotes",
               "views",
-              "bookmarks",
-              "points",
-              "comments",
-              "stars",
-              "forks"
+              "bookmarks"
             ]
           }
         },

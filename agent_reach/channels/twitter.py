@@ -17,51 +17,145 @@ from .base import Channel
 PROBE_USER = "openai"
 PROBE_SEARCH_QUERY = "OpenAI"
 
+_SEARCH_OPERATION_OPTIONS = [
+    {
+        "name": "from",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--from",
+        "sdk_kwarg": "from_user",
+        "description": "Only include tweets from this account.",
+    },
+    {
+        "name": "to",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--to",
+        "sdk_kwarg": "to_user",
+        "description": "Only include tweets directed at this account.",
+    },
+    {
+        "name": "lang",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--lang",
+        "sdk_kwarg": "lang",
+        "description": "Restrict search to one language code such as en or ja.",
+    },
+    {
+        "name": "type",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--type",
+        "sdk_kwarg": "search_type",
+        "choices": ["top", "latest", "photos", "videos"],
+        "description": "Choose the twitter-cli search tab.",
+    },
+    {
+        "name": "has",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--has",
+        "repeatable": True,
+        "choices": ["links", "images", "videos", "media"],
+        "description": "Require one or more content types.",
+    },
+    {
+        "name": "exclude",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--exclude",
+        "repeatable": True,
+        "choices": ["retweets", "replies", "links"],
+        "description": "Exclude one or more content types.",
+    },
+    {
+        "name": "since",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--since",
+        "sdk_kwarg": "since",
+        "description": "Lower date bound forwarded to twitter-cli search.",
+    },
+    {
+        "name": "until",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--until",
+        "sdk_kwarg": "until",
+        "description": "Upper date bound forwarded to twitter-cli search.",
+    },
+    {
+        "name": "min_likes",
+        "type": "integer",
+        "required": False,
+        "cli_flag": "--min-likes",
+        "sdk_kwarg": "min_likes",
+        "minimum": 0,
+        "description": "Minimum likes forwarded to twitter-cli search.",
+    },
+    {
+        "name": "min_retweets",
+        "type": "integer",
+        "required": False,
+        "cli_flag": "--min-retweets",
+        "sdk_kwarg": "min_retweets",
+        "minimum": 0,
+        "description": "Minimum retweets forwarded to twitter-cli search.",
+    },
+    {
+        "name": "min_views",
+        "type": "integer",
+        "required": False,
+        "cli_flag": "--min-views",
+        "sdk_kwarg": "min_views",
+        "minimum": 0,
+        "description": "Minimum views applied after search as a client-side post-filter.",
+    },
+]
+
 
 class TwitterChannel(Channel):
     name = "twitter"
-    description = "Twitter/X search, profiles, posts, and tweet threads"
+    description = "Twitter/X search, hashtags, profiles, posts, and tweet threads"
     backends = ["twitter-cli"]
     auth_kind = "cookie"
     entrypoint_kind = "cli"
-    operations = ["search", "user", "user_posts", "tweet"]
+    operations = ["search", "hashtag", "user", "user_posts", "tweet"]
     operation_inputs = {
         "search": "query",
+        "hashtag": "hashtag",
         "user": "profile",
         "user_posts": "profile",
         "tweet": "post",
     }
     operation_options = {
-        "search": [
+        "search": list(_SEARCH_OPERATION_OPTIONS),
+        "hashtag": list(_SEARCH_OPERATION_OPTIONS),
+        "user_posts": [
             {
-                "name": "since",
-                "type": "string",
+                "name": "originals_only",
+                "type": "boolean",
                 "required": False,
-                "cli_flag": "--since",
-                "sdk_kwarg": "since",
-                "description": "Lower date bound forwarded to twitter-cli search.",
-            },
-            {
-                "name": "until",
-                "type": "string",
-                "required": False,
-                "cli_flag": "--until",
-                "sdk_kwarg": "until",
-                "description": "Upper date bound forwarded to twitter-cli search.",
-            },
-        ]
+                "cli_flag": "--originals-only",
+                "description": "Filter timeline results down to authored posts by removing retweets client-side.",
+            }
+        ],
     }
     required_commands = ["twitter"]
     host_patterns = ["https://x.com/*", "https://twitter.com/*"]
     example_invocations = [
-        'x-reach collect --channel twitter --operation search --input "gpt-5.4" --limit 10 --json',
-        'x-reach collect --channel twitter --operation user --input "openai" --json',
-        'x-reach collect --channel twitter --operation user_posts --input "openai" --limit 20 --json',
-        'x-reach collect --channel twitter --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
+        'x-reach hashtag "OpenAI" --limit 10 --json',
+        'x-reach collect --operation search --input "gpt-5.4" --limit 10 --json',
+        'x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json',
+        'x-reach collect --operation user --input "openai" --json',
+        'x-reach collect --operation user_posts --input "openai" --limit 20 --originals-only --json',
+        'x-reach collect --operation user_posts --input "openai" --limit 20 --json',
+        'x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
         'twitter status',
     ]
     supports_probe = True
-    probe_operations = ["user", "search"]
+    probe_operations = ["search", "hashtag", "user", "user_posts", "tweet"]
     install_hints = [
         "Install twitter-cli with uv tool install twitter-cli.",
         'Configure cookies with x-reach configure twitter-cookies "auth_token=...; ct0=...".',
@@ -225,12 +319,15 @@ class TwitterChannel(Channel):
         try:
             user_payload = adapter.user(PROBE_USER)
             search_payload = adapter.search(PROBE_SEARCH_QUERY, limit=1)
+            user_posts_payload = adapter.user_posts(PROBE_USER, limit=1)
         except Exception as exc:
             return "warn", f"twitter-cli is installed but the live Twitter probes crashed: {exc}", {
                 **self._probe_state(probe_run_coverage="not_run"),
                 "probe_inputs": {
                     "user": PROBE_USER,
                     "search": PROBE_SEARCH_QUERY,
+                    "hashtag": f"#{PROBE_SEARCH_QUERY}",
+                    "user_posts": PROBE_USER,
                 },
             }
 
@@ -247,13 +344,53 @@ class TwitterChannel(Channel):
             success_message="Live search succeeded via twitter-cli",
             empty_message="Live search completed but returned zero items for the probe query",
         )
+        search_status = operation_statuses["search"]
+        operation_statuses["hashtag"] = {
+            **search_status,
+            "message": (
+                "Live hashtag collection shares the twitter-cli search path; "
+                + ("search probe succeeded" if search_status.get("status") == "ok" else "search probe did not succeed")
+            ),
+        }
+        operation_statuses["user_posts"] = self._operation_status_from_result(
+            user_posts_payload,
+            success_message="Live user posts lookup succeeded via twitter-cli",
+            empty_message="Live user posts lookup completed but returned zero items for the probe user",
+        )
 
-        if user_payload["ok"] and search_payload["ok"] and search_payload.get("items"):
-            return "ok", "Live user lookup and search both succeeded via twitter-cli", {
-                **self._probe_state(probe_run_coverage="partial"),
+        probe_tweet_input = _probe_tweet_input(user_posts_payload)
+        tweet_payload: CollectionResult | None = None
+        if probe_tweet_input is None:
+            operation_statuses["tweet"] = {
+                "status": "warn",
+                "message": "Tweet probe was skipped because user_posts did not return a probe tweet.",
+                "error_code": "probe_dependency_failed",
+            }
+        else:
+            try:
+                tweet_payload = adapter.tweet(probe_tweet_input, limit=1)
+            except Exception as exc:
+                operation_statuses["tweet"] = {
+                    "status": "warn",
+                    "message": f"Live tweet probe crashed: {exc}",
+                    "error_code": "probe_crashed",
+                }
+            else:
+                operation_statuses["tweet"] = self._operation_status_from_result(
+                    tweet_payload,
+                    success_message="Live tweet lookup succeeded via twitter-cli",
+                    empty_message="Live tweet lookup completed but returned zero items for the probe tweet",
+                )
+
+        if all(operation_statuses[operation]["status"] == "ok" for operation in self.operations):
+            return "ok", "Live search, hashtag lookup, user lookup, user posts lookup, and tweet lookup all succeeded via twitter-cli", {
+                **self._probe_state(probe_run_coverage="full"),
                 "probe_inputs": {
                     "user": PROBE_USER,
                     "search": PROBE_SEARCH_QUERY,
+                    "hashtag": f"#{PROBE_SEARCH_QUERY}",
+                    "user_posts": PROBE_USER,
+                    "tweet": probe_tweet_input,
                 },
                 "operation_statuses": operation_statuses,
             }
@@ -270,56 +407,67 @@ class TwitterChannel(Channel):
         )
         user_code = user_error.get("code") or ""
         search_code = search_error.get("code") or ""
-        if user_code == "not_authenticated" and search_code in {"", "not_authenticated"}:
+        user_posts_error: CollectionError = user_posts_payload.get("error") or build_error(
+            code="",
+            message="",
+            details={},
+        )
+        user_posts_code = user_posts_error.get("code") or ""
+        hashtag_code = search_code
+        tweet_error: CollectionError = (
+            tweet_payload.get("error")
+            if isinstance(tweet_payload, dict)
+            else build_error(code="", message="", details={})
+        ) or build_error(code="", message="", details={})
+        tweet_code = tweet_error.get("code") or ""
+        auth_codes = {code for code in (user_code, search_code, hashtag_code, user_posts_code, tweet_code) if code}
+        if auth_codes and auth_codes.issubset({"not_authenticated"}):
             return "warn", (
                 "twitter-cli is installed but live Twitter probes are not authenticated. "
                 "Run x-reach configure twitter-cookies \"auth_token=...; ct0=...\""
             ), {
-                **self._probe_state(probe_run_coverage="partial"),
+                **self._probe_state(probe_run_coverage="full"),
                 "probe_inputs": {
                     "user": PROBE_USER,
                     "search": PROBE_SEARCH_QUERY,
+                    "hashtag": f"#{PROBE_SEARCH_QUERY}",
+                    "user_posts": PROBE_USER,
+                    "tweet": probe_tweet_input,
                 },
                 "operation_statuses": operation_statuses,
             }
 
-        if user_payload["ok"] and not search_payload["ok"]:
-            return "warn", (
-                "Live user lookup succeeded, but live search failed "
-                f"({search_code or 'command_failed'}): {search_error.get('message') or 'search failed'}"
-            ), {
-                **self._probe_state(probe_run_coverage="partial"),
-                "probe_inputs": {
-                    "user": PROBE_USER,
-                    "search": PROBE_SEARCH_QUERY,
-                },
-                "operation_statuses": operation_statuses,
-            }
-
-        if search_payload["ok"] and not user_payload["ok"]:
-            return "warn", (
-                "Live search succeeded, but live user lookup failed "
-                f"({user_code or 'command_failed'}): {user_error.get('message') or 'user lookup failed'}"
-            ), {
-                **self._probe_state(probe_run_coverage="partial"),
-                "probe_inputs": {
-                    "user": PROBE_USER,
-                    "search": PROBE_SEARCH_QUERY,
-                },
-                "operation_statuses": operation_statuses,
-            }
-
+        failed_operations = [
+            f"{operation}={status.get('error_code') or status.get('status')}"
+            for operation, status in operation_statuses.items()
+            if status.get("status") != "ok"
+        ]
         return "warn", (
-            "twitter-cli is installed but live user lookup and search both failed. "
-            f"user={user_code or 'command_failed'}, search={search_code or 'command_failed'}"
+            "twitter-cli is installed but one or more live Twitter probes failed. "
+            + ", ".join(failed_operations)
         ), {
-            **self._probe_state(probe_run_coverage="partial"),
+            **self._probe_state(probe_run_coverage="full"),
             "probe_inputs": {
                 "user": PROBE_USER,
                 "search": PROBE_SEARCH_QUERY,
+                "hashtag": f"#{PROBE_SEARCH_QUERY}",
+                "user_posts": PROBE_USER,
+                "tweet": probe_tweet_input,
             },
             "operation_statuses": operation_statuses,
         }
+
+
+def _probe_tweet_input(payload: CollectionResult) -> str | None:
+    items = payload.get("items") or []
+    if not items:
+        return None
+    item = items[0]
+    if item.get("url"):
+        return str(item["url"])
+    if item.get("id"):
+        return str(item["id"])
+    return None
 
 
 def _twitter_runtime_env(config=None) -> dict[str, str]:

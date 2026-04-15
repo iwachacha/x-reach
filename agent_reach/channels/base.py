@@ -8,11 +8,10 @@ from typing import Any, List, Tuple
 
 _DEFAULT_INPUT_KINDS = {
     "search": "query",
-    "read": "resource",
+    "hashtag": "hashtag",
     "user": "profile",
     "user_posts": "profile",
     "tweet": "post",
-    "crawl": "url",
 }
 
 

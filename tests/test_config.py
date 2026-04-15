@@ -51,7 +51,9 @@ class TestConfig:
         assert config2.get("key1") == "value1"
         assert config2.get("key2") == 42
 
-    def test_default_location_falls_back_to_legacy_config(self, tmp_path, monkeypatch):
+    def test_default_location_does_not_fall_back_to_legacy_config(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("TWITTER_AUTH_TOKEN", raising=False)
+        monkeypatch.delenv("AUTH_TOKEN", raising=False)
         config_dir = tmp_path / ".x-reach"
         config_file = config_dir / "config.yaml"
         legacy_dir = tmp_path / ".agent-reach"
@@ -67,7 +69,7 @@ class TestConfig:
         config = Config()
 
         assert config.config_path == config_file
-        assert config.get("twitter_auth_token") == "legacy-token"
+        assert config.get("twitter_auth_token") is None
 
     def test_delete(self, tmp_config):
         tmp_config.set("to_delete", "value")

@@ -1,7 +1,9 @@
-﻿# -*- coding: utf-8 -*-
-"""Backward-compatible core exports for legacy Agent Reach imports."""
+# -*- coding: utf-8 -*-
+"""Legacy core aliases kept for internal compatibility."""
 
-from agent_reach.client import AgentReach, AgentReachClient, XReach, XReachClient
+from x_reach.core import XReach, XReachClient
+
+AgentReach = XReach
+AgentReachClient = XReachClient
 
 __all__ = ["AgentReach", "AgentReachClient", "XReach", "XReachClient"]
-

@@ -76,17 +76,21 @@ x-reach export-integration --client codex --format json --profile runtime-minima
 ## Read-only collection smoke commands
 
 ```powershell
-x-reach collect --channel twitter --operation search --input "OpenAI" --limit 5 --json
-x-reach collect --channel twitter --operation user --input "openai" --json
-x-reach collect --channel twitter --operation user_posts --input "openai" --limit 20 --json
-x-reach collect --channel twitter --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
-x-reach collect --channel twitter --operation search --input "OpenAI" --limit 5 --since 2026-01-01 --until 2026-12-31 --json
+x-reach search "OpenAI" --limit 5 --json
+x-reach hashtag "OpenAI" --limit 5 --json
+x-reach collect --operation search --input "OpenAI" --limit 5 --json
+x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json
+x-reach collect --operation user --input "openai" --json
+x-reach posts "openai" --limit 20 --originals-only --json
+x-reach collect --operation user_posts --input "openai" --limit 20 --json
+x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
+x-reach collect --operation search --input "OpenAI" --limit 5 --since 2026-01-01 --until 2026-12-31 --json
 ```
 
 ## Ledger diagnostics
 
 ```powershell
-x-reach collect --channel twitter --operation search --input "OpenAI" --limit 5 --json --save-dir .x-reach/shards --run-id external-run --intent discovery --query-id twitter-openai --source-role social_search
+x-reach collect --operation search --input "OpenAI" --limit 5 --json --save-dir .x-reach/shards --run-id external-run --intent discovery --query-id twitter-openai --source-role social_search
 x-reach ledger merge --input .x-reach/shards --output .x-reach/evidence.jsonl --json
 x-reach ledger validate --input .x-reach/evidence.jsonl --json
 x-reach ledger summarize --input .x-reach/evidence.jsonl --json

@@ -14,22 +14,22 @@ from agent_reach.results import (
 def test_build_item_and_result_shape():
     item = build_item(
         item_id="item-1",
-        kind="page",
-        title="Example",
-        url="https://example.com",
+        kind="post",
+        title="Tweet",
+        url="https://x.com/OpenAI/status/1",
         text="hello",
-        author="alice",
+        author="OpenAI",
         published_at="2026-04-10T00:00:00Z",
-        source="web",
-        extras={"reader_url": "https://r.jina.ai/https://example.com"},
+        source="twitter",
+        extras={"author_handle": "OpenAI"},
     )
     payload = build_result(
         ok=True,
-        channel="web",
-        operation="read",
+        channel="twitter",
+        operation="tweet",
         items=[item],
         raw={"ok": True},
-        meta={"input": "https://example.com"},
+        meta={"input": "https://x.com/OpenAI/status/1"},
         error=None,
     )
 
@@ -51,7 +51,7 @@ def test_build_item_and_result_shape():
     }
     assert set(payload) == {
         "schema_version",
-        "agent_reach_version",
+        "x_reach_version",
         "ok",
         "channel",
         "operation",
@@ -61,11 +61,11 @@ def test_build_item_and_result_shape():
         "error",
     }
     assert payload["schema_version"]
-    assert payload["agent_reach_version"]
+    assert payload["x_reach_version"]
     assert payload["meta"]["schema_version"]
-    assert item["canonical_url"] == "https://example.com"
+    assert item["canonical_url"] == "https://x.com/OpenAI/status/1"
     assert item["source_item_id"] == "item-1"
-    assert item["identifiers"] == {"domain": "example.com"}
+    assert item["identifiers"] == {"domain": "x.com", "author_handle": "OpenAI"}
     assert payload["meta"]["count"] == 1
 
 
@@ -81,33 +81,51 @@ def test_build_error_shape():
     }
 
 
-def test_build_item_normalizes_engagement_media_and_identifiers():
+def test_build_item_normalizes_x_engagement_media_and_identifiers():
     item = build_item(
-        item_id="repo-1",
-        kind="repository",
-        title="Repo",
-        url="HTTPS://GitHub.com/OpenAI/Example/#readme",
+        item_id="tweet-1",
+        kind="post",
+        title="Tweet",
+        url="https://twitter.com/OpenAI/status/1",
         text=None,
-        author="openai",
+        author="OpenAI",
         published_at=None,
-        source="github",
+        source="twitter",
         extras={
-            "repo_full_name": "OpenAI/Example",
-            "stars": "1,234",
-            "forks": 5,
+            "author_handle": "OpenAI",
+            "post_id": "1",
+            "likes": "1,234",
+            "views": 5,
             "media_references": [{"type": "image", "url": "https://example.com/a.png"}],
         },
-        source_item_id="OpenAI/Example",
+        source_item_id="1",
     )
 
-    assert item["canonical_url"] == "https://github.com/OpenAI/Example"
-    assert item["source_item_id"] == "OpenAI/Example"
-    assert item["engagement"] == {"stars": 1234, "forks": 5}
+    assert item["canonical_url"] == "https://x.com/OpenAI/status/1"
+    assert item["source_item_id"] == "1"
+    assert item["engagement"] == {"likes": 1234, "views": 5}
     assert item["media_references"] == [{"type": "image", "url": "https://example.com/a.png"}]
     assert item["identifiers"] == {
-        "domain": "github.com",
-        "repo_full_name": "OpenAI/Example",
+        "domain": "x.com",
+        "author_handle": "OpenAI",
+        "post_id": "1",
     }
+
+
+def test_build_item_canonicalizes_twitter_domains_to_x():
+    item = build_item(
+        item_id="tweet-1",
+        kind="post",
+        title="Tweet",
+        url="https://twitter.com/OpenAI/status/1",
+        text=None,
+        author="OpenAI",
+        published_at=None,
+        source="twitter",
+    )
+
+    assert item["canonical_url"] == "https://x.com/OpenAI/status/1"
+    assert item["identifiers"] == {"domain": "x.com"}
 
 
 def test_apply_raw_mode_can_minimize_or_truncate_raw_payload():

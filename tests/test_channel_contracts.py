@@ -15,15 +15,40 @@ def test_channel_registry_contract():
     assert contract["backends"] == ["twitter-cli"]
     assert contract["auth_kind"] == "cookie"
     assert contract["entrypoint_kind"] == "cli"
-    assert contract["operations"] == ["search", "user", "user_posts", "tweet"]
+    assert contract["operations"] == ["search", "hashtag", "user", "user_posts", "tweet"]
     assert contract["required_commands"] == ["twitter"]
     assert contract["supports_probe"] is True
-    assert contract["probe_operations"] == ["user", "search"]
-    assert contract["probe_coverage"] == "partial"
+    assert contract["probe_operations"] == ["search", "hashtag", "user", "user_posts", "tweet"]
+    assert contract["probe_coverage"] == "full"
 
     search = contract["operation_contracts"]["search"]
     assert search["input_kind"] == "query"
-    assert [option["name"] for option in search["options"]] == ["since", "until"]
+    assert [option["name"] for option in search["options"]] == [
+        "from",
+        "to",
+        "lang",
+        "type",
+        "has",
+        "exclude",
+        "since",
+        "until",
+        "min_likes",
+        "min_retweets",
+        "min_views",
+    ]
+    hashtag = contract["operation_contracts"]["hashtag"]
+    assert hashtag["input_kind"] == "hashtag"
+    assert [option["name"] for option in hashtag["options"]] == [option["name"] for option in search["options"]]
+    user_posts = contract["operation_contracts"]["user_posts"]
+    assert user_posts["options"] == [
+        {
+            "name": "originals_only",
+            "type": "boolean",
+            "required": False,
+            "cli_flag": "--originals-only",
+            "description": "Filter timeline results down to authored posts by removing retweets client-side.",
+        }
+    ]
 
 
 def test_channel_check_contract_with_minimal_runtime(monkeypatch, tmp_path):

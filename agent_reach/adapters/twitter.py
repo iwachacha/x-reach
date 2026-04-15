@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import Any, Sequence
 from urllib.parse import urlparse
 
 from agent_reach.media_references import build_media_reference, dedupe_media_references
@@ -13,6 +14,7 @@ from agent_reach.results import (
     NormalizedItem,
     build_item,
     derive_title_from_text,
+    normalize_engagement,
     parse_timestamp,
 )
 
@@ -51,6 +53,16 @@ def _tweet_url(tweet: dict) -> str | None:
     return None
 
 
+def _normalize_hashtag(value: str) -> str | None:
+    text = value.strip()
+    if text.startswith("#"):
+        text = text[1:]
+    text = text.strip()
+    if not text or any(character.isspace() for character in text):
+        return None
+    return f"#{text}"
+
+
 def _twitter_media_references(media: object) -> list[dict[str, object]]:
     if not isinstance(media, list):
         return []
@@ -83,38 +95,148 @@ def _tweet_item(
     idx: int,
     source: str,
     *,
-    engagement_complete: bool,
-    media_complete: bool,
+    timeline_owner_handle: str | None = None,
 ) -> NormalizedItem:
+    author = tweet.get("author") or {}
     media = tweet.get("media") or []
+    metrics = tweet.get("metrics") or {}
+    media_references = _twitter_media_references(media)
+    quoted_tweet = tweet.get("quotedTweet")
+    quoted_post_id = quoted_tweet.get("id") if isinstance(quoted_tweet, dict) else None
+    quoted_author = quoted_tweet.get("author") if isinstance(quoted_tweet, dict) else {}
+    retweeted_by = tweet.get("retweetedBy")
+    timeline_item_kind = "original"
+    if tweet.get("isRetweet"):
+        timeline_item_kind = "retweet"
+    elif tweet.get("inReplyToStatusId"):
+        timeline_item_kind = "reply"
+    elif quoted_post_id is not None:
+        timeline_item_kind = "quote"
     return build_item(
         item_id=str(tweet.get("id") or f"tweet-{idx}"),
         kind="post",
         title=derive_title_from_text(tweet.get("text"), fallback=f"Tweet {tweet.get('id')}"),
         url=_tweet_url(tweet),
         text=tweet.get("text"),
-        author=(tweet.get("author") or {}).get("screenName"),
+        author=author.get("screenName"),
         published_at=parse_timestamp(tweet.get("createdAtISO") or tweet.get("createdAt")),
         source=source,
-        extras={
-            "author_name": (tweet.get("author") or {}).get("name"),
-            "verified": (tweet.get("author") or {}).get("verified"),
-            "metrics": tweet.get("metrics") or {},
-            "urls": tweet.get("urls") or [],
-            "media": media,
-            "media_references": _twitter_media_references(media),
-            "lang": tweet.get("lang"),
-            "is_retweet": tweet.get("isRetweet"),
-            "retweeted_by": tweet.get("retweetedBy"),
-            "quoted_tweet": tweet.get("quotedTweet"),
-            "score": tweet.get("score"),
-            "engagement_complete": engagement_complete,
-            "media_complete": media_complete,
-        },
+        extras=_compact_mapping(
+            {
+                "author_name": author.get("name"),
+                "author_verified": author.get("verified"),
+                "lang": tweet.get("lang"),
+                "urls": tweet.get("urls") or [],
+                "is_retweet": tweet.get("isRetweet"),
+                "retweeted_by": retweeted_by,
+                "is_quote": quoted_post_id is not None,
+                "quoted_post_id": quoted_post_id,
+                "quoted_author_handle": quoted_author.get("screenName") if isinstance(quoted_author, dict) else None,
+                "quoted_author_name": quoted_author.get("name") if isinstance(quoted_author, dict) else None,
+                "in_reply_to_post_id": tweet.get("inReplyToStatusId"),
+                "timeline_owner_handle": timeline_owner_handle,
+                "timeline_item_kind": timeline_item_kind,
+            }
+        ),
+        engagement=metrics,
+        media_references=media_references,
+        identifiers=_compact_mapping(
+            {
+                "author_handle": author.get("screenName"),
+                "post_id": tweet.get("id"),
+                "conversation_id": tweet.get("conversationId"),
+                "timeline_owner_handle": timeline_owner_handle,
+            }
+        ),
     )
 
 
-def _build_search_args(query: str, limit: int, *, since: str | None = None, until: str | None = None) -> list[str]:
+def _compact_mapping(values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in values.items()
+        if value not in (None, "", [], {}, False)
+    }
+
+
+def _tweet_item_shape(*, engagement_complete: bool, media_complete: bool) -> dict[str, dict[str, str]]:
+    return {
+        "item_shape": {
+            "engagement": "complete" if engagement_complete else "partial",
+            "media": "complete" if media_complete else "partial",
+        }
+    }
+
+
+def _string_list(value: Sequence[str] | str | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _append_repeatable_option(args: list[str], flag: str, values: Sequence[str] | str | None) -> None:
+    for value in _string_list(values):
+        args.extend([flag, value])
+
+
+def _tweet_metric(tweet: dict[str, Any], field: str) -> int | float | None:
+    metrics = tweet.get("metrics")
+    if not isinstance(metrics, dict):
+        return None
+    return normalize_engagement(metrics).get(field)
+
+
+def _apply_min_views(data: list[dict[str, Any]], min_views: int | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if min_views is None:
+        return data, {}
+    filtered = [
+        tweet
+        for tweet in data
+        if (_tweet_metric(tweet, "views") or 0) >= min_views
+    ]
+    return filtered, {
+        "client_side_filters": {
+            "min_views": min_views,
+            "items_before_min_views": len(data),
+            "items_after_min_views": len(filtered),
+        }
+    }
+
+
+def _apply_originals_only(
+    data: list[dict[str, Any]],
+    originals_only: bool,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if not originals_only:
+        return data, {}
+    filtered = [tweet for tweet in data if not tweet.get("isRetweet")]
+    return filtered, {
+        "client_side_filters": {
+            "originals_only": True,
+            "items_before_originals_only": len(data),
+            "items_after_originals_only": len(filtered),
+        }
+    }
+
+
+def _build_search_args(
+    query: str,
+    limit: int,
+    *,
+    since: str | None = None,
+    until: str | None = None,
+    from_user: str | None = None,
+    to_user: str | None = None,
+    lang: str | None = None,
+    search_type: str | None = None,
+    has: Sequence[str] | str | None = None,
+    exclude: Sequence[str] | str | None = None,
+    min_likes: int | None = None,
+    min_retweets: int | None = None,
+) -> list[str]:
     """Translate common X-style search tokens into twitter-cli flags."""
 
     args = ["search"]
@@ -135,6 +257,10 @@ def _build_search_args(query: str, limit: int, *, since: str | None = None, unti
         "has": "--has",
         "exclude": "--exclude",
     }
+    explicit_repeatable = {
+        "has": bool(_string_list(has)),
+        "exclude": bool(_string_list(exclude)),
+    }
 
     for token in query.split():
         if ":" not in token:
@@ -149,14 +275,42 @@ def _build_search_args(query: str, limit: int, *, since: str | None = None, unti
             continue
         if lowered_key == "until" and until is not None:
             continue
+        if lowered_key == "from" and from_user is not None:
+            continue
+        if lowered_key == "to" and to_user is not None:
+            continue
+        if lowered_key == "lang" and lang is not None:
+            continue
+        if lowered_key == "type" and search_type is not None:
+            continue
+        if lowered_key in {"min_likes", "min-likes"} and min_likes is not None:
+            continue
+        if lowered_key in {"min_retweets", "min-retweets"} and min_retweets is not None:
+            continue
         if lowered_key in option_values:
             args.extend([option_values[lowered_key], value])
             continue
         if lowered_key in repeatable_values:
+            if explicit_repeatable.get(lowered_key):
+                continue
             args.extend([repeatable_values[lowered_key], value])
             continue
         remaining.append(token)
 
+    if search_type is not None:
+        args.extend(["--type", search_type])
+    if from_user is not None:
+        args.extend(["--from", from_user])
+    if to_user is not None:
+        args.extend(["--to", to_user])
+    if lang is not None:
+        args.extend(["--lang", lang])
+    _append_repeatable_option(args, "--has", has)
+    _append_repeatable_option(args, "--exclude", exclude)
+    if min_likes is not None:
+        args.extend(["--min-likes", str(min_likes)])
+    if min_retweets is not None:
+        args.extend(["--min-retweets", str(min_retweets)])
     text_query = " ".join(remaining).strip()
     if text_query:
         args.append(text_query)
@@ -204,7 +358,7 @@ class TwitterAdapter(BaseAdapter):
     """Read Twitter/X data through twitter-cli."""
 
     channel = "twitter"
-    operations = ("search", "user", "user_posts", "tweet")
+    operations = ("search", "hashtag", "user", "user_posts", "tweet")
 
     def search(
         self,
@@ -212,28 +366,62 @@ class TwitterAdapter(BaseAdapter):
         limit: int = 10,
         since: str | None = None,
         until: str | None = None,
+        from_user: str | None = None,
+        to_user: str | None = None,
+        lang: str | None = None,
+        search_type: str | None = None,
+        has: Sequence[str] | str | None = None,
+        exclude: Sequence[str] | str | None = None,
+        min_likes: int | None = None,
+        min_retweets: int | None = None,
+        min_views: int | None = None,
     ) -> CollectionResult:
         started_at = time.perf_counter()
         result = self._run_twitter(
-            _build_search_args(query, limit, since=since, until=until),
+            _build_search_args(
+                query,
+                limit,
+                since=since,
+                until=until,
+                from_user=from_user,
+                to_user=to_user,
+                lang=lang,
+                search_type=search_type,
+                has=has,
+                exclude=exclude,
+                min_likes=min_likes,
+                min_retweets=min_retweets,
+            ),
             operation="search",
             value=query,
             limit=limit,
             started_at=started_at,
-            extra_meta={"since": since, "until": until},
+            extra_meta={
+                "since": since,
+                "until": until,
+                "from_user": from_user,
+                "to_user": to_user,
+                "lang": lang,
+                "search_type": search_type,
+                "has": _string_list(has) or None,
+                "exclude": _string_list(exclude) or None,
+                "min_likes": min_likes,
+                "min_retweets": min_retweets,
+                "min_views": min_views,
+            },
         )
         if isinstance(result, dict):
             return result
 
         raw, _raw_output = result
-        data = raw.get("data", [])
+        raw_data = raw.get("data", [])
+        data = raw_data if isinstance(raw_data, list) else []
+        data, client_filter_diagnostics = _apply_min_views(data, min_views)
         items = [
             _tweet_item(
                 tweet,
                 idx,
                 self.channel,
-                engagement_complete=False,
-                media_complete=False,
             )
             for idx, tweet in enumerate(data)
         ]
@@ -247,7 +435,20 @@ class TwitterAdapter(BaseAdapter):
                 started_at=started_at,
                 since=since,
                 until=until,
-                diagnostics=_time_window_diagnostics(query, since, until),
+                from_user=from_user,
+                to_user=to_user,
+                lang=lang,
+                search_type=search_type,
+                has=_string_list(has) or None,
+                exclude=_string_list(exclude) or None,
+                min_likes=min_likes,
+                min_retweets=min_retweets,
+                min_views=min_views,
+                diagnostics={
+                    **_time_window_diagnostics(query, since, until),
+                    **client_filter_diagnostics,
+                },
+                **_tweet_item_shape(engagement_complete=False, media_complete=False),
             ),
         )
 
@@ -284,30 +485,38 @@ class TwitterAdapter(BaseAdapter):
             author=data.get("screenName"),
             published_at=parse_timestamp(data.get("createdAtISO") or data.get("createdAt")),
             source=self.channel,
-            extras={
-                "followers": data.get("followers"),
-                "following": data.get("following"),
-                "tweets": data.get("tweets"),
-                "likes": data.get("likes"),
-                "verified": data.get("verified"),
-                "location": data.get("location"),
-                "profile_image_url": data.get("profileImageUrl"),
-                "website_url": data.get("url"),
-                "media_references": dedupe_media_references(
-                    [
-                        reference
-                        for reference in [
-                            build_media_reference(
-                                type="image",
-                                url=data.get("profileImageUrl"),
-                                relation="avatar",
-                                source_field="profileImageUrl",
-                            )
-                        ]
-                        if reference is not None
+            extras=_compact_mapping(
+                {
+                    "followers": data.get("followers"),
+                    "following": data.get("following"),
+                    "tweets": data.get("tweets"),
+                    "likes": data.get("likes"),
+                    "profile_verified": data.get("verified"),
+                    "location": data.get("location"),
+                    "profile_image_url": data.get("profileImageUrl"),
+                    "website_url": data.get("url"),
+                }
+            ),
+            media_references=dedupe_media_references(
+                [
+                    reference
+                    for reference in [
+                        build_media_reference(
+                            type="image",
+                            url=data.get("profileImageUrl"),
+                            relation="avatar",
+                            source_field="profileImageUrl",
+                        )
                     ]
-                ),
-            },
+                    if reference is not None
+                ]
+            ),
+            identifiers=_compact_mapping(
+                {
+                    "author_handle": data.get("screenName"),
+                    "profile_handle": data.get("screenName"),
+                }
+            ),
         )
         return self.ok_result(
             "user",
@@ -316,7 +525,62 @@ class TwitterAdapter(BaseAdapter):
             meta=self.make_meta(value=normalized, limit=limit, started_at=started_at),
         )
 
-    def user_posts(self, screen_name: str, limit: int = 10) -> CollectionResult:
+    def hashtag(
+        self,
+        hashtag: str,
+        limit: int = 10,
+        since: str | None = None,
+        until: str | None = None,
+        from_user: str | None = None,
+        to_user: str | None = None,
+        lang: str | None = None,
+        search_type: str | None = None,
+        has: Sequence[str] | str | None = None,
+        exclude: Sequence[str] | str | None = None,
+        min_likes: int | None = None,
+        min_retweets: int | None = None,
+        min_views: int | None = None,
+    ) -> CollectionResult:
+        started_at = time.perf_counter()
+        normalized = _normalize_hashtag(hashtag)
+        if normalized is None:
+            return self.error_result(
+                "hashtag",
+                code="invalid_input",
+                message="Twitter hashtag must be one non-empty hashtag without whitespace",
+                meta=self.make_meta(value=hashtag, limit=limit, started_at=started_at),
+            )
+        payload = self.search(
+            normalized,
+            limit=limit,
+            since=since,
+            until=until,
+            from_user=from_user,
+            to_user=to_user,
+            lang=lang,
+            search_type=search_type,
+            has=has,
+            exclude=exclude,
+            min_likes=min_likes,
+            min_retweets=min_retweets,
+            min_views=min_views,
+        )
+        meta = dict(payload.get("meta") or {})
+        meta["input"] = hashtag
+        meta["resolved_query"] = normalized
+        meta["hashtag"] = normalized[1:]
+        return {
+            **payload,
+            "operation": "hashtag",
+            "meta": meta,
+        }
+
+    def user_posts(
+        self,
+        screen_name: str,
+        limit: int = 10,
+        originals_only: bool = False,
+    ) -> CollectionResult:
         started_at = time.perf_counter()
         normalized = _normalize_screen_name(screen_name)
         result = self._run_twitter(
@@ -331,13 +595,21 @@ class TwitterAdapter(BaseAdapter):
 
         raw, _raw_output = result
         data = raw.get("data", [])
+        if not isinstance(data, list):
+            return self.error_result(
+                "user_posts",
+                code="invalid_response",
+                message="Twitter user posts returned an unexpected payload",
+                raw=raw,
+                meta=self.make_meta(value=normalized, limit=limit, started_at=started_at),
+            )
+        data, client_filter_diagnostics = _apply_originals_only(data, originals_only)
         items = [
             _tweet_item(
                 tweet,
                 idx,
                 self.channel,
-                engagement_complete=False,
-                media_complete=False,
+                timeline_owner_handle=normalized,
             )
             for idx, tweet in enumerate(data)
         ]
@@ -345,7 +617,14 @@ class TwitterAdapter(BaseAdapter):
             "user_posts",
             items=items,
             raw=raw,
-            meta=self.make_meta(value=normalized, limit=limit, started_at=started_at),
+            meta=self.make_meta(
+                value=normalized,
+                limit=limit,
+                started_at=started_at,
+                originals_only=originals_only or None,
+                **({"diagnostics": client_filter_diagnostics} if client_filter_diagnostics else {}),
+                **_tweet_item_shape(engagement_complete=False, media_complete=False),
+            ),
         )
 
     def tweet(self, tweet_id_or_url: str, limit: int = 20) -> CollectionResult:
@@ -379,8 +658,6 @@ class TwitterAdapter(BaseAdapter):
                 tweet,
                 idx,
                 self.channel,
-                engagement_complete=True,
-                media_complete=True,
             )
             for idx, tweet in enumerate(data)
         ]
@@ -388,7 +665,12 @@ class TwitterAdapter(BaseAdapter):
             "tweet",
             items=items,
             raw=raw,
-            meta=self.make_meta(value=normalized, limit=limit, started_at=started_at),
+            meta=self.make_meta(
+                value=normalized,
+                limit=limit,
+                started_at=started_at,
+                **_tweet_item_shape(engagement_complete=True, media_complete=True),
+            ),
         )
 
     def _run_twitter(

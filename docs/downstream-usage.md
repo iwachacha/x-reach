@@ -15,8 +15,8 @@ x-reach skill --install
 x-reach channels --json
 x-reach doctor --json
 x-reach doctor --json --probe
-x-reach collect --channel twitter --operation search --input "OpenAI" --limit 5 --json
-x-reach collect --channel twitter --operation user --input "openai" --json
+x-reach collect --operation search --input "OpenAI" --limit 5 --json
+x-reach collect --operation user --input "openai" --json
 ```
 
 Use the exact stable channel name from `x-reach channels --json`: `twitter`.
@@ -24,7 +24,7 @@ Use the exact stable channel name from `x-reach channels --json`: `twitter`.
 ## Evidence ledger flow
 
 ```powershell
-x-reach collect --channel twitter --operation search --input "OpenAI" --limit 5 --json --save .x-reach/evidence.jsonl --run-id twitter-openai --intent discovery --query-id twitter-openai --source-role social_search
+x-reach collect --operation search --input "OpenAI" --limit 5 --json --save .x-reach/evidence.jsonl --run-id twitter-openai --intent discovery --query-id twitter-openai --source-role social_search
 x-reach ledger validate --input .x-reach/evidence.jsonl --json
 x-reach ledger summarize --input .x-reach/evidence.jsonl --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --json

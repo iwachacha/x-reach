@@ -1,5 +1,5 @@
 ﻿# -*- coding: utf-8 -*-
-"""Legacy compatibility package for X Reach."""
+"""Internal implementation package for X Reach."""
 
 from agent_reach._version import __version__
 

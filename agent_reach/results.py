@@ -35,10 +35,6 @@ _ENGAGEMENT_FIELDS = (
     "quotes",
     "views",
     "bookmarks",
-    "points",
-    "comments",
-    "stars",
-    "forks",
 )
 
 _ENGAGEMENT_ALIASES = {
@@ -49,10 +45,6 @@ _ENGAGEMENT_ALIASES = {
     "quotes": ("quotes", "quote_count", "quotes_count"),
     "views": ("views", "view_count", "views_count", "page_views_count"),
     "bookmarks": ("bookmarks", "bookmark_count", "bookmarks_count", "stocks_count"),
-    "points": ("points", "score", "ups"),
-    "comments": ("comments", "comment_count", "comments_count", "num_comments", "descendants"),
-    "stars": ("stars", "star_count", "stargazer_count", "stargazers_count"),
-    "forks": ("forks", "fork_count", "forks_count"),
 }
 
 _ERROR_CATEGORY_ALIASES = {
@@ -110,7 +102,7 @@ class CollectionResult(TypedDict):
     """A stable external-facing collection result."""
 
     schema_version: str
-    agent_reach_version: str
+    x_reach_version: str
     ok: bool
     channel: str
     operation: str
@@ -247,7 +239,7 @@ def build_result(
     _synchronize_pagination_meta(payload_meta)
     return {
         "schema_version": SCHEMA_VERSION,
-        "agent_reach_version": __version__,
+        "x_reach_version": __version__,
         "ok": ok,
         "channel": channel,
         "operation": operation,
@@ -290,10 +282,11 @@ def canonicalize_url(url: str | None) -> str | None:
     path = parts.path
     if path != "/" and path.endswith("/"):
         path = path.rstrip("/")
+    host = _normalized_host(parts.netloc)
     return urlunsplit(
         (
             parts.scheme.lower(),
-            parts.netloc.lower(),
+            host,
             path,
             parts.query,
             "",
@@ -446,11 +439,10 @@ def _normalize_identifiers(
     domain = _domain_from_url(url)
     if domain:
         normalized.setdefault("domain", domain)
-    repo_full_name = extras.get("repo_full_name")
-    if repo_full_name:
-        normalized.setdefault("repo_full_name", repo_full_name)
-    elif source == "github" and "/" in str(item_id):
-        normalized.setdefault("repo_full_name", str(item_id))
+    for key in ("author_handle", "profile_handle", "post_id", "conversation_id"):
+        value = extras.get(key)
+        if value not in (None, "", [], {}):
+            normalized.setdefault(key, value)
     return normalized
 
 
@@ -458,7 +450,14 @@ def _domain_from_url(url: str | None) -> str | None:
     if not url:
         return None
     parsed = urlsplit(str(url))
-    return parsed.netloc.lower() or None
+    return _normalized_host(parsed.netloc) or None
+
+
+def _normalized_host(netloc: str) -> str:
+    host = netloc.lower()
+    if host in {"twitter.com", "www.twitter.com", "mobile.twitter.com", "www.x.com"}:
+        return "x.com"
+    return host
 
 
 def _first_present(values: dict[str, Any], keys: tuple[str, ...]) -> Any:

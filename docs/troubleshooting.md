@@ -28,8 +28,8 @@ x-reach configure --from-browser chrome
 Run targeted checks:
 
 ```powershell
-x-reach collect --channel twitter --operation user --input "openai" --json
-x-reach collect --channel twitter --operation search --input "OpenAI" --limit 1 --json
+x-reach collect --operation user --input "openai" --json
+x-reach collect --operation search --input "OpenAI" --limit 1 --json
 ```
 
 ## Raw `twitter --help` fails with `UnicodeEncodeError` on Windows

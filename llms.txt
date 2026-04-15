@@ -16,7 +16,7 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 - `x-reach channels --json`
 - `x-reach doctor --json`
 - `x-reach doctor --json --probe`
-- `x-reach collect --channel twitter --operation <op> --input <value> --json`
+- `x-reach collect --operation <op> --input <value> --json`
 - `x-reach schema collection-result --json`
 - `x-reach plan candidates --input .x-reach/evidence.jsonl --json`
 - `x-reach ledger validate --input .x-reach/evidence.jsonl --json`

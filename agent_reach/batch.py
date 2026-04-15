@@ -110,11 +110,20 @@ def run_batch_plan(
         kwargs: dict[str, Any] = {}
         if query.get("limit") is not None:
             kwargs["limit"] = int(query["limit"])
-        if query.get("body_mode") is not None:
-            kwargs["body_mode"] = query["body_mode"]
-        if query.get("crawl_query") is not None:
-            kwargs["crawl_query"] = query["crawl_query"]
-        for option_name in ("page_size", "max_pages", "cursor", "page", "since", "until"):
+        for option_name in (
+            "since",
+            "until",
+            "from_user",
+            "to_user",
+            "lang",
+            "search_type",
+            "has",
+            "exclude",
+            "min_likes",
+            "min_retweets",
+            "min_views",
+            "originals_only",
+        ):
             if query.get(option_name) is not None:
                 kwargs[option_name] = query[option_name]
         payload = client.collect(query["channel"], query["operation"], query["input"], **kwargs)
@@ -129,14 +138,18 @@ def run_batch_plan(
             "limit": query.get("limit"),
             "intent": query.get("intent"),
             "source_role": query.get("source_role"),
-            "body_mode": query.get("body_mode"),
-            "crawl_query": query.get("crawl_query"),
-            "page_size": query.get("page_size"),
-            "max_pages": query.get("max_pages"),
-            "cursor": query.get("cursor"),
-            "page": query.get("page"),
             "since": query.get("since"),
             "until": query.get("until"),
+            "from_user": query.get("from_user"),
+            "to_user": query.get("to_user"),
+            "lang": query.get("lang"),
+            "search_type": query.get("search_type"),
+            "has": query.get("has"),
+            "exclude": query.get("exclude"),
+            "min_likes": query.get("min_likes"),
+            "min_retweets": query.get("min_retweets"),
+            "min_views": query.get("min_views"),
+            "originals_only": query.get("originals_only"),
             "status": "ok" if payload.get("ok") else "error",
             "ok": bool(payload.get("ok")),
             "count": len(payload.get("items") or []),
@@ -336,8 +349,15 @@ def _normalize_query(
     query["channel"] = str(query["channel"])
     query["operation"] = str(query["operation"])
     query["input"] = str(query["input"])
-    if query.get("query") is not None and query.get("crawl_query") is None:
-        query["crawl_query"] = query["query"]
+    removed_fields = [
+        field
+        for field in ("body_mode", "crawl_query", "query", "page_size", "max_pages", "cursor", "page")
+        if query.get(field) is not None
+    ]
+    if removed_fields:
+        raise BatchPlanError(
+            f"query {index + 1} uses removed X Reach option(s): {', '.join(removed_fields)}"
+        )
     try:
         validate_operation_options(
             query["channel"],
@@ -383,21 +403,7 @@ def _plan_summary(queries: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _query_key(
     query: dict[str, Any],
-) -> tuple[
-    str,
-    str,
-    str,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-    str | None,
-]:
+) -> tuple[str | None, ...]:
     limit = query.get("limit")
     return (
         str(query.get("channel")),
@@ -405,56 +411,28 @@ def _query_key(
         str(query.get("input")),
         str(limit) if limit is not None else None,
         str(query.get("intent")) if query.get("intent") is not None else None,
-        str(query.get("body_mode")) if query.get("body_mode") is not None else None,
-        str(query.get("crawl_query")) if query.get("crawl_query") is not None else None,
-        str(query.get("page_size")) if query.get("page_size") is not None else None,
-        str(query.get("max_pages")) if query.get("max_pages") is not None else None,
-        str(query.get("cursor")) if query.get("cursor") is not None else None,
-        str(query.get("page")) if query.get("page") is not None else None,
         str(query.get("since")) if query.get("since") is not None else None,
         str(query.get("until")) if query.get("until") is not None else None,
+        str(query.get("from_user")) if query.get("from_user") is not None else None,
+        str(query.get("to_user")) if query.get("to_user") is not None else None,
+        str(query.get("lang")) if query.get("lang") is not None else None,
+        str(query.get("search_type")) if query.get("search_type") is not None else None,
+        json.dumps(query.get("has"), ensure_ascii=False) if query.get("has") is not None else None,
+        json.dumps(query.get("exclude"), ensure_ascii=False) if query.get("exclude") is not None else None,
+        str(query.get("min_likes")) if query.get("min_likes") is not None else None,
+        str(query.get("min_retweets")) if query.get("min_retweets") is not None else None,
+        str(query.get("min_views")) if query.get("min_views") is not None else None,
+        str(query.get("originals_only")) if query.get("originals_only") is not None else None,
     )
 
 
 def _completed_query_keys(
     path: str | Path | None,
-) -> set[
-    tuple[
-        str,
-        str,
-        str,
-        str | None,
-        str | None,
-        str | None,
-        str | None,
-        str | None,
-        str | None,
-        str | None,
-        str | None,
-        str | None,
-        str | None,
-    ]
-]:
+) -> set[tuple[str | None, ...]]:
     if path is None:
         return set()
 
-    completed: set[
-        tuple[
-            str,
-            str,
-            str,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-        ]
-    ] = set()
+    completed: set[tuple[str | None, ...]] = set()
     for record in iter_ledger_records(path, allow_missing=True):
         if not isinstance(record, dict) or record.get("record_type") != "collection_result":
             continue
@@ -468,14 +446,18 @@ def _completed_query_keys(
             "input": record.get("input") if record.get("input") is not None else meta.get("input"),
             "limit": meta.get("requested_limit") if meta.get("requested_limit") is not None else meta.get("limit"),
             "intent": record.get("intent") if record.get("intent") is not None else meta.get("intent"),
-            "body_mode": meta.get("body_mode"),
-            "crawl_query": meta.get("crawl_query"),
-            "page_size": meta.get("requested_page_size"),
-            "max_pages": meta.get("requested_max_pages"),
-            "cursor": meta.get("requested_cursor"),
-            "page": meta.get("requested_page"),
             "since": meta.get("since"),
             "until": meta.get("until"),
+            "from_user": meta.get("from_user"),
+            "to_user": meta.get("to_user"),
+            "lang": meta.get("lang"),
+            "search_type": meta.get("search_type"),
+            "has": meta.get("has"),
+            "exclude": meta.get("exclude"),
+            "min_likes": meta.get("min_likes"),
+            "min_retweets": meta.get("min_retweets"),
+            "min_views": meta.get("min_views"),
+            "originals_only": meta.get("originals_only"),
         }
         if query["channel"] and query["operation"] and query["input"]:
             completed.add(_query_key(query))

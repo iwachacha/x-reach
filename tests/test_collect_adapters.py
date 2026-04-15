@@ -69,9 +69,15 @@ def test_twitter_adapter_success(config, monkeypatch):
     assert payload["ok"] is True
     assert payload["items"][0]["author"] == "OpenAI"
     assert payload["items"][0]["url"] == "https://x.com/OpenAI/status/123"
-    assert payload["items"][0]["extras"]["metrics"] == {"likes": 10}
+    assert payload["items"][0]["extras"]["author_name"] == "OpenAI"
     assert payload["items"][0]["engagement"] == {"likes": 10}
+    assert payload["items"][0]["identifiers"] == {
+        "domain": "x.com",
+        "author_handle": "OpenAI",
+        "post_id": "123",
+    }
     assert payload["meta"]["diagnostics"]["unbounded_time_window"] is True
+    assert payload["meta"]["item_shape"] == {"engagement": "partial", "media": "partial"}
     assert captured["command"][1:3] == ["search", "OpenAI"]
 
 
@@ -136,6 +142,89 @@ def test_twitter_adapter_search_prefers_explicit_since_until(config, monkeypatch
     assert payload["meta"]["until"] == "2026-12-31"
 
 
+def test_twitter_adapter_search_accepts_formalized_filters(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    captured = {}
+
+    def fake_run(command, timeout=120, env=None):
+        captured["command"] = command
+        return _cp(stdout=json.dumps({"ok": True, "data": []}))
+
+    monkeypatch.setattr(adapter, "run_command", fake_run)
+
+    payload = adapter.search(
+        "OpenAI",
+        limit=5,
+        from_user="OpenAI",
+        search_type="latest",
+        has=["links"],
+        exclude=["retweets"],
+        min_likes=10,
+        min_retweets=5,
+    )
+
+    assert payload["ok"] is True
+    assert captured["command"] == [
+        "twitter",
+        "search",
+        "--type",
+        "latest",
+        "--from",
+        "OpenAI",
+        "--has",
+        "links",
+        "--exclude",
+        "retweets",
+        "--min-likes",
+        "10",
+        "--min-retweets",
+        "5",
+        "OpenAI",
+        "-n",
+        "5",
+        "--json",
+    ]
+
+
+def test_twitter_adapter_search_applies_min_views_client_side(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    monkeypatch.setattr(
+        adapter,
+        "run_command",
+        lambda command, timeout=120, env=None: _cp(
+            stdout=json.dumps(
+                {
+                    "ok": True,
+                    "data": [
+                        {
+                            "id": "1",
+                            "text": "lower",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                            "createdAtISO": "2026-04-10T00:00:00Z",
+                            "metrics": {"views": 99},
+                        },
+                        {
+                            "id": "2",
+                            "text": "higher",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                            "createdAtISO": "2026-04-10T00:00:00Z",
+                            "metrics": {"views": 1000},
+                        },
+                    ],
+                }
+            )
+        ),
+    )
+
+    payload = adapter.search("OpenAI", limit=5, min_views=100)
+
+    assert payload["ok"] is True
+    assert [item["id"] for item in payload["items"]] == ["2"]
+    assert payload["meta"]["diagnostics"]["client_side_filters"]["min_views"] == 100
+
+
 def test_twitter_adapter_user_success(config, monkeypatch):
     adapter = TwitterAdapter(config=config)
     monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
@@ -171,6 +260,11 @@ def test_twitter_adapter_user_success(config, monkeypatch):
     assert payload["items"][0]["kind"] == "profile"
     assert payload["items"][0]["url"] == "https://x.com/OpenAI"
     assert payload["items"][0]["extras"]["followers"] == 100
+    assert payload["items"][0]["identifiers"] == {
+        "domain": "x.com",
+        "author_handle": "OpenAI",
+        "profile_handle": "OpenAI",
+    }
 
 
 def test_twitter_adapter_user_posts_success(config, monkeypatch):
@@ -201,8 +295,80 @@ def test_twitter_adapter_user_posts_success(config, monkeypatch):
 
     assert payload["ok"] is True
     assert payload["operation"] == "user_posts"
-    assert payload["items"][0]["extras"]["media"][0]["type"] == "photo"
-    assert payload["items"][0]["extras"]["engagement_complete"] is False
+    assert payload["items"][0]["media_references"][0]["media_type"] == "photo"
+    assert payload["items"][0]["extras"]["timeline_owner_handle"] == "OpenAI"
+    assert payload["items"][0]["extras"]["timeline_item_kind"] == "original"
+    assert payload["meta"]["item_shape"] == {"engagement": "partial", "media": "partial"}
+
+
+def test_twitter_adapter_user_posts_can_filter_retweets(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    monkeypatch.setattr(
+        adapter,
+        "run_command",
+        lambda command, timeout=120, env=None: _cp(
+            stdout=json.dumps(
+                {
+                    "ok": True,
+                    "data": [
+                        {
+                            "id": "1",
+                            "text": "original",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                            "createdAtISO": "2026-04-10T00:00:00Z",
+                            "isRetweet": False,
+                        },
+                        {
+                            "id": "2",
+                            "text": "retweet",
+                            "author": {"screenName": "someone", "name": "Someone"},
+                            "createdAtISO": "2026-04-10T00:00:00Z",
+                            "isRetweet": True,
+                            "retweetedBy": "OpenAI",
+                        },
+                    ],
+                }
+            )
+        ),
+    )
+
+    payload = adapter.user_posts("OpenAI", limit=5, originals_only=True)
+
+    assert payload["ok"] is True
+    assert [item["id"] for item in payload["items"]] == ["1"]
+    assert payload["meta"]["originals_only"] is True
+    assert payload["meta"]["diagnostics"]["client_side_filters"]["originals_only"] is True
+
+
+def test_twitter_adapter_hashtag_success(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    captured = {}
+
+    def fake_run(command, timeout=120, env=None):
+        captured["command"] = command
+        return _cp(stdout=json.dumps({"ok": True, "data": []}))
+
+    monkeypatch.setattr(adapter, "run_command", fake_run)
+
+    payload = adapter.hashtag("OpenAI", limit=5, min_views=100)
+
+    assert payload["ok"] is True
+    assert payload["operation"] == "hashtag"
+    assert payload["meta"]["input"] == "OpenAI"
+    assert payload["meta"]["resolved_query"] == "#OpenAI"
+    assert payload["meta"]["hashtag"] == "OpenAI"
+    assert captured["command"] == ["twitter", "search", "#OpenAI", "-n", "5", "--json"]
+
+
+def test_twitter_adapter_hashtag_rejects_whitespace(config):
+    adapter = TwitterAdapter(config=config)
+
+    payload = adapter.hashtag("Open AI")
+
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "invalid_input"
 
 
 def test_twitter_adapter_tweet_success(config, monkeypatch):
@@ -235,7 +401,7 @@ def test_twitter_adapter_tweet_success(config, monkeypatch):
     assert payload["ok"] is True
     assert captured["command"][2] == "123"
     assert payload["items"][0]["url"] == "https://x.com/OpenAI/status/123"
-    assert payload["items"][0]["extras"]["engagement_complete"] is True
+    assert payload["meta"]["item_shape"] == {"engagement": "complete", "media": "complete"}
 
 
 def test_twitter_adapter_not_authenticated(config, monkeypatch):

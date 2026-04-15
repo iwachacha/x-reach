@@ -41,7 +41,6 @@ dev = [
 
 [project.scripts]
 x-reach = "x_reach.cli:main"
-agent-reach = "x_reach.cli:main"
 
 [project.urls]
 Upstream = "https://github.com/Panniantong/Agent-Reach"

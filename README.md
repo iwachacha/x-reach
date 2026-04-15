@@ -7,7 +7,7 @@ X Reach is the X/Twitter-only split of the Windows-first Agent Reach fork. It ke
 - `x-reach channels --json`
 - `x-reach doctor --json`
 - `x-reach doctor --json --probe`
-- `x-reach collect --channel twitter --operation <op> --input <value> --json`
+- `x-reach collect --operation <op> --input <value> --json`
 - `x-reach schema collection-result --json`
 - `x-reach plan candidates --input .x-reach/evidence.jsonl --json`
 - `x-reach ledger merge|validate|summarize|query|append`
@@ -21,8 +21,6 @@ Supported channels:
 - `twitter`
 
 The live contract is always `x-reach channels --json`.
-
-Legacy compatibility imports such as `from agent_reach import XReachClient` remain available.
 
 ## Install the latest fork build
 
@@ -53,9 +51,13 @@ x-reach version
 x-reach channels --json
 x-reach doctor --json
 x-reach doctor --json --probe
-x-reach collect --channel twitter --operation search --input "OpenAI" --limit 5 --json
-x-reach collect --channel twitter --operation user --input "openai" --json
-x-reach collect --channel twitter --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
+x-reach search "OpenAI" --limit 5 --json
+x-reach hashtag "OpenAI" --limit 5 --json
+x-reach collect --operation search --input "OpenAI" --limit 5 --json
+x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json
+x-reach collect --operation user --input "openai" --json
+x-reach posts "openai" --limit 20 --originals-only --json
+x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
 ```
 
 ## Caller-control policy
