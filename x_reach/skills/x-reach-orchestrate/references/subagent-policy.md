@@ -29,7 +29,7 @@ Do not use a subagent when:
 - use at most one subagent per user request
 - use it for intake only
 - do not chain or recurse into more subagents
-- do not delegate channel checks, collection start, or final synthesis
+- do not delegate channel checks, collection start, or the final deliverable
 
 ## Main-Agent Ownership
 
@@ -39,4 +39,4 @@ The main agent always owns:
 - integrating the shaped brief
 - checking live channel and readiness data
 - starting collection
-- synthesizing the final answer
+- delivering the final collection artifact or synthesis

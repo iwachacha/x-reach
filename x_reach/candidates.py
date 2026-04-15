@@ -39,6 +39,7 @@ ALLOWED_CANDIDATE_FIELDS = {
     "intent",
     "query_id",
     "source_role",
+    "seen_in_count",
     "extras",
 }
 
@@ -76,7 +77,9 @@ def build_candidates_payload(
     max_per_author: int | None = None,
     prefer_originals: bool = False,
     drop_noise: bool = False,
+    drop_title_duplicates: bool = False,
     require_query_match: bool = False,
+    min_seen_in: int | None = None,
 ) -> dict[str, Any]:
     """Read evidence JSONL and return a deduped candidate payload."""
 
@@ -86,6 +89,8 @@ def build_candidates_payload(
         raise CandidatePlanError("limit must be greater than or equal to 1")
     if max_per_author is not None and max_per_author < 1:
         raise CandidatePlanError("max_per_author must be greater than or equal to 1")
+    if min_seen_in is not None and min_seen_in < 1:
+        raise CandidatePlanError("min_seen_in must be greater than or equal to 1")
     selected_fields = _normalize_fields(fields)
 
     evidence_path = Path(path)
@@ -134,6 +139,7 @@ def build_candidates_payload(
 
             if key in by_key:
                 by_key[key]["extras"]["seen_in"].append(sighting)
+                by_key[key]["seen_in_count"] = len(by_key[key]["extras"]["seen_in"])
                 _fill_missing_candidate_metadata(by_key[key], intent, query_id, source_role)
                 _append_alternate_url(by_key[key], item.get("url"))
                 _merge_query_tokens(by_key[key], record_query_tokens)
@@ -153,6 +159,7 @@ def build_candidates_payload(
             candidate["extras"]["seen_in"] = [sighting]
             candidate["extras"]["candidate_key"] = key
             candidate["extras"].setdefault("alternate_urls", [])
+            candidate["seen_in_count"] = 1
             by_key[key] = candidate
             candidates.append(candidate)
 
@@ -160,9 +167,12 @@ def build_candidates_payload(
         candidates,
         max_per_author=max_per_author,
         drop_noise=drop_noise,
+        drop_title_duplicates=drop_title_duplicates,
         require_query_match=require_query_match,
+        min_seen_in=min_seen_in,
     )
     returned = filtered_candidates[:limit]
+    max_seen_in = max((int(candidate.get("seen_in_count") or 0) for candidate in candidates), default=0)
     output_candidates = [] if summary_only else [_filter_candidate(candidate, selected_fields) for candidate in returned]
     return {
         "schema_version": SCHEMA_VERSION,
@@ -176,7 +186,9 @@ def build_candidates_payload(
         "max_per_author": max_per_author,
         "prefer_originals": prefer_originals,
         "drop_noise": drop_noise,
+        "drop_title_duplicates": drop_title_duplicates,
         "require_query_match": require_query_match,
+        "min_seen_in": min_seen_in,
         "summary": {
             "records": len(records) + skipped_records,
             "collection_results": len(records),
@@ -184,6 +196,8 @@ def build_candidates_payload(
             "items_seen": items_seen,
             "skipped_items": skipped_items,
             "candidate_count": len(candidates),
+            "multi_seen_candidates": sum(1 for candidate in candidates if int(candidate.get("seen_in_count") or 0) > 1),
+            "max_seen_in": max_seen_in,
             "returned": len(returned),
             "filtered_candidate_count": len(filtered_candidates),
             "filter_drop_counts": filter_drop_counts,
@@ -309,6 +323,7 @@ def _candidate_from_item(
         "intent": extras.get("intent"),
         "query_id": extras.get("query_id"),
         "source_role": extras.get("source_role"),
+        "seen_in_count": 0,
         "extras": merged_extras,
         "_preference_rank": original_preference_rank(extras.get("timeline_item_kind")),
     }
@@ -420,6 +435,7 @@ def _promote_candidate(existing: dict[str, Any], incoming: dict[str, Any]) -> No
     replacement_extras["seen_in"] = seen_in
     replacement_extras["alternate_urls"] = alternate_urls
     replacement_extras["candidate_key"] = candidate_key
+    replacement["seen_in_count"] = len(seen_in)
     if query_tokens:
         replacement_extras["query_tokens"] = query_tokens
     existing.clear()
@@ -480,11 +496,14 @@ def _post_filter_candidates(
     *,
     max_per_author: int | None,
     drop_noise: bool,
+    drop_title_duplicates: bool,
     require_query_match: bool,
+    min_seen_in: int | None,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     returned: list[dict[str, Any]] = []
     dropped: dict[str, int] = {}
     author_counts: dict[str, int] = {}
+    seen_title_keys: set[str] = set()
 
     for candidate in candidates:
         if drop_noise or require_query_match:
@@ -511,6 +530,18 @@ def _post_filter_candidates(
                 for reason in list(dict.fromkeys(reasons)):
                     dropped[reason] = dropped.get(reason, 0) + 1
                 continue
+
+        if min_seen_in is not None and int(candidate.get("seen_in_count") or 0) < min_seen_in:
+            dropped["seen_in"] = dropped.get("seen_in", 0) + 1
+            continue
+
+        if drop_title_duplicates:
+            title_key = _candidate_title_key(candidate)
+            if title_key is not None:
+                if title_key in seen_title_keys:
+                    dropped["title_duplicate"] = dropped.get("title_duplicate", 0) + 1
+                    continue
+                seen_title_keys.add(title_key)
 
         author_key = _candidate_author_key(candidate)
         if max_per_author is not None and author_key is not None:
@@ -628,6 +659,18 @@ def _candidate_author_key(candidate: dict[str, Any]) -> str | None:
         return None
     text = str(author).strip().casefold()
     return text or None
+
+
+def _candidate_title_key(candidate: dict[str, Any]) -> str | None:
+    title = candidate.get("title")
+    if title is None:
+        return None
+    normalized = " ".join(str(title).casefold().split())
+    if not normalized:
+        return None
+    if len(normalized) < 24 and len(normalized.split()) < 4:
+        return None
+    return normalized
 
 
 def _normalized_url(item: dict[str, Any]) -> str | None:

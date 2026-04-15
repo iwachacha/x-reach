@@ -8,7 +8,7 @@
 4. If readiness matters, run `x-reach doctor --json`.
 5. Use `x-reach doctor --json --probe` only when a live operation check would change the route.
 6. Start collection with one or a small number of `x-reach collect --json` commands using the exact stable channel name from `x-reach channels --json`.
-7. Synthesize results with source links and explicit uncertainty notes.
+7. Return the deliverable the caller asked for. Collection-only handoff is valid; synthesize only when the request actually asks for synthesis.
 
 ## Narrow Research
 

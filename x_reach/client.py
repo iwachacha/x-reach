@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from pathlib import Path
+from typing import Any, Optional, Sequence
 
 from x_reach.adapters import get_adapter
+from x_reach.candidates import build_candidates_payload
 from x_reach.channels import get_all_channel_contracts
 from x_reach.config import Config
 from x_reach.high_signal import (
@@ -14,6 +16,12 @@ from x_reach.high_signal import (
     DEFAULT_BROAD_RAW_MODE,
     is_broad_operation,
     normalize_quality_profile,
+)
+from x_reach.ledger import (
+    merge_ledger_inputs,
+    query_ledger_input,
+    summarize_ledger_input,
+    validate_ledger_input_with_filters,
 )
 from x_reach.operation_contracts import OperationContractError, validate_operation_options
 from x_reach.results import (
@@ -212,6 +220,84 @@ class XReachClient:
         """Return the stable channel registry contract."""
 
         return get_all_channel_contracts()
+
+    def plan_candidates(
+        self,
+        input_path: str | Path,
+        *,
+        by: str = "url",
+        limit: int = 20,
+        summary_only: bool = False,
+        fields: Sequence[str] | str | None = None,
+        max_per_author: int | None = None,
+        prefer_originals: bool = False,
+        drop_noise: bool = False,
+        drop_title_duplicates: bool = False,
+        require_query_match: bool = False,
+        min_seen_in: int | None = None,
+    ) -> dict[str, Any]:
+        """Build lightweight follow-up candidates from an evidence ledger."""
+
+        return build_candidates_payload(
+            input_path,
+            by=by,
+            limit=limit,
+            summary_only=summary_only,
+            fields=fields,
+            max_per_author=max_per_author,
+            prefer_originals=prefer_originals,
+            drop_noise=drop_noise,
+            drop_title_duplicates=drop_title_duplicates,
+            require_query_match=require_query_match,
+            min_seen_in=min_seen_in,
+        )
+
+    def ledger_merge(self, input_path: str | Path, output_path: str | Path) -> dict[str, Any]:
+        """Merge one ledger file or a shard directory into one JSONL file."""
+
+        return merge_ledger_inputs(input_path, output_path)
+
+    def ledger_validate(
+        self,
+        input_path: str | Path,
+        *,
+        require_metadata: bool = False,
+        filters: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Validate an evidence ledger, optionally within a filtered subset."""
+
+        return validate_ledger_input_with_filters(
+            input_path,
+            require_metadata=require_metadata,
+            filters=list(filters or []),
+        )
+
+    def ledger_summarize(
+        self,
+        input_path: str | Path,
+        *,
+        filters: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Return compact ledger health counts for downstream automation."""
+
+        return summarize_ledger_input(input_path, filters=list(filters or []))
+
+    def ledger_query(
+        self,
+        input_path: str | Path,
+        *,
+        filters: Sequence[str] | None = None,
+        limit: int | None = None,
+        fields: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Query ledger records with the same dotted-path surface as the CLI."""
+
+        return query_ledger_input(
+            input_path,
+            filters=list(filters or []),
+            limit=limit,
+            fields=list(fields) if fields is not None else None,
+        )
 
     def collect(
         self,

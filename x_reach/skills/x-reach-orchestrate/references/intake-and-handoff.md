@@ -25,6 +25,7 @@ Create a compact internal brief first.
 
 - Ask a follow-up only if freshness, source policy, geography, or deliverable shape would materially change.
 - Otherwise choose safe defaults and record them as assumptions.
+- If the user asks to gather posts or evidence rather than interpret them, set the deliverable to a shortlist or raw evidence handoff instead of a prose synthesis.
 - If delegation is available and the ambiguity is outcome-changing, one intake-only subagent may shape the brief.
 - If the ask is already narrow and executable, do not use a subagent.
 

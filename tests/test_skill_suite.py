@@ -57,6 +57,28 @@ def test_budgeted_research_skill_has_budget_examples():
     assert "Twitter/X" in examples
 
 
+def test_skill_suite_supports_collection_first_handoffs():
+    base_skill = (_skill_dir("x-reach") / "SKILL.md").read_text(encoding="utf-8")
+    base_metadata = (_skill_dir("x-reach") / "agents" / "openai.yaml").read_text(encoding="utf-8")
+    orchestrate_skill = (_skill_dir("x-reach-orchestrate") / "SKILL.md").read_text(encoding="utf-8")
+    flow = (_skill_dir("x-reach-orchestrate") / "references" / "orchestration-flow.md").read_text(
+        encoding="utf-8"
+    )
+    brief_contract = (_skill_dir("x-reach-shape-brief") / "references" / "brief-contract.md").read_text(
+        encoding="utf-8"
+    )
+    defaults = (_skill_dir("x-reach-shape-brief") / "references" / "defaults.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Collection-only or raw-evidence handoff" in base_skill
+    assert "do not synthesize unless the user asked for it" in base_metadata
+    assert "Collection-only or evidence-pack handoff" in orchestrate_skill
+    assert "Collection-only handoff is valid" in flow
+    assert "answer-first asks" in brief_contract
+    assert "collection-first asks" in defaults
+
+
 def test_maintainer_release_skill_has_shipping_guardrails():
     skill = (_skill_dir("x-reach-maintain-release") / "SKILL.md").read_text(encoding="utf-8")
     boundaries = (_skill_dir("x-reach-maintain-release") / "references" / "change-boundaries.md").read_text(

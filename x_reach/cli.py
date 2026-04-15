@@ -149,6 +149,11 @@ def _add_collect_persistence_args(parser: argparse.ArgumentParser) -> None:
         "--source-role",
         help="Optional evidence ledger source role label. Requires --save or --save-dir",
     )
+    parser.add_argument(
+        "--warn-missing-evidence-metadata",
+        action="store_true",
+        help="Warn on stderr when saving without --intent, --query-id, or --source-role",
+    )
 
 
 def _add_search_filter_args(parser: argparse.ArgumentParser) -> None:
@@ -211,6 +216,7 @@ def _shortcut_collect_namespace(args, *, operation: str, input_value: str) -> ar
         intent=getattr(args, "intent", None),
         query_id=getattr(args, "query_id", None),
         source_role=getattr(args, "source_role", None),
+        warn_missing_evidence_metadata=getattr(args, "warn_missing_evidence_metadata", False),
     )
 
 
@@ -391,6 +397,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--source-role",
         help="Optional evidence ledger source role label. Requires --save or --save-dir",
     )
+    p_collect.add_argument(
+        "--warn-missing-evidence-metadata",
+        action="store_true",
+        help="Warn on stderr when saving without --intent, --query-id, or --source-role",
+    )
 
     p_search = sub.add_parser("search", help="Shortcut for twitter search")
     p_search.add_argument("query", help="Search query text")
@@ -476,9 +487,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Drop candidates that match the deterministic X noise rules",
     )
     p_candidates.add_argument(
+        "--drop-title-duplicates",
+        action="store_true",
+        help="Drop later candidates whose normalized titles exactly match an earlier candidate",
+    )
+    p_candidates.add_argument(
         "--require-query-match",
         action="store_true",
         help="Keep only candidates that still match stored query tokens",
+    )
+    p_candidates.add_argument(
+        "--min-seen-in",
+        type=int,
+        help="Keep only candidates observed in at least N ledger sightings",
     )
 
     p_scout = sub.add_parser("scout", help="Build an opt-in plan-only capability snapshot")
@@ -1251,7 +1272,8 @@ def _cmd_collect(args) -> int:
         print(_render_collect_text(payload, max_text_chars=args.max_text_chars))
 
     if args.save or args.save_dir:
-        _warn_missing_evidence_metadata(args.intent, args.query_id, args.source_role)
+        if getattr(args, "warn_missing_evidence_metadata", False):
+            _warn_missing_evidence_metadata(args.intent, args.query_id, args.source_role)
         try:
             run_id = args.run_id or default_run_id()
             if args.save:
@@ -1323,6 +1345,9 @@ def _cmd_plan_candidates(args) -> int:
     if args.max_per_author is not None and args.max_per_author < 1:
         print("max-per-author must be greater than or equal to 1", file=sys.stderr)
         return 2
+    if args.min_seen_in is not None and args.min_seen_in < 1:
+        print("min-seen-in must be greater than or equal to 1", file=sys.stderr)
+        return 2
     try:
         payload = build_candidates_payload(
             args.input,
@@ -1333,7 +1358,9 @@ def _cmd_plan_candidates(args) -> int:
             max_per_author=args.max_per_author,
             prefer_originals=args.prefer_originals,
             drop_noise=args.drop_noise,
+            drop_title_duplicates=args.drop_title_duplicates,
             require_query_match=args.require_query_match,
+            min_seen_in=args.min_seen_in,
         )
     except CandidatePlanError as exc:
         if args.json:
@@ -1363,6 +1390,12 @@ def _candidate_error_payload(args, message: str) -> dict:
         "limit": args.limit,
         "summary_only": bool(args.summary_only),
         "fields": fields,
+        "max_per_author": args.max_per_author,
+        "prefer_originals": bool(args.prefer_originals),
+        "drop_noise": bool(args.drop_noise),
+        "drop_title_duplicates": bool(args.drop_title_duplicates),
+        "require_query_match": bool(args.require_query_match),
+        "min_seen_in": args.min_seen_in,
         "candidates": [],
         "error": {
             "code": "candidate_plan_error",

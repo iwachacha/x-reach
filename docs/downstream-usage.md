@@ -28,15 +28,19 @@ x-reach collect --operation search --input "OpenAI" --limit 5 --json --save .x-r
 x-reach ledger validate --input .x-reach/evidence.jsonl --json
 x-reach ledger summarize --input .x-reach/evidence.jsonl --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --json
+x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --min-seen-in 2 --json
 ```
 
 ## Caller control
 
 - The caller chooses scope.
 - X Reach does not choose routes, ranking, summarization, or posting.
+- Collection-only or raw-evidence handoff is a valid final deliverable when the caller wants posts or machine-readable artifacts instead of prose synthesis.
 - Keep narrow asks narrow and avoid auto-escalate behavior.
 - Large-scale collection is explicit opt-in.
 - `plan candidates` keeps the default `--limit 20` unless the caller asks for more.
+- `--min-seen-in` is useful for broad or multilingual runs where you want candidates that resurfaced across multiple queries; keep it off for narrow probes.
+- Saved evidence does not warn by default; use `--warn-missing-evidence-metadata` when downstream provenance completeness matters.
 
 ## GitHub Actions
 

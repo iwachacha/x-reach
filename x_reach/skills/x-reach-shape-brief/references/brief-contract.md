@@ -22,7 +22,7 @@ Always return the brief in this exact order:
 
 - `目的`: Why the research is being run and what decision or understanding it should support.
 - `対象`: The product, company, repository, document set, topic, event, community, or comparison axis being investigated.
-- `期待成果物`: The expected final deliverable from the downstream research run. Default to a concise synthesis with citations unless the user asks for a table, shortlist, comparison matrix, timeline, or raw evidence set.
+- `期待成果物`: The expected final deliverable from the downstream research run. Default to a concise synthesis with citations for answer-first asks, but default to a shortlist or raw evidence set when the user emphasizes collection, corpus building, downstream ranking, or no-summary handoff.
 - `鮮度要件`: How current the answer must be. Use concrete dates when recency matters.
 - `含める範囲`: What the investigation should include.
 - `除外範囲`: What to avoid so the downstream prompt does not sprawl.

@@ -13,7 +13,7 @@ If the answer does not materially change the research route, choose a default an
 
 ## Recommended Defaults
 
-- `期待成果物`: concise synthesis with source links, notable caveats, and a short conclusion
+- `期待成果物`: concise synthesis with source links for answer-first asks; shortlist or raw evidence pack with stable source links for collection-first asks
 - `鮮度要件`: use latest available information at execution time for unstable topics; otherwise prefer authoritative baseline material without forcing recency
 - `含める範囲`: official sources first, then high-signal secondary or community sources that directly help answer the request
 - `除外範囲`: duplicate mirrors, low-signal reposts, unsupported speculation, and irrelevant side topics

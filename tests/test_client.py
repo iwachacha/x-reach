@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """Tests for the X Reach SDK surface."""
 
+import json
+
 from agent_reach.config import Config
+from agent_reach.ledger import build_ledger_record
 from agent_reach.results import build_result
+from agent_reach.results import build_item
 from x_reach import XReach, XReachClient
 
 
@@ -218,3 +222,84 @@ def test_collect_catches_unexpected_adapter_error(tmp_path, monkeypatch):
 
     assert payload["ok"] is False
     assert payload["error"]["code"] == "internal_error"
+
+
+def test_client_exposes_ledger_and_candidate_helpers(tmp_path):
+    client = XReachClient(config=Config(config_path=tmp_path / "config.yaml"))
+    ledger_path = tmp_path / "evidence.jsonl"
+    merged_path = tmp_path / "merged.jsonl"
+    result_one = build_result(
+        ok=True,
+        channel="twitter",
+        operation="search",
+        items=[
+            build_item(
+                item_id="1",
+                kind="post",
+                title="Repeated",
+                url="https://x.com/openai/status/1",
+                text="Repeated item",
+                author="openai",
+                published_at=None,
+                source="twitter",
+            )
+        ],
+        raw=None,
+        meta={"input": "OpenAI"},
+        error=None,
+    )
+    result_two = build_result(
+        ok=True,
+        channel="twitter",
+        operation="search",
+        items=[
+            build_item(
+                item_id="2",
+                kind="post",
+                title="Repeated again",
+                url="https://x.com/openai/status/1",
+                text="Repeated item again",
+                author="openai",
+                published_at=None,
+                source="twitter",
+            )
+        ],
+        raw=None,
+        meta={"input": "OpenAI latest"},
+        error=None,
+    )
+    ledger_path.write_text(
+        "\n".join(
+            [
+                json.dumps(build_ledger_record(result_one, run_id="run-1"), ensure_ascii=False),
+                json.dumps(build_ledger_record(result_two, run_id="run-2"), ensure_ascii=False),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    summary = client.ledger_summarize(ledger_path)
+    validation = client.ledger_validate(ledger_path, filters=["channel == twitter"])
+    query = client.ledger_query(
+        ledger_path,
+        filters=["channel == twitter"],
+        limit=1,
+        fields=["channel", "result.meta.input"],
+    )
+    plan = client.plan_candidates(
+        ledger_path,
+        by="url",
+        min_seen_in=2,
+        fields=["title", "seen_in_count"],
+    )
+    merge = client.ledger_merge(ledger_path, merged_path)
+
+    assert summary["records"] == 2
+    assert validation["valid"] is True
+    assert query["matched_records"] == 2
+    assert query["returned_records"] == 1
+    assert plan["summary"]["candidate_count"] == 1
+    assert plan["candidates"] == [{"title": "Repeated", "seen_in_count": 2}]
+    assert merge["records_written"] == 2
+    assert merged_path.exists()

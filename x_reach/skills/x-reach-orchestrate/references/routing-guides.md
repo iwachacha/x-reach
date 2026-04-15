@@ -23,5 +23,5 @@ Choose routing hints that match the task. Do not hard-code unavailable channels;
 - Prefer `--raw-mode minimal|none` and `--item-text-mode snippet|none` for discovery artifacts.
 - Prefer `--save-dir .x-reach/shards` when the run needs multiple collection commands.
 - Merge shards before `ledger summarize`, `ledger query`, or `plan candidates`.
-- Keep the deep-read budget small and summarize shortlisted sources only.
+- Keep the deep-read budget small, and summarize shortlisted sources only when the deliverable calls for synthesis.
 

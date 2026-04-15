@@ -509,3 +509,166 @@ def test_candidates_can_drop_noise_require_query_match_and_cap_authors(tmp_path)
         "query_miss": 1,
     }
 
+
+def test_candidates_can_require_multiple_sightings(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    repeated_url = "https://x.com/alice/status/1"
+    records = [
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="repeat-1",
+                        kind="post",
+                        title="Repeated lead",
+                        url=repeated_url,
+                        text="A repeated high-signal post",
+                        author="alice",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="MCP AI",
+                meta={"query_tokens": ["mcp", "ai"]},
+            ),
+            run_id="run-1",
+        ),
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="repeat-2",
+                        kind="post",
+                        title="Repeated lead duplicate",
+                        url=repeated_url,
+                        text="The same post surfaced again",
+                        author="alice",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="Model Context Protocol",
+                meta={"query_tokens": ["model", "context", "protocol"]},
+            ),
+            run_id="run-2",
+        ),
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="single-1",
+                        kind="post",
+                        title="Singleton",
+                        url="https://x.com/bob/status/2",
+                        text="Only seen once",
+                        author="bob",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="MCP AI",
+                meta={"query_tokens": ["mcp", "ai"]},
+            ),
+            run_id="run-1",
+        ),
+    ]
+    _write_jsonl(path, records)
+
+    payload = build_candidates_payload(path, by="url", limit=20, min_seen_in=2)
+
+    assert [candidate["id"] for candidate in payload["candidates"]] == ["repeat-1"]
+    assert payload["candidates"][0]["seen_in_count"] == 2
+    assert len(payload["candidates"][0]["extras"]["seen_in"]) == 2
+    assert payload["summary"]["candidate_count"] == 2
+    assert payload["summary"]["multi_seen_candidates"] == 1
+    assert payload["summary"]["max_seen_in"] == 2
+    assert payload["summary"]["filter_drop_counts"] == {"seen_in": 1}
+
+
+def test_candidates_can_drop_exact_title_duplicates_across_authors(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    duplicate_title = "Anthropic just introduced the Claude Architect Certification — and it’s not easy"
+    records = [
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="lead",
+                        kind="post",
+                        title=duplicate_title,
+                        url="https://x.com/alice/status/1",
+                        text="Detailed thread about the certification",
+                        author="alice",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="Claude MCP",
+                meta={"query_tokens": ["claude", "mcp"]},
+            ),
+            run_id="run-1",
+        ),
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="copy-1",
+                        kind="post",
+                        title=duplicate_title,
+                        url="https://x.com/bob/status/2",
+                        text="Another account reposted the same headline",
+                        author="bob",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="Claude MCP",
+                meta={"query_tokens": ["claude", "mcp"]},
+            ),
+            run_id="run-1",
+        ),
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="distinct",
+                        kind="post",
+                        title="How to use MCP with Claude Code in practice",
+                        url="https://x.com/carol/status/3",
+                        text="A distinct post should remain",
+                        author="carol",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="Claude MCP",
+                meta={"query_tokens": ["claude", "mcp"]},
+            ),
+            run_id="run-1",
+        ),
+    ]
+    _write_jsonl(path, records)
+
+    payload = build_candidates_payload(path, by="post", limit=20, drop_title_duplicates=True)
+
+    assert [candidate["id"] for candidate in payload["candidates"]] == ["lead", "distinct"]
+    assert payload["summary"]["filter_drop_counts"] == {"title_duplicate": 1}
+

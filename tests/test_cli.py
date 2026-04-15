@@ -422,6 +422,81 @@ class TestCLI:
         payload = json.loads(capsys.readouterr().out)
         assert payload["items"][0]["text"] is None
 
+    def test_collect_save_is_quiet_about_missing_metadata_by_default(self, capsys, monkeypatch):
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("agent_reach.cli.save_collection_result", lambda *args, **kwargs: None)
+
+        assert (
+            main(
+                [
+                    "collect",
+                    "--operation",
+                    "search",
+                    "--input",
+                    "OpenAI",
+                    "--save",
+                    "evidence.jsonl",
+                    "--run-id",
+                    "run-1",
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        captured = capsys.readouterr()
+        assert "[WARN] evidence ledger save used without evidence metadata" not in captured.err
+
+    def test_collect_can_warn_about_missing_metadata_when_requested(self, capsys, monkeypatch):
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("agent_reach.cli.save_collection_result", lambda *args, **kwargs: None)
+
+        assert (
+            main(
+                [
+                    "collect",
+                    "--operation",
+                    "search",
+                    "--input",
+                    "OpenAI",
+                    "--save",
+                    "evidence.jsonl",
+                    "--run-id",
+                    "run-1",
+                    "--warn-missing-evidence-metadata",
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        captured = capsys.readouterr()
+        assert "[WARN] evidence ledger save used without evidence metadata" in captured.err
+
     def test_plan_candidates_passes_new_filtering_args(self, capsys, monkeypatch):
         captured = {}
 
@@ -446,7 +521,10 @@ class TestCLI:
                     "2",
                     "--prefer-originals",
                     "--drop-noise",
+                    "--drop-title-duplicates",
                     "--require-query-match",
+                    "--min-seen-in",
+                    "2",
                     "--json",
                 ]
             )
@@ -456,7 +534,9 @@ class TestCLI:
         assert captured["kwargs"]["max_per_author"] == 2
         assert captured["kwargs"]["prefer_originals"] is True
         assert captured["kwargs"]["drop_noise"] is True
+        assert captured["kwargs"]["drop_title_duplicates"] is True
         assert captured["kwargs"]["require_query_match"] is True
+        assert captured["kwargs"]["min_seen_in"] == 2
 
     def test_uninstall_dry_run_mentions_twitter_cleanup(self, capsys):
         assert main(["uninstall", "--dry-run"]) == 0
