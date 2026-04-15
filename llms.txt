@@ -1,0 +1,34 @@
+# Twitter Reach
+
+Twitter Reach is a Twitter-only split of Agent Reach for Codex-style workflows.
+
+## Quick start
+
+- Install guide: https://github.com/iwachacha/twitter-reach/blob/main/docs/install.md
+- Downstream usage: https://github.com/iwachacha/twitter-reach/blob/main/docs/downstream-usage.md
+- Codex integration: https://github.com/iwachacha/twitter-reach/blob/main/docs/codex-integration.md
+- Python SDK: https://github.com/iwachacha/twitter-reach/blob/main/docs/python-sdk.md
+- Troubleshooting: https://github.com/iwachacha/twitter-reach/blob/main/docs/troubleshooting.md
+- Repository README: https://github.com/iwachacha/twitter-reach/blob/main/README.md
+
+## Stable surfaces
+
+- `agent-reach channels --json`
+- `agent-reach doctor --json`
+- `agent-reach doctor --json --probe`
+- `agent-reach collect --channel twitter --operation <op> --input <value> --json`
+- `agent-reach schema collection-result --json`
+- `agent-reach plan candidates --input .agent-reach/evidence.jsonl --json`
+- `agent-reach ledger validate --input .agent-reach/evidence.jsonl --json`
+- `agent-reach ledger summarize --input .agent-reach/evidence.jsonl --json`
+- `agent-reach ledger query --input .agent-reach/evidence.jsonl --filter "channel == twitter" --json`
+- `agent-reach ledger append --input RESULT.json --output .agent-reach/evidence.jsonl --json`
+- `agent-reach export-integration --client codex --format json`
+- Python: `from agent_reach import AgentReachClient`
+
+## Scope
+
+- Supported channel: `twitter`
+- Purpose: channel registry, readiness diagnostics, thin read-only collection helper
+- Agent Reach does not choose request scale, collection routes, ranking, summarization, or posting
+- External projects should prefer `agent-reach collect --json` and should not copy `.codex-plugin` or `agent_reach/skills` by default

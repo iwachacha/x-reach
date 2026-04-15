@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Reach Shape Brief"
+  short_description: "On explicit Agent Reach opt-in, turn rough research asks into fixed briefs"
+  default_prompt: "When the user explicitly asks for Agent Reach, use $agent-reach-shape-brief to turn this rough research request into a structured brief for Agent Reach."

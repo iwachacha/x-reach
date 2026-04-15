@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Reach Orchestrate"
+  short_description: "On explicit Agent Reach opt-in, start Agent Reach research in-session"
+  default_prompt: "When the user explicitly asks for Agent Reach, use $agent-reach-orchestrate to turn this rough research ask into an executable brief and start the Agent Reach investigation."
