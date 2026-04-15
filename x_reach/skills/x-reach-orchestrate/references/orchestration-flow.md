@@ -30,6 +30,6 @@
 ## Collection-Start Guardrails
 
 - inspect live `operation_contracts` before using `since` or `until`
-- treat `engagement`, `media_references`, `identifiers`, `extras.source_hints`, and `error.category` as diagnostics only
+- treat `engagement`, `media_references`, `identifiers`, and `error.category` as diagnostics only
 - keep channel choice task-driven and live-contract-aware
 

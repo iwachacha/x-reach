@@ -1387,7 +1387,8 @@ def _render_ledger_query_text(payload: dict[str, object]) -> str:
         f"Matched: {payload['matched_records']}",
         f"Returned: {payload['returned_records']}",
     ]
-    filters = payload.get("filters") or []
+    raw_filters = payload.get("filters")
+    filters = raw_filters if isinstance(raw_filters, list) else []
     if filters:
         lines.append(
             "Filters: " + "; ".join(
@@ -1396,10 +1397,12 @@ def _render_ledger_query_text(payload: dict[str, object]) -> str:
                 if isinstance(filter_payload, dict) and filter_payload.get("expression")
             )
         )
-    fields = payload.get("fields")
+    raw_fields = payload.get("fields")
+    fields = raw_fields if isinstance(raw_fields, list) else None
     if fields:
         lines.append(f"Fields: {', '.join(str(field) for field in fields)}")
-    matches = payload.get("matches") or []
+    raw_matches = payload.get("matches")
+    matches = raw_matches if isinstance(raw_matches, list) else []
     for match in matches[:5]:
         lines.append(json.dumps(match, ensure_ascii=False))
     return "\n".join(lines)

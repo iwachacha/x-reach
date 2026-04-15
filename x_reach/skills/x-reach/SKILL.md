@@ -32,7 +32,7 @@ Do not assume this fork chooses investigation scope. The caller chooses scale, t
 - Use `x-reach plan candidates --input .x-reach/evidence.jsonl --json` for lightweight URL or ID dedupe before selected follow-up reads.
 - Keep `x-reach plan candidates` at the default `--limit 20` unless the caller explicitly wants a broader candidate set.
 - Use `x-reach schema collection-result --json` when downstream code needs a contract-testable schema.
-- Treat `engagement`, `media_references`, `identifiers`, `extras.source_hints`, `extras.engagement_complete`, `extras.media_complete`, and `error.category` as diagnostics only, not ranking or trust scores.
+- Treat `engagement`, `media_references`, `identifiers`, `extras.engagement_complete`, `extras.media_complete`, and `error.category` as diagnostics only, not ranking or trust scores.
 - Treat `batch` and `scout` as explicit opt-in helpers. They are not the default route for everyday collection.
 - For large research tasks, only use bounded fan-out when the caller explicitly opts in; then use `plan candidates` for no-model dedupe and deep-read only selected URLs.
 

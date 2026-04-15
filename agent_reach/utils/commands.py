@@ -1,4 +1,4 @@
-"""Helpers for locating Windows-installed command line tools."""
+"""Helpers for locating command line tools."""
 
 from __future__ import annotations
 
@@ -45,15 +45,4 @@ def ensure_command_on_path(name: str) -> Optional[str]:
 
 
 def _windows_candidates(name: str) -> Iterable[Path]:
-    local_app_data = os.environ.get("LOCALAPPDATA", "")
-    program_files = os.environ.get("ProgramFiles", "")
-    program_files_x86 = os.environ.get("ProgramFiles(x86)", "")
-
-    if name == "gh":
-        yield Path(program_files) / "GitHub CLI" / "gh.exe"
-        yield Path(program_files_x86) / "GitHub CLI" / "gh.exe"
-    elif name == "yt-dlp":
-        winget_root = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
-        if winget_root.exists():
-            for package_dir in winget_root.glob("yt-dlp.yt-dlp_*"):
-                yield package_dir / "yt-dlp.exe"
+    return ()
