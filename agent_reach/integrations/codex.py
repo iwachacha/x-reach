@@ -31,7 +31,7 @@ LEGACY_PACKAGED_SKILL_NAMES = (
     "agent-reach-maintain-release",
 )
 INTEGRATION_PROFILES = ("full", "runtime-minimal")
-FORK_REPO_URL = "https://github.com/iwachacha/twitter-reach.git"
+FORK_REPO_URL = "https://github.com/iwachacha/x-reach.git"
 
 
 def _repo_root() -> Path:
@@ -226,7 +226,7 @@ def _external_project_usage() -> dict[str, Any]:
             ],
         },
         "github_actions": {
-            "uses": "iwachacha/twitter-reach/.github/actions/setup-x-reach@main",
+            "uses": "iwachacha/x-reach/.github/actions/setup-x-reach@main",
             "notes": [
                 "Use the composite action to install the CLI in the workflow without vendoring repo files.",
                 "Pin `uses` to a tag or commit for reproducible automation.",
@@ -420,7 +420,7 @@ def export_codex_integration(profile: str = "full") -> dict[str, Any]:
             "availability": "project_env_only",
             "import": "from x_reach import XReachClient",
             "install_examples": [
-                "uv pip install -e C:\\path\\to\\twitter-reach",
+                "uv pip install -e C:\\path\\to\\x-reach",
                 "uv pip install C:\\path\\to\\dist\\x_reach-<version>-py3-none-any.whl",
             ],
             "quickstart": [

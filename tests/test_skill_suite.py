@@ -68,5 +68,5 @@ def test_maintainer_release_skill_has_shipping_guardrails():
 
     assert "commit, push, or reinstall" in skill
     assert "Must-Stay-True Rules" in boundaries
-    assert "twitter-reach.git" in flow
+    assert "x-reach.git" in flow
 

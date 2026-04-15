@@ -5,7 +5,7 @@ This Twitter-only fork keeps the `x-reach` CLI and exposes `x_reach` as the prim
 ## Install the latest fork build
 
 ```powershell
-uv tool install --force git+https://github.com/iwachacha/twitter-reach.git
+uv tool install --force git+https://github.com/iwachacha/x-reach.git
 x-reach skill --install
 x-reach version
 ```
@@ -13,7 +13,7 @@ x-reach version
 To pin a specific build:
 
 ```powershell
-uv tool install --force git+https://github.com/iwachacha/twitter-reach.git@<commit-or-ref>
+uv tool install --force git+https://github.com/iwachacha/x-reach.git@<commit-or-ref>
 x-reach skill --install
 x-reach version
 ```

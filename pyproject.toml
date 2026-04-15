@@ -45,7 +45,7 @@ agent-reach = "x_reach.cli:main"
 
 [project.urls]
 Upstream = "https://github.com/Panniantong/Agent-Reach"
-Repository = "https://github.com/iwachacha/twitter-reach"
+Repository = "https://github.com/iwachacha/x-reach"
 
 [build-system]
 requires = ["hatchling"]

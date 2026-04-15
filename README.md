@@ -27,7 +27,7 @@ Legacy compatibility imports such as `from agent_reach import XReachClient` rema
 ## Install the latest fork build
 
 ```powershell
-uv tool install --force git+https://github.com/iwachacha/twitter-reach.git
+uv tool install --force git+https://github.com/iwachacha/x-reach.git
 x-reach skill --install
 x-reach version
 ```
@@ -35,7 +35,7 @@ x-reach version
 To pin an exact build:
 
 ```powershell
-uv tool install --force git+https://github.com/iwachacha/twitter-reach.git@<commit-or-ref>
+uv tool install --force git+https://github.com/iwachacha/x-reach.git@<commit-or-ref>
 x-reach skill --install
 x-reach version
 ```

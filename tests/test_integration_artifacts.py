@@ -139,5 +139,5 @@ def test_export_tool_install_omits_dead_paths(tmp_path):
     assert payload["recommended_docs"] == []
     assert payload["plugin_manifest_inline"]["name"] == "x-reach"
     assert payload["mcp_config_inline"] is None
-    assert payload["external_project_usage"]["github_actions"]["uses"].startswith("iwachacha/twitter-reach/")
+    assert payload["external_project_usage"]["github_actions"]["uses"].startswith("iwachacha/x-reach/")
 

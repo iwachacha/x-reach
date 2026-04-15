@@ -34,7 +34,7 @@ Use this order for approved X Reach maintenance work.
 ## 5. Reinstall After Push
 
 1. get the pushed commit with `git rev-parse HEAD`
-2. reinstall with `uv tool install --force git+https://github.com/iwachacha/twitter-reach.git@<commit>`
+2. reinstall with `uv tool install --force git+https://github.com/iwachacha/x-reach.git@<commit>`
 3. rerun `x-reach skill --install`
 4. run lightweight smoke commands only if requested or clearly warranted
 

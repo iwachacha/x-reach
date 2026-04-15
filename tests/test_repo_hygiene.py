@@ -42,7 +42,7 @@ def test_docs_folder_only_contains_supported_docs():
 def test_llms_txt_points_at_current_fork_docs():
     llms = (_repo_root() / "llms.txt").read_text(encoding="utf-8")
 
-    assert "github.com/iwachacha/twitter-reach/blob/main/docs/install.md" in llms
+    assert "github.com/iwachacha/x-reach/blob/main/docs/install.md" in llms
     assert "github.com/iwachacha/Agent-Reach/blob/main/" not in llms
     assert "twitter" in llms
 

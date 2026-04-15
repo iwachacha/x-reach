@@ -5,7 +5,7 @@ X Reach is meant to be consumed as a CLI or Python dependency from another proje
 ## Install
 
 ```powershell
-uv tool install --force git+https://github.com/iwachacha/twitter-reach.git
+uv tool install --force git+https://github.com/iwachacha/x-reach.git
 x-reach skill --install
 ```
 
@@ -41,7 +41,7 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --li
 ## GitHub Actions
 
 ```yaml
-- uses: iwachacha/twitter-reach/.github/actions/setup-x-reach@main
+- uses: iwachacha/x-reach/.github/actions/setup-x-reach@main
   with:
     install-twitter-cli: "true"
 ```

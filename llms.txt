@@ -4,12 +4,12 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 
 ## Quick start
 
-- Install guide: https://github.com/iwachacha/twitter-reach/blob/main/docs/install.md
-- Downstream usage: https://github.com/iwachacha/twitter-reach/blob/main/docs/downstream-usage.md
-- Codex integration: https://github.com/iwachacha/twitter-reach/blob/main/docs/codex-integration.md
-- Python SDK: https://github.com/iwachacha/twitter-reach/blob/main/docs/python-sdk.md
-- Troubleshooting: https://github.com/iwachacha/twitter-reach/blob/main/docs/troubleshooting.md
-- Repository README: https://github.com/iwachacha/twitter-reach/blob/main/README.md
+- Install guide: https://github.com/iwachacha/x-reach/blob/main/docs/install.md
+- Downstream usage: https://github.com/iwachacha/x-reach/blob/main/docs/downstream-usage.md
+- Codex integration: https://github.com/iwachacha/x-reach/blob/main/docs/codex-integration.md
+- Python SDK: https://github.com/iwachacha/x-reach/blob/main/docs/python-sdk.md
+- Troubleshooting: https://github.com/iwachacha/x-reach/blob/main/docs/troubleshooting.md
+- Repository README: https://github.com/iwachacha/x-reach/blob/main/README.md
 
 ## Stable surfaces
 

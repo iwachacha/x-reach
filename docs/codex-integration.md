@@ -5,7 +5,7 @@ This fork keeps the X Reach Codex integration surface, but only for Twitter/X co
 ## Install
 
 ```powershell
-uv tool install --force git+https://github.com/iwachacha/twitter-reach.git
+uv tool install --force git+https://github.com/iwachacha/x-reach.git
 x-reach skill --install
 ```
 

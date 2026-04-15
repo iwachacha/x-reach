@@ -19,7 +19,7 @@ uv pip install -e .
 Or install the current fork directly:
 
 ```powershell
-uv pip install "x-reach @ git+https://github.com/iwachacha/twitter-reach.git"
+uv pip install "x-reach @ git+https://github.com/iwachacha/x-reach.git"
 ```
 
 ## Basic usage

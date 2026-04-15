@@ -5,8 +5,8 @@ Thank you for contributing. This fork is intentionally narrow: Windows-first, Co
 ## Local setup
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/twitter-reach.git
-cd twitter-reach
+git clone https://github.com/YOUR_USERNAME/x-reach.git
+cd x-reach
 uv sync --extra dev
 ```
 
