@@ -1,4 +1,8 @@
-# -*- coding: utf-8 -*-
-"""Package version shared by runtime modules without import cycles."""
+﻿# -*- coding: utf-8 -*-
+# Compatibility wrapper around x_reach._version.
 
-__version__ = "1.13.0"
+from importlib import import_module
+import sys
+
+sys.modules[__name__] = import_module('x_reach._version')
+

@@ -1,14 +1,8 @@
-"""UTF-8-safe text helpers for cross-platform file operations."""
+﻿# -*- coding: utf-8 -*-
+# Compatibility wrapper around x_reach.utils.text.
 
-from __future__ import annotations
+from importlib import import_module
+import sys
 
-from pathlib import Path
+sys.modules[__name__] = import_module('x_reach.utils.text')
 
-
-def read_utf8_text(path: str | Path, default: str = "") -> str:
-    """Read text as UTF-8 with replacement semantics."""
-
-    target = Path(path)
-    if not target.exists():
-        return default
-    return target.read_text(encoding="utf-8", errors="replace")

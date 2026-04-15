@@ -1,6 +1,8 @@
-# -*- coding: utf-8 -*-
-"""Integration export helpers for downstream tools."""
+﻿# -*- coding: utf-8 -*-
+# Compatibility wrapper around x_reach.integrations.
 
-from agent_reach.integrations.codex import export_codex_integration
+from importlib import import_module
+import sys
 
-__all__ = ["export_codex_integration"]
+sys.modules[__name__] = import_module('x_reach.integrations')
+

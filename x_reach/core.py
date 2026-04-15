@@ -1,6 +1,7 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Public core exports for X Reach."""
 
-from x_reach.client import XReach, XReachClient
+from x_reach.client import AgentReach, AgentReachClient, XReach, XReachClient
 
-__all__ = ["XReach", "XReachClient"]
+__all__ = ["AgentReach", "AgentReachClient", "XReach", "XReachClient"]
+

@@ -1,15 +1,15 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Public SDK for X Reach."""
 
 from __future__ import annotations
 
 from typing import Optional, Sequence
 
-from agent_reach.adapters import get_adapter
-from agent_reach.channels import get_all_channel_contracts
-from agent_reach.config import Config
-from agent_reach.operation_contracts import OperationContractError, validate_operation_options
-from agent_reach.results import CollectionResult, build_error, build_result
+from x_reach.adapters import get_adapter
+from x_reach.channels import get_all_channel_contracts
+from x_reach.config import Config
+from x_reach.operation_contracts import OperationContractError, validate_operation_options
+from x_reach.results import CollectionResult, build_error, build_result
 
 
 class _Namespace:
@@ -129,7 +129,7 @@ class XReachClient:
         self.twitter = _Namespace(self, "twitter")
 
     def doctor(self) -> dict[str, dict]:
-        from agent_reach.doctor import check_all
+        from x_reach.doctor import check_all
 
         return check_all(self.config)
 
@@ -140,7 +140,7 @@ class XReachClient:
         required_channels: Sequence[str] | None = None,
         require_all: bool = False,
     ) -> dict:
-        from agent_reach.doctor import check_all, make_doctor_payload
+        from x_reach.doctor import check_all, make_doctor_payload
 
         return make_doctor_payload(
             check_all(self.config, probe=probe),
@@ -156,7 +156,7 @@ class XReachClient:
         required_channels: Sequence[str] | None = None,
         require_all: bool = False,
     ) -> str:
-        from agent_reach.doctor import check_all, format_report
+        from x_reach.doctor import check_all, format_report
 
         return format_report(
             check_all(self.config, probe=probe),
@@ -305,4 +305,9 @@ class XReach(XReachClient):
     """Primary compatibility surface for the X Reach SDK."""
 
 
-__all__ = ["XReach", "XReachClient"]
+AgentReachClient = XReachClient
+AgentReach = XReach
+
+
+__all__ = ["AgentReach", "AgentReachClient", "XReach", "XReachClient"]
+

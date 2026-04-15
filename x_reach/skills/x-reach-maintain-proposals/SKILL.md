@@ -13,7 +13,7 @@ This is the right maintainer skill when someone has already pasted candidate imp
 
 1. Read [references/policy-tests.md](references/policy-tests.md) to apply hard accept and reject rules.
 2. Read [references/review-output.md](references/review-output.md) to keep the decision record compact and reusable.
-3. Inspect the current repo surface before judging overlap. Check `README.md`, `agent_reach/integrations/codex.py`, the relevant CLI or adapter modules, and existing skills when needed.
+3. Inspect the current repo surface before judging overlap. Check `README.md`, `x_reach/integrations/codex.py`, the relevant CLI or adapter modules, and existing skills when needed.
 4. Judge each proposal independently first. Only bundle accepted items when they clearly share one thin primitive or one release boundary.
 5. If at least one item is `adopt_now`, define the smallest safe implementation slice before editing.
 

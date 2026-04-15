@@ -1,9 +1,6 @@
-# -*- coding: utf-8 -*-
-"""Legacy core aliases kept for internal compatibility."""
+﻿# -*- coding: utf-8 -*-
+"""Legacy SDK aliases kept for internal compatibility."""
 
-from x_reach.core import XReach, XReachClient
-
-AgentReach = XReach
-AgentReachClient = XReachClient
+from x_reach.core import AgentReach, AgentReachClient, XReach, XReachClient
 
 __all__ = ["AgentReach", "AgentReachClient", "XReach", "XReachClient"]

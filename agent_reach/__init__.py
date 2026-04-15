@@ -1,11 +1,10 @@
 ﻿# -*- coding: utf-8 -*-
-"""Internal implementation package for X Reach."""
+"""Legacy compatibility surface for agent_reach imports."""
 
-from agent_reach._version import __version__
+from x_reach._version import __version__
+from x_reach.core import XReach, XReachClient
 
-__author__ = "Neo Reid"
-
-from agent_reach.core import AgentReach, AgentReachClient, XReach, XReachClient
+AgentReachClient = XReachClient
+AgentReach = XReach
 
 __all__ = ["AgentReach", "AgentReachClient", "XReach", "XReachClient", "__version__"]
-

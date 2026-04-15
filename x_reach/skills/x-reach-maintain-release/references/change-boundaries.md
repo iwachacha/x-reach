@@ -23,7 +23,7 @@ When the public or packaged surface changes, review whether these also need upda
 
 - `README.md`
 - install or downstream docs under `docs/`
-- `agent_reach/integrations/codex.py`
+- `x_reach/integrations/codex.py`
 - packaged skill metadata and references
 - version and changelog files
 - tests that lock exported names or skill lists
