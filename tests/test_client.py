@@ -119,10 +119,23 @@ def test_collect_passes_twitter_since_until_from_contract(tmp_path, monkeypatch)
     monkeypatch.setattr("x_reach.client.get_adapter", lambda channel, config=None: _StubAdapter(config=config))
     client = XReachClient(config=config)
 
-    payload = client.collect("twitter", "search", "OpenAI", since="2026-01-01", until="2026-12-31")
+    payload = client.collect(
+        "twitter",
+        "search",
+        "OpenAI",
+        since="2026-01-01",
+        until="2026-12-31",
+        raw_mode="full",
+    )
 
     assert payload["ok"] is True
-    assert payload["raw"] == {"value": "OpenAI", "limit": None, "since": "2026-01-01", "until": "2026-12-31"}
+    assert payload["raw"] == {
+        "value": "OpenAI",
+        "limit": None,
+        "since": "2026-01-01",
+        "until": "2026-12-31",
+        "quality_profile": "balanced",
+    }
 
 
 def test_collect_passes_formalized_search_filters(tmp_path, monkeypatch):
@@ -139,6 +152,7 @@ def test_collect_passes_formalized_search_filters(tmp_path, monkeypatch):
         has=["links"],
         min_likes=10,
         min_views=100,
+        raw_mode="full",
     )
 
     assert payload["ok"] is True
@@ -154,10 +168,38 @@ def test_collect_passes_user_posts_originals_only(tmp_path, monkeypatch):
     monkeypatch.setattr("x_reach.client.get_adapter", lambda channel, config=None: _StubAdapter(config=config))
     client = XReachClient(config=config)
 
-    payload = client.twitter.user_posts("OpenAI", limit=5, originals_only=True)
+    payload = client.twitter.user_posts("OpenAI", limit=5, originals_only=True, raw_mode="full")
 
     assert payload["ok"] is True
     assert payload["raw"]["originals_only"] is True
+
+
+def test_collect_defaults_broad_operations_to_compact_shapes(tmp_path, monkeypatch):
+    config = Config(config_path=tmp_path / "config.yaml")
+    monkeypatch.setattr("x_reach.client.get_adapter", lambda channel, config=None: _StubAdapter(config=config))
+    client = XReachClient(config=config)
+
+    payload = client.collect("twitter", "search", "OpenAI")
+
+    assert payload["ok"] is True
+    assert payload["raw"] is None
+    assert payload["meta"]["quality_profile"] == "balanced"
+    assert payload["meta"]["raw_mode"] == "none"
+    assert payload["meta"]["item_text_mode"] == "snippet"
+    assert payload["meta"]["item_text_max_chars"] == 280
+    assert payload["meta"]["applied_defaults"]["quality_profile"] == "balanced"
+
+
+def test_collect_passes_explicit_quality_profile_to_adapter(tmp_path, monkeypatch):
+    config = Config(config_path=tmp_path / "config.yaml")
+    monkeypatch.setattr("x_reach.client.get_adapter", lambda channel, config=None: _StubAdapter(config=config))
+    client = XReachClient(config=config)
+
+    payload = client.twitter.search("OpenAI", quality_profile="precision", raw_mode="full")
+
+    assert payload["ok"] is True
+    assert payload["raw"]["quality_profile"] == "precision"
+    assert payload["meta"]["quality_profile"] == "precision"
 
 
 def test_collect_catches_unexpected_adapter_error(tmp_path, monkeypatch):

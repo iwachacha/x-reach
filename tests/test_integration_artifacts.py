@@ -85,7 +85,7 @@ def test_export_points_at_existing_checkout_artifacts():
     channel_contracts = {channel["name"]: channel for channel in payload["channels"]}
     assert list(channel_contracts) == ["twitter"]
     assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][0]["name"] == "from"
-    assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][-1]["name"] == "min_views"
+    assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][-1]["name"] == "quality_profile"
     assert channel_contracts["twitter"]["operation_contracts"]["hashtag"]["input_kind"] == "hashtag"
     assert channel_contracts["twitter"]["probe_operations"] == ["search", "hashtag", "user", "user_posts", "tweet"]
     assert channel_contracts["twitter"]["probe_coverage"] == "full"

@@ -5,9 +5,19 @@ from __future__ import annotations
 
 import json
 import time
+from collections import Counter
 from typing import Any, Sequence
 from urllib.parse import urlparse
 
+from x_reach.high_signal import (
+    analyze_item_quality,
+    extract_query_tokens,
+    merge_default_excludes,
+    normalize_quality_profile,
+    resolve_default_originals_only,
+    resolve_default_search_type,
+    resolve_fetch_limit,
+)
 from x_reach.media_references import build_media_reference, dedupe_media_references
 from x_reach.results import (
     CollectionResult,
@@ -105,13 +115,7 @@ def _tweet_item(
     quoted_post_id = quoted_tweet.get("id") if isinstance(quoted_tweet, dict) else None
     quoted_author = quoted_tweet.get("author") if isinstance(quoted_tweet, dict) else {}
     retweeted_by = tweet.get("retweetedBy")
-    timeline_item_kind = "original"
-    if tweet.get("isRetweet"):
-        timeline_item_kind = "retweet"
-    elif tweet.get("inReplyToStatusId"):
-        timeline_item_kind = "reply"
-    elif quoted_post_id is not None:
-        timeline_item_kind = "quote"
+    timeline_item_kind = _tweet_timeline_item_kind(tweet)
     return build_item(
         item_id=str(tweet.get("id") or f"tweet-{idx}"),
         kind="post",
@@ -157,6 +161,18 @@ def _compact_mapping(values: dict[str, Any]) -> dict[str, Any]:
         for key, value in values.items()
         if value not in (None, "", [], {}, False)
     }
+
+
+def _tweet_timeline_item_kind(tweet: dict[str, Any]) -> str:
+    quoted_tweet = tweet.get("quotedTweet")
+    quoted_post_id = quoted_tweet.get("id") if isinstance(quoted_tweet, dict) else None
+    if tweet.get("isRetweet"):
+        return "retweet"
+    if tweet.get("inReplyToStatusId"):
+        return "reply"
+    if quoted_post_id is not None:
+        return "quote"
+    return "original"
 
 
 def _tweet_item_shape(*, engagement_complete: bool, media_complete: bool) -> dict[str, dict[str, str]]:
@@ -220,6 +236,103 @@ def _apply_originals_only(
             "items_after_originals_only": len(filtered),
         }
     }
+
+
+def _tweet_url_values(tweet: dict[str, Any]) -> list[str]:
+    raw_urls = tweet.get("urls")
+    if not isinstance(raw_urls, list):
+        return []
+
+    values: list[str] = []
+    for entry in raw_urls:
+        if isinstance(entry, dict):
+            for candidate in (
+                entry.get("expandedUrl"),
+                entry.get("url"),
+                entry.get("expanded_url"),
+                entry.get("displayUrl"),
+            ):
+                if candidate:
+                    values.append(str(candidate))
+                    break
+            continue
+        text = str(entry).strip()
+        if text:
+            values.append(text)
+    return values
+
+
+def _tweet_searchable_parts(tweet: dict[str, Any]) -> list[str | None]:
+    author = tweet.get("author") or {}
+    quoted_tweet = tweet.get("quotedTweet")
+    quoted_author = quoted_tweet.get("author") if isinstance(quoted_tweet, dict) else {}
+    return [
+        tweet.get("text"),
+        author.get("screenName"),
+        author.get("name"),
+        quoted_author.get("screenName") if isinstance(quoted_author, dict) else None,
+        quoted_author.get("name") if isinstance(quoted_author, dict) else None,
+        " ".join(_tweet_url_values(tweet)) or None,
+    ]
+
+
+def _apply_quality_profile_filter(
+    data: list[dict[str, Any]],
+    *,
+    requested_limit: int,
+    quality_profile: str | None,
+    query_tokens: Sequence[str] | None = None,
+    require_query_match: bool = False,
+    drop_retweets: bool = False,
+    drop_replies: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any], list[str]]:
+    if quality_profile not in {"precision", "balanced"}:
+        return data[:requested_limit], {}, {}, []
+
+    kept: list[dict[str, Any]] = []
+    fallback: list[dict[str, Any]] = []
+    dropped = Counter()
+
+    for tweet in data:
+        analysis = analyze_item_quality(
+            text=tweet.get("text"),
+            searchable_parts=_tweet_searchable_parts(tweet),
+            urls=_tweet_url_values(tweet),
+            query_tokens=query_tokens,
+            item_kind=_tweet_timeline_item_kind(tweet),
+            engagement=tweet.get("metrics") if isinstance(tweet.get("metrics"), dict) else tweet,
+            quality_profile=quality_profile,
+            require_query_match=require_query_match,
+            drop_retweets=drop_retweets,
+            drop_replies=drop_replies,
+        )
+        reasons = list(dict.fromkeys(str(reason) for reason in analysis["drop_reasons"]))
+        if not reasons:
+            kept.append(tweet)
+            continue
+        if reasons == ["engagement_gate"]:
+            fallback.append(tweet)
+            continue
+        for reason in reasons:
+            dropped[reason] += 1
+
+    used_fallback = max(requested_limit - len(kept), 0)
+    if used_fallback:
+        kept.extend(fallback[:used_fallback])
+    for _tweet in fallback[used_fallback:]:
+        dropped["engagement_gate"] += 1
+
+    filter_drop_counts = {key: dropped[key] for key in sorted(dropped)}
+    diagnostics = {
+        "quality_filter": {
+            "quality_profile": quality_profile,
+            "items_before_quality_filter": len(data),
+            "items_after_quality_filter": len(kept[:requested_limit]),
+            "fallback_candidates": len(fallback),
+            "fallback_used": min(used_fallback, len(fallback)),
+        }
+    }
+    return kept[:requested_limit], diagnostics, filter_drop_counts, list(filter_drop_counts)
 
 
 def _build_search_args(
@@ -326,6 +439,10 @@ def _query_has_time_window(query: str) -> bool:
     return any(token.lower().startswith(("since:", "until:")) for token in query.split())
 
 
+def _query_has_search_type(query: str) -> bool:
+    return any(token.lower().startswith("type:") for token in query.split())
+
+
 def _time_window_diagnostics(query: str, since: str | None, until: str | None) -> dict[str, object]:
     bounded = since is not None or until is not None or _query_has_time_window(query)
     return {
@@ -375,26 +492,49 @@ class TwitterAdapter(BaseAdapter):
         min_likes: int | None = None,
         min_retweets: int | None = None,
         min_views: int | None = None,
+        quality_profile: str | None = None,
     ) -> CollectionResult:
         started_at = time.perf_counter()
+        effective_quality_profile = normalize_quality_profile("search", quality_profile)
+        requested_limit = max(int(limit), 1)
+        fetch_limit = resolve_fetch_limit(requested_limit, effective_quality_profile)
+        if search_type is None and _query_has_search_type(query):
+            effective_search_type, defaulted_search_type = None, False
+        else:
+            effective_search_type, defaulted_search_type = resolve_default_search_type(
+                search_type,
+                effective_quality_profile,
+            )
+        effective_exclude, defaulted_exclude = merge_default_excludes(
+            _string_list(exclude) or None,
+            effective_quality_profile,
+        )
+        query_tokens = extract_query_tokens(query)
+        applied_defaults: dict[str, Any] = {}
+        if quality_profile is None and effective_quality_profile is not None:
+            applied_defaults["quality_profile"] = effective_quality_profile
+        if defaulted_search_type and effective_search_type is not None:
+            applied_defaults["search_type"] = effective_search_type
+        if defaulted_exclude and effective_exclude is not None:
+            applied_defaults["exclude"] = effective_exclude
         result = self._run_twitter(
             _build_search_args(
                 query,
-                limit,
+                fetch_limit,
                 since=since,
                 until=until,
                 from_user=from_user,
                 to_user=to_user,
                 lang=lang,
-                search_type=search_type,
+                search_type=effective_search_type,
                 has=has,
-                exclude=exclude,
+                exclude=effective_exclude,
                 min_likes=min_likes,
                 min_retweets=min_retweets,
             ),
             operation="search",
             value=query,
-            limit=limit,
+            limit=requested_limit,
             started_at=started_at,
             extra_meta={
                 "since": since,
@@ -402,12 +542,16 @@ class TwitterAdapter(BaseAdapter):
                 "from_user": from_user,
                 "to_user": to_user,
                 "lang": lang,
-                "search_type": search_type,
+                "search_type": effective_search_type,
                 "has": _string_list(has) or None,
-                "exclude": _string_list(exclude) or None,
+                "exclude": effective_exclude,
                 "min_likes": min_likes,
                 "min_retweets": min_retweets,
                 "min_views": min_views,
+                "quality_profile": effective_quality_profile,
+                "fetch_limit": fetch_limit,
+                "query_tokens": query_tokens or None,
+                **({"applied_defaults": applied_defaults} if applied_defaults else {}),
             },
         )
         if isinstance(result, dict):
@@ -417,6 +561,15 @@ class TwitterAdapter(BaseAdapter):
         raw_data = raw.get("data", [])
         data = raw_data if isinstance(raw_data, list) else []
         data, client_filter_diagnostics = _apply_min_views(data, min_views)
+        data, quality_diagnostics, filter_drop_counts, filter_drop_reasons = _apply_quality_profile_filter(
+            data,
+            requested_limit=requested_limit,
+            quality_profile=effective_quality_profile,
+            query_tokens=query_tokens,
+            require_query_match=True,
+            drop_retweets=True,
+            drop_replies=True,
+        )
         items = [
             _tweet_item(
                 tweet,
@@ -431,22 +584,29 @@ class TwitterAdapter(BaseAdapter):
             raw=raw,
             meta=self.make_meta(
                 value=query,
-                limit=limit,
+                limit=requested_limit,
                 started_at=started_at,
                 since=since,
                 until=until,
                 from_user=from_user,
                 to_user=to_user,
                 lang=lang,
-                search_type=search_type,
+                search_type=effective_search_type,
                 has=_string_list(has) or None,
-                exclude=_string_list(exclude) or None,
+                exclude=effective_exclude,
                 min_likes=min_likes,
                 min_retweets=min_retweets,
                 min_views=min_views,
+                quality_profile=effective_quality_profile,
+                fetch_limit=fetch_limit,
+                query_tokens=query_tokens or None,
+                **({"applied_defaults": applied_defaults} if applied_defaults else {}),
+                **({"filter_drop_counts": filter_drop_counts} if filter_drop_counts else {}),
+                **({"filter_drop_reasons": filter_drop_reasons} if filter_drop_reasons else {}),
                 diagnostics={
                     **_time_window_diagnostics(query, since, until),
                     **client_filter_diagnostics,
+                    **quality_diagnostics,
                 },
                 **_tweet_item_shape(engagement_complete=False, media_complete=False),
             ),
@@ -540,6 +700,7 @@ class TwitterAdapter(BaseAdapter):
         min_likes: int | None = None,
         min_retweets: int | None = None,
         min_views: int | None = None,
+        quality_profile: str | None = None,
     ) -> CollectionResult:
         started_at = time.perf_counter()
         normalized = _normalize_hashtag(hashtag)
@@ -564,6 +725,7 @@ class TwitterAdapter(BaseAdapter):
             min_likes=min_likes,
             min_retweets=min_retweets,
             min_views=min_views,
+            quality_profile=quality_profile,
         )
         meta = dict(payload.get("meta") or {})
         meta["input"] = hashtag
@@ -579,16 +741,34 @@ class TwitterAdapter(BaseAdapter):
         self,
         screen_name: str,
         limit: int = 10,
-        originals_only: bool = False,
+        originals_only: bool | None = None,
+        quality_profile: str | None = None,
     ) -> CollectionResult:
         started_at = time.perf_counter()
         normalized = _normalize_screen_name(screen_name)
+        effective_quality_profile = normalize_quality_profile("user_posts", quality_profile)
+        requested_limit = max(int(limit), 1)
+        fetch_limit = resolve_fetch_limit(requested_limit, effective_quality_profile)
+        effective_originals_only, defaulted_originals_only = resolve_default_originals_only(
+            originals_only,
+            effective_quality_profile,
+        )
+        applied_defaults: dict[str, Any] = {}
+        if quality_profile is None and effective_quality_profile is not None:
+            applied_defaults["quality_profile"] = effective_quality_profile
+        if defaulted_originals_only:
+            applied_defaults["originals_only"] = True
         result = self._run_twitter(
-            ["user-posts", normalized, "-n", str(limit), "--json"],
+            ["user-posts", normalized, "-n", str(fetch_limit), "--json"],
             operation="user_posts",
             value=normalized,
-            limit=limit,
+            limit=requested_limit,
             started_at=started_at,
+            extra_meta={
+                "quality_profile": effective_quality_profile,
+                "fetch_limit": fetch_limit,
+                **({"applied_defaults": applied_defaults} if applied_defaults else {}),
+            },
         )
         if isinstance(result, dict):
             return result
@@ -601,9 +781,15 @@ class TwitterAdapter(BaseAdapter):
                 code="invalid_response",
                 message="Twitter user posts returned an unexpected payload",
                 raw=raw,
-                meta=self.make_meta(value=normalized, limit=limit, started_at=started_at),
+                meta=self.make_meta(value=normalized, limit=requested_limit, started_at=started_at),
             )
-        data, client_filter_diagnostics = _apply_originals_only(data, originals_only)
+        data, client_filter_diagnostics = _apply_originals_only(data, effective_originals_only)
+        data, quality_diagnostics, filter_drop_counts, filter_drop_reasons = _apply_quality_profile_filter(
+            data,
+            requested_limit=requested_limit,
+            quality_profile=effective_quality_profile,
+            drop_retweets=effective_originals_only,
+        )
         items = [
             _tweet_item(
                 tweet,
@@ -619,10 +805,18 @@ class TwitterAdapter(BaseAdapter):
             raw=raw,
             meta=self.make_meta(
                 value=normalized,
-                limit=limit,
+                limit=requested_limit,
                 started_at=started_at,
-                originals_only=originals_only or None,
-                **({"diagnostics": client_filter_diagnostics} if client_filter_diagnostics else {}),
+                originals_only=effective_originals_only or None,
+                quality_profile=effective_quality_profile,
+                fetch_limit=fetch_limit,
+                **({"applied_defaults": applied_defaults} if applied_defaults else {}),
+                **({"filter_drop_counts": filter_drop_counts} if filter_drop_counts else {}),
+                **({"filter_drop_reasons": filter_drop_reasons} if filter_drop_reasons else {}),
+                diagnostics={
+                    **client_filter_diagnostics,
+                    **quality_diagnostics,
+                },
                 **_tweet_item_shape(engagement_complete=False, media_complete=False),
             ),
         )

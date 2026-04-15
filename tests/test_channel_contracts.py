@@ -35,6 +35,7 @@ def test_channel_registry_contract():
         "min_likes",
         "min_retweets",
         "min_views",
+        "quality_profile",
     ]
     hashtag = contract["operation_contracts"]["hashtag"]
     assert hashtag["input_kind"] == "hashtag"
@@ -47,6 +48,14 @@ def test_channel_registry_contract():
             "required": False,
             "cli_flag": "--originals-only",
             "description": "Filter timeline results down to authored posts by removing retweets client-side.",
+        },
+        {
+            "name": "quality_profile",
+            "type": "string",
+            "required": False,
+            "cli_flag": "--quality-profile",
+            "choices": ["precision", "balanced", "recall"],
+            "description": "High-signal collection profile that controls oversampling and noise filtering.",
         }
     ]
 

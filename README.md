@@ -52,11 +52,13 @@ x-reach channels --json
 x-reach doctor --json
 x-reach doctor --json --probe
 x-reach search "OpenAI" --limit 5 --json
+x-reach search "AI agent" --limit 5 --quality-profile precision --json
 x-reach hashtag "OpenAI" --limit 5 --json
 x-reach collect --operation search --input "OpenAI" --limit 5 --json
 x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json
 x-reach collect --operation user --input "openai" --json
-x-reach posts "openai" --limit 20 --originals-only --json
+x-reach posts "openai" --limit 20 --json
+x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --json
 x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
 ```
 
@@ -65,9 +67,11 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - X Reach does not choose investigation scope, ranking, summarization, or publishing.
 - The caller chooses scope. Keep lightweight asks lightweight instead of trying to auto-escalate them into large-scale research.
 - `x-reach collect --json` is the default thin interface for downstream collection.
+- Broad discovery operations (`search`, `hashtag`, `posts`) default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet` so saved artifacts stay compact unless the caller explicitly opts into fuller payloads.
 - `batch` and `scout` are explicit opt-in helpers. They are not the default route for everyday collection.
 - Inspect `x-reach channels --json` `operation_contracts` before choosing `since` or `until`.
 - `x-reach plan candidates` keeps its default `--limit 20`; raise it only when the caller explicitly wants a wider candidate review set.
+- For large-scale research, use a two-stage flow: compact discovery first, then `plan candidates` with `--max-per-author 2 --prefer-originals --drop-noise` before any deeper reads.
 
 ## Docs
 

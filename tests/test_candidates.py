@@ -10,14 +10,14 @@ from agent_reach.ledger import build_ledger_record
 from agent_reach.results import build_item, build_result
 
 
-def _result(channel="web", operation="read", items=None, input_value="query"):
+def _result(channel="web", operation="read", items=None, input_value="query", meta=None):
     return build_result(
         ok=True,
         channel=channel,
         operation=operation,
         items=items or [],
         raw={"ok": True},
-        meta={"input": input_value},
+        meta={"input": input_value, **(meta or {})},
         error=None,
     )
 
@@ -358,4 +358,154 @@ def test_candidates_supports_x_identifier_dedupe_modes(tmp_path):
     assert by_source_item_id["candidates"][0]["extras"]["candidate_key"] == "source_item_id:twitter:123"
     assert by_source_item_id["candidates"][0]["engagement"] == {"likes": 10}
     assert by_normalized_url["candidates"][1]["extras"]["candidate_key"] == "normalized_url:https://example.com/post"
+
+
+def test_candidates_can_prefer_original_posts_for_duplicate_keys(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    quoted = build_item(
+        item_id="quote-1",
+        kind="post",
+        title="Quote",
+        url="https://x.com/openai/status/123",
+        text="Quoted OpenAI update",
+        author="alice",
+        published_at=None,
+        source="twitter",
+        extras={"timeline_item_kind": "quote"},
+    )
+    original = build_item(
+        item_id="orig-1",
+        kind="post",
+        title="Original",
+        url="https://x.com/openai/status/123",
+        text="Original OpenAI update",
+        author="openai",
+        published_at=None,
+        source="twitter",
+        extras={"timeline_item_kind": "original"},
+    )
+    _write_jsonl(
+        path,
+        [
+            build_ledger_record(_result(channel="twitter", operation="search", items=[quoted]), run_id="run-1"),
+            build_ledger_record(_result(channel="twitter", operation="search", items=[original]), run_id="run-1"),
+        ],
+    )
+
+    payload = build_candidates_payload(path, by="url", limit=20, prefer_originals=True)
+
+    assert payload["candidates"][0]["title"] == "Original"
+    assert payload["candidates"][0]["author"] == "openai"
+    assert len(payload["candidates"][0]["extras"]["seen_in"]) == 2
+
+
+def test_candidates_can_drop_noise_require_query_match_and_cap_authors(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    records = [
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="good-1",
+                        kind="post",
+                        title="Useful",
+                        url="https://x.com/alice/status/1",
+                        text="OpenAI shipped a useful update",
+                        author="alice",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="OpenAI",
+                meta={"query_tokens": ["openai"]},
+            ),
+            run_id="run-1",
+        ),
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="good-2",
+                        kind="post",
+                        title="Second",
+                        url="https://x.com/alice/status/2",
+                        text="OpenAI second useful update",
+                        author="alice",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="OpenAI",
+                meta={"query_tokens": ["openai"]},
+            ),
+            run_id="run-1",
+        ),
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="spam-1",
+                        kind="post",
+                        title="Spam",
+                        url="https://x.com/spam/status/1",
+                        text="OpenAI giveaway whitelist now live",
+                        author="spam",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="OpenAI",
+                meta={"query_tokens": ["openai"]},
+            ),
+            run_id="run-1",
+        ),
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="offtopic-1",
+                        kind="post",
+                        title="Off topic",
+                        url="https://x.com/bob/status/1",
+                        text="Completely unrelated post",
+                        author="bob",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    )
+                ],
+                input_value="OpenAI",
+                meta={"query_tokens": ["openai"]},
+            ),
+            run_id="run-1",
+        ),
+    ]
+    _write_jsonl(path, records)
+
+    payload = build_candidates_payload(
+        path,
+        by="url",
+        limit=20,
+        max_per_author=1,
+        drop_noise=True,
+        require_query_match=True,
+    )
+
+    assert [candidate["id"] for candidate in payload["candidates"]] == ["good-1"]
+    assert payload["summary"]["filter_drop_counts"] == {
+        "author_cap": 1,
+        "promo_phrase": 1,
+        "query_miss": 1,
+    }
 

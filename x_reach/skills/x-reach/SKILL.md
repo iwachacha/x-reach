@@ -31,6 +31,7 @@ Do not assume this fork chooses investigation scope. The caller chooses scale, t
 - Merge sharded ledgers with `x-reach ledger merge --input .x-reach/shards --output .x-reach/evidence.jsonl --json` before `ledger summarize`, `ledger query`, or `plan candidates`.
 - Use `x-reach plan candidates --input .x-reach/evidence.jsonl --json` for lightweight URL or ID dedupe before selected follow-up reads.
 - Keep `x-reach plan candidates` at the default `--limit 20` unless the caller explicitly wants a broader candidate set.
+- Broad discovery operations default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet`; use `quality_profile=recall` or explicit `--raw-mode full --item-text-mode full` only when fuller payloads are truly needed.
 - Use `x-reach schema collection-result --json` when downstream code needs a contract-testable schema.
 - Treat `engagement`, `media_references`, `identifiers`, `meta.item_shape`, and `error.category` as diagnostics only, not ranking or trust scores.
 - Treat `batch` and `scout` as explicit opt-in helpers. They are not the default route for everyday collection.
@@ -44,6 +45,7 @@ x-reach doctor --json
 x-reach doctor --json --probe
 x-reach schema collection-result --json
 x-reach collect --operation search --input "OpenAI" --limit 5 --json
+x-reach search "AI agent" --limit 5 --quality-profile precision --json
 x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json
 x-reach collect --operation user --input "openai" --json
 x-reach export-integration --client codex --format json --profile runtime-minimal
@@ -60,7 +62,7 @@ x-reach export-integration --client codex --format json --profile runtime-minima
 3. Inspect `summary.required_not_ready`, `summary.informational_not_ready`, and `summary.probe_attention`.
 4. Use `--probe` only when a lightweight live check is useful.
 5. Use `x-reach collect --json` by default when external code needs normalized results.
-6. For large machine-readable handoffs, prefer `--raw-mode minimal|none` plus `--item-text-mode snippet|none`.
+6. Broad discovery already defaults to compact artifacts; only override with fuller payload modes when the caller explicitly needs them.
 7. Prefer `--run-id`, `--intent`, `--query-id`, and `--source-role` on saved evidence.
 8. Use diagnostic hints only to explain provenance or extraction shape; downstream code owns ranking and selection.
 9. Choose advanced collection controls such as `since` and `until` from the live `operation_contracts`.
@@ -76,7 +78,7 @@ x-reach export-integration --client codex --format json --profile runtime-minima
 5. Save raw `CollectionResult` envelopes with `--save .x-reach/evidence.jsonl` or `--save-dir .x-reach/shards` when the run needs an evidence trail.
 6. If the run produced shards, merge them before summary or candidate planning.
 7. Run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when CI or downstream automation needs health counts.
-8. Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --json` before deeper reads.
+8. Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` before deeper reads.
 9. Return partial results with clear readiness or collection failures instead of hiding them.
 
 ## Command Routing

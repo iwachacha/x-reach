@@ -8,8 +8,21 @@ from typing import Optional, Sequence
 from x_reach.adapters import get_adapter
 from x_reach.channels import get_all_channel_contracts
 from x_reach.config import Config
+from x_reach.high_signal import (
+    DEFAULT_BROAD_ITEM_TEXT_MAX_CHARS,
+    DEFAULT_BROAD_ITEM_TEXT_MODE,
+    DEFAULT_BROAD_RAW_MODE,
+    is_broad_operation,
+    normalize_quality_profile,
+)
 from x_reach.operation_contracts import OperationContractError, validate_operation_options
-from x_reach.results import CollectionResult, build_error, build_result
+from x_reach.results import (
+    CollectionResult,
+    apply_item_text_mode,
+    apply_raw_mode,
+    build_error,
+    build_result,
+)
 
 
 class _Namespace:
@@ -35,6 +48,11 @@ class _Namespace:
         min_likes: int | None = None,
         min_retweets: int | None = None,
         min_views: int | None = None,
+        quality_profile: str | None = None,
+        raw_mode: str | None = None,
+        raw_max_bytes: int | None = None,
+        item_text_mode: str | None = None,
+        item_text_max_chars: int | None = None,
     ) -> CollectionResult:
         """Run the X search operation with optional quality filters."""
 
@@ -54,6 +72,11 @@ class _Namespace:
             min_likes=min_likes,
             min_retweets=min_retweets,
             min_views=min_views,
+            quality_profile=quality_profile,
+            raw_mode=raw_mode,
+            raw_max_bytes=raw_max_bytes,
+            item_text_mode=item_text_mode,
+            item_text_max_chars=item_text_max_chars,
         )
 
     def hashtag(
@@ -72,6 +95,11 @@ class _Namespace:
         min_likes: int | None = None,
         min_retweets: int | None = None,
         min_views: int | None = None,
+        quality_profile: str | None = None,
+        raw_mode: str | None = None,
+        raw_max_bytes: int | None = None,
+        item_text_mode: str | None = None,
+        item_text_max_chars: int | None = None,
     ) -> CollectionResult:
         """Run a hashtag-centered X search with the same filter surface as search()."""
 
@@ -91,6 +119,11 @@ class _Namespace:
             min_likes=min_likes,
             min_retweets=min_retweets,
             min_views=min_views,
+            quality_profile=quality_profile,
+            raw_mode=raw_mode,
+            raw_max_bytes=raw_max_bytes,
+            item_text_mode=item_text_mode,
+            item_text_max_chars=item_text_max_chars,
         )
 
     def user(self, value: str, limit: int | None = None) -> CollectionResult:
@@ -104,6 +137,11 @@ class _Namespace:
         limit: int | None = None,
         *,
         originals_only: bool = False,
+        quality_profile: str | None = None,
+        raw_mode: str | None = None,
+        raw_max_bytes: int | None = None,
+        item_text_mode: str | None = None,
+        item_text_max_chars: int | None = None,
     ) -> CollectionResult:
         """Run a user timeline lookup and optionally keep only authored posts."""
 
@@ -113,6 +151,11 @@ class _Namespace:
             value,
             limit=limit,
             originals_only=originals_only or None,
+            quality_profile=quality_profile,
+            raw_mode=raw_mode,
+            raw_max_bytes=raw_max_bytes,
+            item_text_mode=item_text_mode,
+            item_text_max_chars=item_text_max_chars,
         )
 
     def tweet(self, value: str, limit: int | None = None) -> CollectionResult:
@@ -188,6 +231,11 @@ class XReachClient:
         min_retweets: int | None = None,
         min_views: int | None = None,
         originals_only: bool | None = None,
+        quality_profile: str | None = None,
+        raw_mode: str | None = None,
+        raw_max_bytes: int | None = None,
+        item_text_mode: str | None = None,
+        item_text_max_chars: int | None = None,
     ) -> CollectionResult:
         """Run a supported collection operation and return a stable result envelope."""
 
@@ -206,17 +254,31 @@ class XReachClient:
             )
 
         if limit is not None and limit < 1:
-            return build_result(
-                ok=False,
+            return _invalid_input_result(
                 channel=channel,
                 operation=operation,
-                meta={"input": text_value, "limit": limit},
-                error=build_error(
-                    code="invalid_input",
-                    message="limit must be greater than or equal to 1",
-                    details={"limit": limit},
-                ),
+                input_value=text_value,
+                limit=limit,
+                message="limit must be greater than or equal to 1",
+                details={"limit": limit},
             )
+        try:
+            effective_quality_profile = normalize_quality_profile(operation, quality_profile)
+        except ValueError as exc:
+            return _invalid_input_result(
+                channel=channel,
+                operation=operation,
+                input_value=text_value,
+                limit=limit,
+                message=str(exc),
+                details={"quality_profile": quality_profile},
+            )
+
+        quality_profile_defaulted = (
+            quality_profile is None
+            and effective_quality_profile is not None
+            and is_broad_operation(operation)
+        )
 
         options = {
             "since": since,
@@ -231,6 +293,7 @@ class XReachClient:
             "min_retweets": min_retweets,
             "min_views": min_views,
             "originals_only": originals_only,
+            "quality_profile": effective_quality_profile,
         }
         adapter = get_adapter(channel, config=self.config)
         if adapter is None:
@@ -286,7 +349,7 @@ class XReachClient:
             for option_name, option_value in options.items():
                 if option_value is not None:
                     call_kwargs[option_name] = option_value
-            return method(text_value, **call_kwargs)
+            payload = method(text_value, **call_kwargs)
         except Exception as exc:
             return build_result(
                 ok=False,
@@ -299,6 +362,16 @@ class XReachClient:
                     details={"exception_type": type(exc).__name__},
                 ),
             )
+        return _shape_collection_result(
+            payload,
+            operation=operation,
+            quality_profile=effective_quality_profile,
+            quality_profile_defaulted=quality_profile_defaulted,
+            raw_mode=raw_mode,
+            raw_max_bytes=raw_max_bytes,
+            item_text_mode=item_text_mode,
+            item_text_max_chars=item_text_max_chars,
+        )
 
 
 class XReach(XReachClient):
@@ -310,4 +383,112 @@ AgentReach = XReach
 
 
 __all__ = ["AgentReach", "AgentReachClient", "XReach", "XReachClient"]
+
+
+def _invalid_input_result(
+    *,
+    channel: str,
+    operation: str,
+    input_value: str,
+    limit: int | None = None,
+    message: str,
+    details: dict[str, object] | None = None,
+) -> CollectionResult:
+    meta = {"input": input_value}
+    if limit is not None:
+        meta["limit"] = limit
+    return build_result(
+        ok=False,
+        channel=channel,
+        operation=operation,
+        meta=meta,
+        error=build_error(code="invalid_input", message=message, details=details or {}),
+    )
+
+
+def _shape_collection_result(
+    payload: CollectionResult,
+    *,
+    operation: str,
+    quality_profile: str | None,
+    quality_profile_defaulted: bool,
+    raw_mode: str | None,
+    raw_max_bytes: int | None,
+    item_text_mode: str | None,
+    item_text_max_chars: int | None,
+) -> CollectionResult:
+    effective_raw_mode = raw_mode
+    effective_item_text_mode = item_text_mode
+    effective_item_text_max_chars = item_text_max_chars
+    applied_defaults = dict(payload.get("meta") or {}).get("applied_defaults")
+    normalized_applied_defaults = dict(applied_defaults) if isinstance(applied_defaults, dict) else {}
+
+    if effective_raw_mode is None and raw_max_bytes is not None:
+        effective_raw_mode = "full"
+    if effective_item_text_mode is None and item_text_max_chars is not None:
+        effective_item_text_mode = "snippet"
+
+    if is_broad_operation(operation):
+        if effective_raw_mode is None:
+            effective_raw_mode = DEFAULT_BROAD_RAW_MODE
+            normalized_applied_defaults.setdefault("raw_mode", effective_raw_mode)
+        if effective_item_text_mode is None:
+            effective_item_text_mode = DEFAULT_BROAD_ITEM_TEXT_MODE
+            normalized_applied_defaults.setdefault("item_text_mode", effective_item_text_mode)
+        if effective_item_text_mode == "snippet" and effective_item_text_max_chars is None:
+            effective_item_text_max_chars = DEFAULT_BROAD_ITEM_TEXT_MAX_CHARS
+            normalized_applied_defaults.setdefault(
+                "item_text_max_chars",
+                effective_item_text_max_chars,
+            )
+        if quality_profile_defaulted and quality_profile is not None:
+            normalized_applied_defaults.setdefault("quality_profile", quality_profile)
+    else:
+        effective_raw_mode = effective_raw_mode or "full"
+        effective_item_text_mode = effective_item_text_mode or "full"
+
+    shaped = {
+        **payload,
+        "meta": dict(payload.get("meta") or {}),
+    }
+    if normalized_applied_defaults:
+        shaped["meta"]["applied_defaults"] = normalized_applied_defaults
+    if quality_profile is not None:
+        shaped["meta"]["quality_profile"] = quality_profile
+    try:
+        shaped = apply_item_text_mode(
+            shaped,
+            item_text_mode=effective_item_text_mode,
+            item_text_max_chars=effective_item_text_max_chars,
+        )
+        shaped = apply_raw_mode(
+            shaped,
+            raw_mode=effective_raw_mode,
+            raw_max_bytes=raw_max_bytes,
+        )
+    except ValueError as exc:
+        return build_result(
+            ok=False,
+            channel=payload["channel"],
+            operation=payload["operation"],
+            meta={
+                "input": shaped["meta"].get("input"),
+                **(
+                    {"limit": shaped["meta"].get("requested_limit")}
+                    if shaped["meta"].get("requested_limit") is not None
+                    else {}
+                ),
+            },
+            error=build_error(
+                code="invalid_input",
+                message=str(exc),
+                details={
+                    "raw_mode": raw_mode,
+                    "raw_max_bytes": raw_max_bytes,
+                    "item_text_mode": item_text_mode,
+                    "item_text_max_chars": item_text_max_chars,
+                },
+            ),
+        )
+    return shaped
 

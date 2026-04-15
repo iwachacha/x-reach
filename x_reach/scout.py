@@ -8,6 +8,11 @@ from typing import Any
 from x_reach.channels import get_all_channel_contracts
 from x_reach.config import Config
 from x_reach.doctor import check_all
+from x_reach.high_signal import (
+    DEFAULT_BROAD_ITEM_TEXT_MAX_CHARS,
+    DEFAULT_BROAD_ITEM_TEXT_MODE,
+    DEFAULT_BROAD_RAW_MODE,
+)
 from x_reach.schemas import SCHEMA_VERSION, utc_timestamp
 
 BUDGETS = ("auto", "small", "medium", "large", "xlarge")
@@ -105,6 +110,7 @@ def build_scout_plan(
         "not_ready_channels": not_ready_channels,
         "seed_channels": seed_channels,
         "required_readiness_checks": _readiness_checks(available_channels),
+        "recommended_collection_settings": _recommended_collection_settings(quality),
     }
 
 
@@ -121,6 +127,15 @@ def render_scout_text(payload: dict[str, Any]) -> str:
     ]
     if payload["seed_channels"]:
         lines.append(f"Seed channels: {', '.join(payload['seed_channels'])}")
+    recommended = payload.get("recommended_collection_settings") or {}
+    if recommended:
+        lines.append(
+            "Discovery defaults: "
+            f"quality_profile={recommended.get('quality_profile')} "
+            f"raw_mode={recommended.get('raw_mode')} "
+            f"item_text_mode={recommended.get('item_text_mode')} "
+            f"item_text_max_chars={recommended.get('item_text_max_chars')}"
+        )
     if payload["not_ready_channels"]:
         lines.append("Not ready:")
         for channel in payload["not_ready_channels"]:
@@ -133,5 +148,20 @@ def _readiness_checks(channels: list[dict[str, Any]]) -> list[str]:
     if any(channel.get("supports_probe") for channel in channels):
         checks.append("x-reach doctor --json --probe")
     return checks
+
+
+def _recommended_collection_settings(quality: str) -> dict[str, Any]:
+    deep_read_defaults = {
+        "raw_mode": "full",
+        "item_text_mode": "full",
+        "candidate_limit": 10 if quality == "precision" else 20,
+    }
+    return {
+        "quality_profile": quality,
+        "raw_mode": DEFAULT_BROAD_RAW_MODE,
+        "item_text_mode": DEFAULT_BROAD_ITEM_TEXT_MODE,
+        "item_text_max_chars": DEFAULT_BROAD_ITEM_TEXT_MAX_CHARS,
+        "deep_read_defaults": deep_read_defaults,
+    }
 
 

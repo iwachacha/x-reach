@@ -112,6 +112,14 @@ _SEARCH_OPERATION_OPTIONS = [
         "minimum": 0,
         "description": "Minimum views applied after search as a client-side post-filter.",
     },
+    {
+        "name": "quality_profile",
+        "type": "string",
+        "required": False,
+        "cli_flag": "--quality-profile",
+        "choices": ["precision", "balanced", "recall"],
+        "description": "High-signal collection profile that controls oversampling and noise filtering.",
+    },
 ]
 
 
@@ -139,6 +147,14 @@ class TwitterChannel(Channel):
                 "required": False,
                 "cli_flag": "--originals-only",
                 "description": "Filter timeline results down to authored posts by removing retweets client-side.",
+            },
+            {
+                "name": "quality_profile",
+                "type": "string",
+                "required": False,
+                "cli_flag": "--quality-profile",
+                "choices": ["precision", "balanced", "recall"],
+                "description": "High-signal collection profile that controls oversampling and noise filtering.",
             }
         ],
     }
@@ -146,10 +162,10 @@ class TwitterChannel(Channel):
     host_patterns = ["https://x.com/*", "https://twitter.com/*"]
     example_invocations = [
         'x-reach hashtag "OpenAI" --limit 10 --json',
-        'x-reach collect --operation search --input "gpt-5.4" --limit 10 --json',
-        'x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json',
+        'x-reach collect --operation search --input "gpt-5.4" --limit 10 --quality-profile balanced --json',
+        'x-reach collect --operation search --input "OpenAI" --quality-profile precision --min-likes 100 --min-views 10000 --json',
         'x-reach collect --operation user --input "openai" --json',
-        'x-reach collect --operation user_posts --input "openai" --limit 20 --originals-only --json',
+        'x-reach collect --operation user_posts --input "openai" --limit 20 --quality-profile balanced --json',
         'x-reach collect --operation user_posts --input "openai" --limit 20 --json',
         'x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
         'twitter status',

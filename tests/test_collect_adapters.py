@@ -76,9 +76,24 @@ def test_twitter_adapter_success(config, monkeypatch):
         "author_handle": "OpenAI",
         "post_id": "123",
     }
+    assert payload["meta"]["quality_profile"] == "balanced"
+    assert payload["meta"]["fetch_limit"] == 3
     assert payload["meta"]["diagnostics"]["unbounded_time_window"] is True
     assert payload["meta"]["item_shape"] == {"engagement": "partial", "media": "partial"}
-    assert captured["command"][1:3] == ["search", "OpenAI"]
+    assert captured["command"] == [
+        "twitter",
+        "search",
+        "--type",
+        "top",
+        "--exclude",
+        "retweets",
+        "--exclude",
+        "replies",
+        "OpenAI",
+        "-n",
+        "3",
+        "--json",
+    ]
 
 
 def test_twitter_adapter_search_translates_common_advanced_tokens(config, monkeypatch):
@@ -106,8 +121,12 @@ def test_twitter_adapter_search_translates_common_advanced_tokens(config, monkey
         "photos",
         "--lang",
         "ja",
+        "--exclude",
+        "retweets",
+        "--exclude",
+        "replies",
         "-n",
-        "5",
+        "15",
         "--json",
     ]
 
@@ -129,13 +148,19 @@ def test_twitter_adapter_search_prefers_explicit_since_until(config, monkeypatch
     assert captured["command"] == [
         "twitter",
         "search",
+        "--type",
+        "top",
+        "--exclude",
+        "retweets",
+        "--exclude",
+        "replies",
         "OpenAI",
         "--since",
         "2026-01-01",
         "--until",
         "2026-12-31",
         "-n",
-        "5",
+        "15",
         "--json",
     ]
     assert payload["meta"]["since"] == "2026-01-01"
@@ -176,13 +201,15 @@ def test_twitter_adapter_search_accepts_formalized_filters(config, monkeypatch):
         "links",
         "--exclude",
         "retweets",
+        "--exclude",
+        "replies",
         "--min-likes",
         "10",
         "--min-retweets",
         "5",
         "OpenAI",
         "-n",
-        "5",
+        "15",
         "--json",
     ]
 
@@ -223,6 +250,53 @@ def test_twitter_adapter_search_applies_min_views_client_side(config, monkeypatc
     assert payload["ok"] is True
     assert [item["id"] for item in payload["items"]] == ["2"]
     assert payload["meta"]["diagnostics"]["client_side_filters"]["min_views"] == 100
+
+
+def test_twitter_adapter_search_balanced_filters_noise_but_backfills_on_topic_results(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    monkeypatch.setattr(
+        adapter,
+        "run_command",
+        lambda command, timeout=120, env=None: _cp(
+            stdout=json.dumps(
+                {
+                    "ok": True,
+                    "data": [
+                        {
+                            "id": "1",
+                            "text": "OpenAI signal retweeted",
+                            "author": {"screenName": "someone", "name": "Someone"},
+                            "createdAtISO": "2026-04-10T00:00:00Z",
+                            "isRetweet": True,
+                            "metrics": {"likes": 500},
+                        },
+                        {
+                            "id": "2",
+                            "text": "OpenAI giveaway whitelist now live",
+                            "author": {"screenName": "spam", "name": "Spam"},
+                            "createdAtISO": "2026-04-10T00:00:00Z",
+                            "metrics": {"likes": 5000},
+                        },
+                        {
+                            "id": "3",
+                            "text": "OpenAI shipped a useful update",
+                            "author": {"screenName": "openai_watch", "name": "Watcher"},
+                            "createdAtISO": "2026-04-10T00:00:00Z",
+                            "metrics": {"likes": 1},
+                        },
+                    ],
+                }
+            )
+        ),
+    )
+
+    payload = adapter.search("OpenAI", limit=1)
+
+    assert [item["id"] for item in payload["items"]] == ["3"]
+    assert payload["meta"]["query_tokens"] == ["openai"]
+    assert payload["meta"]["filter_drop_counts"] == {"promo_phrase": 1, "retweet": 1}
+    assert payload["meta"]["diagnostics"]["quality_filter"]["fallback_used"] == 1
 
 
 def test_twitter_adapter_user_success(config, monkeypatch):
@@ -298,6 +372,9 @@ def test_twitter_adapter_user_posts_success(config, monkeypatch):
     assert payload["items"][0]["media_references"][0]["media_type"] == "photo"
     assert payload["items"][0]["extras"]["timeline_owner_handle"] == "OpenAI"
     assert payload["items"][0]["extras"]["timeline_item_kind"] == "original"
+    assert payload["meta"]["originals_only"] is True
+    assert payload["meta"]["quality_profile"] == "balanced"
+    assert payload["meta"]["fetch_limit"] == 3
     assert payload["meta"]["item_shape"] == {"engagement": "partial", "media": "partial"}
 
 
@@ -359,7 +436,20 @@ def test_twitter_adapter_hashtag_success(config, monkeypatch):
     assert payload["meta"]["input"] == "OpenAI"
     assert payload["meta"]["resolved_query"] == "#OpenAI"
     assert payload["meta"]["hashtag"] == "OpenAI"
-    assert captured["command"] == ["twitter", "search", "#OpenAI", "-n", "5", "--json"]
+    assert captured["command"] == [
+        "twitter",
+        "search",
+        "--type",
+        "top",
+        "--exclude",
+        "retweets",
+        "--exclude",
+        "replies",
+        "#OpenAI",
+        "-n",
+        "15",
+        "--json",
+    ]
 
 
 def test_twitter_adapter_hashtag_rejects_whitespace(config):

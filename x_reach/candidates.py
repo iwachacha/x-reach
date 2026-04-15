@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
+from x_reach.high_signal import (
+    analyze_item_quality,
+    extract_query_tokens,
+    original_preference_rank,
+)
 from x_reach.ledger import iter_jsonl_lines
 from x_reach.results import canonicalize_url as result_canonicalize_url
 from x_reach.schemas import SCHEMA_VERSION, utc_timestamp
@@ -68,6 +73,10 @@ def build_candidates_payload(
     limit: int = 20,
     summary_only: bool = False,
     fields: Sequence[str] | str | None = None,
+    max_per_author: int | None = None,
+    prefer_originals: bool = False,
+    drop_noise: bool = False,
+    require_query_match: bool = False,
 ) -> dict[str, Any]:
     """Read evidence JSONL and return a deduped candidate payload."""
 
@@ -75,6 +84,8 @@ def build_candidates_payload(
         raise CandidatePlanError(f"Unsupported dedupe mode: {by}")
     if limit < 1:
         raise CandidatePlanError("limit must be greater than or equal to 1")
+    if max_per_author is not None and max_per_author < 1:
+        raise CandidatePlanError("max_per_author must be greater than or equal to 1")
     selected_fields = _normalize_fields(fields)
 
     evidence_path = Path(path)
@@ -83,6 +94,7 @@ def build_candidates_payload(
     by_key: dict[str, dict[str, Any]] = {}
     items_seen = 0
     skipped_items = 0
+    filter_drop_counts: dict[str, int] = {}
     channel_keys: dict[str, set[str]] = {}
     source_role_keys: dict[str, set[str]] = {}
     intent_keys: dict[str, set[str]] = {}
@@ -90,6 +102,7 @@ def build_candidates_payload(
     for record in records:
         result = record["result"]
         meta = result.get("meta") or {}
+        record_query_tokens = _query_tokens_for_record(record, result)
         for item in result.get("items") or []:
             if not isinstance(item, dict):
                 skipped_items += 1
@@ -123,9 +136,17 @@ def build_candidates_payload(
                 by_key[key]["extras"]["seen_in"].append(sighting)
                 _fill_missing_candidate_metadata(by_key[key], intent, query_id, source_role)
                 _append_alternate_url(by_key[key], item.get("url"))
+                _merge_query_tokens(by_key[key], record_query_tokens)
+                if prefer_originals:
+                    incoming = _candidate_from_item(item, query_tokens=record_query_tokens)
+                    incoming["intent"] = intent
+                    incoming["query_id"] = query_id
+                    incoming["source_role"] = source_role
+                    if _should_promote_candidate(by_key[key], incoming):
+                        _promote_candidate(by_key[key], incoming)
                 continue
 
-            candidate = _candidate_from_item(item)
+            candidate = _candidate_from_item(item, query_tokens=record_query_tokens)
             candidate["intent"] = intent
             candidate["query_id"] = query_id
             candidate["source_role"] = source_role
@@ -135,7 +156,13 @@ def build_candidates_payload(
             by_key[key] = candidate
             candidates.append(candidate)
 
-    returned = candidates[:limit]
+    filtered_candidates, filter_drop_counts = _post_filter_candidates(
+        candidates,
+        max_per_author=max_per_author,
+        drop_noise=drop_noise,
+        require_query_match=require_query_match,
+    )
+    returned = filtered_candidates[:limit]
     output_candidates = [] if summary_only else [_filter_candidate(candidate, selected_fields) for candidate in returned]
     return {
         "schema_version": SCHEMA_VERSION,
@@ -146,6 +173,10 @@ def build_candidates_payload(
         "limit": limit,
         "summary_only": summary_only,
         "fields": list(selected_fields) if selected_fields is not None else None,
+        "max_per_author": max_per_author,
+        "prefer_originals": prefer_originals,
+        "drop_noise": drop_noise,
+        "require_query_match": require_query_match,
         "summary": {
             "records": len(records) + skipped_records,
             "collection_results": len(records),
@@ -154,6 +185,8 @@ def build_candidates_payload(
             "skipped_items": skipped_items,
             "candidate_count": len(candidates),
             "returned": len(returned),
+            "filtered_candidate_count": len(filtered_candidates),
+            "filter_drop_counts": filter_drop_counts,
             "channel_counts": _count_summary_keys(channel_keys),
             "source_role_counts": _count_summary_keys(source_role_keys),
             "intent_counts": _count_summary_keys(intent_keys),
@@ -249,9 +282,16 @@ def _is_collection_result(value: Any) -> bool:
     return required.issubset(value.keys()) and isinstance(value.get("items"), list)
 
 
-def _candidate_from_item(item: dict[str, Any]) -> dict[str, Any]:
+def _candidate_from_item(
+    item: dict[str, Any],
+    *,
+    query_tokens: Sequence[str] | None = None,
+) -> dict[str, Any]:
     raw_extras = item.get("extras")
     extras: dict[str, Any] = raw_extras if isinstance(raw_extras, dict) else {}
+    merged_extras = {**extras}
+    if query_tokens:
+        merged_extras["query_tokens"] = list(dict.fromkeys(str(token) for token in query_tokens))
     return {
         "id": item.get("id"),
         "kind": item.get("kind"),
@@ -269,7 +309,8 @@ def _candidate_from_item(item: dict[str, Any]) -> dict[str, Any]:
         "intent": extras.get("intent"),
         "query_id": extras.get("query_id"),
         "source_role": extras.get("source_role"),
-        "extras": {**extras},
+        "extras": merged_extras,
+        "_preference_rank": original_preference_rank(extras.get("timeline_item_kind")),
     }
 
 
@@ -338,6 +379,66 @@ def _append_alternate_url(candidate: dict[str, Any], url: Any) -> None:
         alternates.append(text)
 
 
+def _query_tokens_for_record(record: dict[str, Any], result: dict[str, Any]) -> list[str]:
+    raw_meta = result.get("meta")
+    meta: dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
+    raw_tokens = meta.get("query_tokens")
+    if isinstance(raw_tokens, list):
+        return list(dict.fromkeys(str(token).casefold() for token in raw_tokens if str(token).strip()))
+
+    if result.get("operation") not in {"search", "hashtag"}:
+        return []
+    input_value = record.get("input") if record.get("input") is not None else meta.get("input")
+    return extract_query_tokens(str(input_value or ""))
+
+
+def _merge_query_tokens(candidate: dict[str, Any], query_tokens: Sequence[str]) -> None:
+    if not query_tokens:
+        return
+    extras = candidate.setdefault("extras", {})
+    existing = extras.get("query_tokens")
+    existing_tokens = [str(token).casefold() for token in existing] if isinstance(existing, list) else []
+    merged = list(dict.fromkeys([*existing_tokens, *(str(token).casefold() for token in query_tokens)]))
+    extras["query_tokens"] = merged
+
+
+def _should_promote_candidate(existing: dict[str, Any], incoming: dict[str, Any]) -> bool:
+    return int(incoming.get("_preference_rank", 99)) < int(existing.get("_preference_rank", 99))
+
+
+def _promote_candidate(existing: dict[str, Any], incoming: dict[str, Any]) -> None:
+    seen_in = list(existing.get("extras", {}).get("seen_in", []))
+    alternate_urls = list(existing.get("extras", {}).get("alternate_urls", []))
+    candidate_key = existing.get("extras", {}).get("candidate_key")
+    query_tokens = list(existing.get("extras", {}).get("query_tokens", []))
+    existing_intent = existing.get("intent")
+    existing_query_id = existing.get("query_id")
+    existing_source_role = existing.get("source_role")
+
+    replacement = _copy_candidate(incoming)
+    replacement_extras = replacement.setdefault("extras", {})
+    replacement_extras["seen_in"] = seen_in
+    replacement_extras["alternate_urls"] = alternate_urls
+    replacement_extras["candidate_key"] = candidate_key
+    if query_tokens:
+        replacement_extras["query_tokens"] = query_tokens
+    existing.clear()
+    existing.update(replacement)
+    _fill_missing_candidate_metadata(existing, existing_intent, existing_query_id, existing_source_role)
+
+
+def _copy_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+    copy: dict[str, Any] = {}
+    for key, value in candidate.items():
+        if isinstance(value, dict):
+            copy[key] = dict(value)
+        elif isinstance(value, list):
+            copy[key] = list(value)
+        else:
+            copy[key] = value
+    return copy
+
+
 def _normalize_fields(fields: Sequence[str] | str | None) -> tuple[str, ...] | None:
     if fields is None:
         return None
@@ -360,9 +461,67 @@ def _filter_candidate(
     candidate: dict[str, Any],
     fields: tuple[str, ...] | None,
 ) -> dict[str, Any]:
+    public_candidate = _public_candidate(candidate)
     if fields is None:
-        return candidate
-    return {field: candidate.get(field) for field in fields}
+        return public_candidate
+    return {field: public_candidate.get(field) for field in fields}
+
+
+def _public_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in candidate.items()
+        if not key.startswith("_")
+    }
+
+
+def _post_filter_candidates(
+    candidates: list[dict[str, Any]],
+    *,
+    max_per_author: int | None,
+    drop_noise: bool,
+    require_query_match: bool,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    returned: list[dict[str, Any]] = []
+    dropped: dict[str, int] = {}
+    author_counts: dict[str, int] = {}
+
+    for candidate in candidates:
+        if drop_noise or require_query_match:
+            analysis = analyze_item_quality(
+                text=_candidate_text(candidate),
+                searchable_parts=_candidate_searchable_parts(candidate),
+                urls=_candidate_urls(candidate),
+                query_tokens=_candidate_query_tokens(candidate),
+                item_kind=_candidate_item_kind(candidate),
+                engagement=None,
+                quality_profile=None,
+                require_query_match=require_query_match,
+                drop_retweets=drop_noise,
+                drop_replies=drop_noise,
+            )
+            reasons = []
+            for reason in analysis["drop_reasons"]:
+                if reason == "engagement_gate":
+                    continue
+                if reason == "query_miss" and not require_query_match:
+                    continue
+                reasons.append(str(reason))
+            if reasons:
+                for reason in list(dict.fromkeys(reasons)):
+                    dropped[reason] = dropped.get(reason, 0) + 1
+                continue
+
+        author_key = _candidate_author_key(candidate)
+        if max_per_author is not None and author_key is not None:
+            current = author_counts.get(author_key, 0)
+            if current >= max_per_author:
+                dropped["author_cap"] = dropped.get("author_cap", 0) + 1
+                continue
+            author_counts[author_key] = current + 1
+
+        returned.append(candidate)
+    return returned, {key: dropped[key] for key in sorted(dropped)}
 
 
 def _dedupe_key(
@@ -410,6 +569,65 @@ def _dedupe_key(
         if item_id:
             return f"id:{source}:{item_id}"
     return None
+
+
+def _candidate_text(candidate: dict[str, Any]) -> str | None:
+    text = candidate.get("text")
+    if text is not None:
+        return str(text)
+    title = candidate.get("title")
+    return str(title) if title is not None else None
+
+
+def _candidate_searchable_parts(candidate: dict[str, Any]) -> list[str | None]:
+    raw_extras = candidate.get("extras")
+    extras: dict[str, Any] = raw_extras if isinstance(raw_extras, dict) else {}
+    return [
+        candidate.get("title"),
+        candidate.get("text"),
+        candidate.get("author"),
+        extras.get("author_name"),
+        extras.get("quoted_author_handle"),
+        extras.get("quoted_author_name"),
+        candidate.get("url"),
+        " ".join(_candidate_urls(candidate)) or None,
+    ]
+
+
+def _candidate_urls(candidate: dict[str, Any]) -> list[str]:
+    raw_extras = candidate.get("extras")
+    extras: dict[str, Any] = raw_extras if isinstance(raw_extras, dict) else {}
+    raw_urls = extras.get("urls")
+    if not isinstance(raw_urls, list):
+        return []
+    return [str(url) for url in raw_urls if str(url).strip()]
+
+
+def _candidate_query_tokens(candidate: dict[str, Any]) -> list[str]:
+    raw_extras = candidate.get("extras")
+    extras: dict[str, Any] = raw_extras if isinstance(raw_extras, dict) else {}
+    raw_tokens = extras.get("query_tokens")
+    if not isinstance(raw_tokens, list):
+        return []
+    return [str(token).casefold() for token in raw_tokens if str(token).strip()]
+
+
+def _candidate_item_kind(candidate: dict[str, Any]) -> str | None:
+    raw_extras = candidate.get("extras")
+    extras: dict[str, Any] = raw_extras if isinstance(raw_extras, dict) else {}
+    value = extras.get("timeline_item_kind")
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    return text or None
+
+
+def _candidate_author_key(candidate: dict[str, Any]) -> str | None:
+    author = candidate.get("author")
+    if author is None:
+        return None
+    text = str(author).strip().casefold()
+    return text or None
 
 
 def _normalized_url(item: dict[str, Any]) -> str | None:

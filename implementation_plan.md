@@ -13,7 +13,7 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 | CLI (cli.py) | 1,622行 |
 | 結果スキーマ (results.py) | 529行 |
 | チャネル/アダプタ基底クラス | 207行 (使われ方は1つだけ) |
-| テスト | 141件 全パス |
+| テスト | 149件 全パス |
 | 登録チャネル | **1つ** (twitter) |
 
 ### 特定した冗長・ノイズ箇所
@@ -65,6 +65,11 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 > **Phase 2-B 進行中**:
 > runtime 実装を `x_reach/` へ移し、`agent_reach/` は compatibility shim に切り替えました。
 > この段階で `pytest` 141 件と live 収集テストはすべて成功しています。
+
+> [!IMPORTANT]
+> **Phase 2-C 完了**:
+> `quality_profile`、broad op の compact default shaping、deterministic noise filtering、ledger/candidates の large-scale 向け診断を実装しました。
+> `pytest` 149 件と live の `doctor / search / posts / batch -> merge -> summarize -> plan candidates` まで成功しています。
 
 ---
 
@@ -176,11 +181,20 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 - 完了: `x_reach.schema_files` を schema 読み込み元に切り替え、`X_REACH_RUN_ID` を優先しつつ `AGENT_REACH_RUN_ID` を後方互換で維持。
 - 残作業: テスト・ドキュメント・skills 内の参照を段階的に `x_reach` 優先へ寄せ、どこまで legacy import を残すかを決める。
 
+#### 2-C. 高信号・大規模調査最適化（完了 ✅）
+- `search` / `hashtag` / `user_posts` に `quality_profile=precision|balanced|recall` を追加し、broad op の既定を `balanced` にした。
+- broad op の既定出力を `raw_mode=none`、`item_text_mode=snippet`、`item_text_max_chars=280` に変更し、CLI と SDK の両方で同じ shape を返すようにした。
+- `balanced` / `precision` で oversampling、query token hit、retweet/reply 除外、構造ノイズ除去、promo/scam phrase 除去、engagement gate、fallback backfill を実装した。
+- `user_posts` では `originals_only` を balanced/precision の既定にし、timeline ノイズを減らした。
+- `ledger summarize|validate` に `raw_mode_counts`、`item_text_mode_counts`、`raw_payload_bytes_total`、`item_text_chars_total`、`unbounded_time_window_records`、`filter_drop_reason_counts`、`timeline_item_kind_counts`、`search_type_counts` を追加した。
+- `plan candidates` に `--max-per-author`、`--prefer-originals`、`--drop-noise`、`--require-query-match` を追加した。
+- `scout` に discovery / deep-read 推奨設定を返す `recommended_collection_settings` を追加した。
+
 ---
 
 ## Open Questions
 
-特にありません。次の候補は、`agent_reach` 表記が残る docs / skills / tests の整理と、互換レイヤーの維持方針の明文化です。
+次の候補は、`agent_reach` 表記が残る docs / skills / tests の整理と、互換レイヤーの維持方針の明文化です。
 
 ---
 
@@ -190,6 +204,7 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 |---|---|---|
 | 2026-04-15 | `hashtag`、検索フィルタ、CLI ショートカット、`posts --originals-only` を追加 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach hashtag "OpenAI" --limit 3 --json`、`uv run x-reach posts "openai" --limit 5 --originals-only --json` |
 | 2026-04-15 | runtime 本体を `x_reach/` に移動し、`agent_reach/` を shim 化 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach search "OpenAI" --limit 3 --json`、`uv run x-reach posts "openai" --limit 5 --originals-only --json` |
+| 2026-04-15 | `quality_profile`、broad op の compact default、deterministic noise filtering、ledger/candidates の大規模調査向け診断を追加 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach search "OpenAI" --limit 5 --json`、`uv run x-reach search "AI agent" --limit 5 --quality-profile precision --json`、`uv run x-reach posts "openai" --limit 5 --json`、`uv run x-reach batch --plan PLAN.json --save-dir SHARDS --json`、`uv run x-reach ledger merge --input SHARDS --output evidence.jsonl --json`、`uv run x-reach ledger summarize --input evidence.jsonl --json`、`uv run x-reach plan candidates --input evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --json` |
 
 ## Verification Plan
 

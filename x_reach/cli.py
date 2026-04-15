@@ -96,23 +96,30 @@ def _add_collect_render_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--item-text-mode",
         choices=["full", "snippet", "none"],
-        help="Control normalized item text retention in CollectionResult output. Defaults to full",
+        help="Control normalized item text retention in CollectionResult output. Broad operations default to snippet",
     )
     parser.add_argument(
         "--item-text-max-chars",
         type=int,
-        help="When item-text-mode is snippet, keep at most N characters per item text. Defaults to 500",
+        help="When item-text-mode is snippet, keep at most N characters per item text. Broad operations default to 280",
     )
     parser.add_argument(
         "--raw-mode",
         choices=["full", "minimal", "none"],
-        default="full",
-        help="Control raw payload retention in printed and saved CollectionResult JSON. Defaults to full",
+        help="Control raw payload retention in printed and saved CollectionResult JSON. Broad operations default to none",
     )
     parser.add_argument(
         "--raw-max-bytes",
         type=int,
         help="Replace raw with a preview summary when its UTF-8 JSON size exceeds N bytes",
+    )
+
+
+def _add_quality_profile_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--quality-profile",
+        choices=QUALITY_PROFILES,
+        help="High-signal collection profile. Broad operations default to balanced",
     )
 
 
@@ -191,11 +198,12 @@ def _shortcut_collect_namespace(args, *, operation: str, input_value: str) -> ar
         min_retweets=getattr(args, "min_retweets", None),
         min_views=getattr(args, "min_views", None),
         originals_only=getattr(args, "originals_only", False),
+        quality_profile=getattr(args, "quality_profile", None),
         json=getattr(args, "json", False),
         max_text_chars=getattr(args, "max_text_chars", None),
         item_text_mode=getattr(args, "item_text_mode", None),
         item_text_max_chars=getattr(args, "item_text_max_chars", None),
-        raw_mode=getattr(args, "raw_mode", "full"),
+        raw_mode=getattr(args, "raw_mode", None),
         raw_max_bytes=getattr(args, "raw_max_bytes", None),
         save=getattr(args, "save", None),
         save_dir=getattr(args, "save_dir", None),
@@ -331,6 +339,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only keep authored posts for user_posts by filtering out retweets client-side",
     )
+    _add_quality_profile_arg(p_collect)
     p_collect.add_argument("--json", action="store_true", help="Print machine-readable collection output")
     p_collect.add_argument(
         "--max-text-chars",
@@ -340,18 +349,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument(
         "--item-text-mode",
         choices=["full", "snippet", "none"],
-        help="Control normalized item text retention in CollectionResult output. Defaults to full",
+        help="Control normalized item text retention in CollectionResult output. Broad operations default to snippet",
     )
     p_collect.add_argument(
         "--item-text-max-chars",
         type=int,
-        help="When item-text-mode is snippet, keep at most N characters per item text. Defaults to 500",
+        help="When item-text-mode is snippet, keep at most N characters per item text. Broad operations default to 280",
     )
     p_collect.add_argument(
         "--raw-mode",
         choices=["full", "minimal", "none"],
-        default="full",
-        help="Control raw payload retention in printed and saved CollectionResult JSON. Defaults to full",
+        help="Control raw payload retention in printed and saved CollectionResult JSON. Broad operations default to none",
     )
     p_collect.add_argument(
         "--raw-max-bytes",
@@ -388,6 +396,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("query", help="Search query text")
     p_search.add_argument("--limit", type=int, help="Optional item limit for returned tweets")
     _add_search_filter_args(p_search)
+    _add_quality_profile_arg(p_search)
     _add_collect_render_args(p_search)
     _add_collect_persistence_args(p_search)
 
@@ -395,6 +404,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_hashtag.add_argument("tag", help='Hashtag value with or without "#"')
     p_hashtag.add_argument("--limit", type=int, help="Optional item limit for returned tweets")
     _add_search_filter_args(p_hashtag)
+    _add_quality_profile_arg(p_hashtag)
     _add_collect_render_args(p_hashtag)
     _add_collect_persistence_args(p_hashtag)
 
@@ -411,6 +421,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only keep authored posts by filtering out retweets client-side",
     )
+    _add_quality_profile_arg(p_posts)
     _add_collect_render_args(p_posts)
     _add_collect_persistence_args(p_posts)
 
@@ -448,6 +459,26 @@ def _build_parser() -> argparse.ArgumentParser:
     p_candidates.add_argument(
         "--fields",
         help="Comma-separated candidate fields to include in output",
+    )
+    p_candidates.add_argument(
+        "--max-per-author",
+        type=int,
+        help="Optional maximum number of returned candidates per author",
+    )
+    p_candidates.add_argument(
+        "--prefer-originals",
+        action="store_true",
+        help="Prefer original posts when duplicate candidates share the same dedupe key",
+    )
+    p_candidates.add_argument(
+        "--drop-noise",
+        action="store_true",
+        help="Drop candidates that match the deterministic X noise rules",
+    )
+    p_candidates.add_argument(
+        "--require-query-match",
+        action="store_true",
+        help="Keep only candidates that still match stored query tokens",
     )
 
     p_scout = sub.add_parser("scout", help="Build an opt-in plan-only capability snapshot")
@@ -1144,7 +1175,6 @@ def _cmd_collect(args) -> int:
         return 2
 
     client = AgentReachClient()
-    item_text_mode = args.item_text_mode or ("snippet" if args.item_text_max_chars is not None else "full")
     collect_kwargs = {}
     if args.limit is not None:
         collect_kwargs["limit"] = args.limit
@@ -1172,17 +1202,49 @@ def _cmd_collect(args) -> int:
         collect_kwargs["min_views"] = args.min_views
     if getattr(args, "originals_only", False):
         collect_kwargs["originals_only"] = True
+    if getattr(args, "quality_profile", None) is not None:
+        collect_kwargs["quality_profile"] = args.quality_profile
+    if args.raw_mode is not None:
+        collect_kwargs["raw_mode"] = args.raw_mode
+    if args.raw_max_bytes is not None:
+        collect_kwargs["raw_max_bytes"] = args.raw_max_bytes
+    if args.item_text_mode is not None:
+        collect_kwargs["item_text_mode"] = args.item_text_mode
+    if args.item_text_max_chars is not None:
+        collect_kwargs["item_text_max_chars"] = args.item_text_max_chars
     payload = client.collect(args.channel, args.operation, args.input, **collect_kwargs)
-    try:
-        payload = apply_item_text_mode(
-            payload,
-            item_text_mode=item_text_mode,
-            item_text_max_chars=args.item_text_max_chars,
+    explicit_shaping_requested = any(
+        value is not None
+        for value in (
+            args.item_text_mode,
+            args.item_text_max_chars,
+            args.raw_mode,
+            args.raw_max_bytes,
         )
-        payload = apply_raw_mode(payload, raw_mode=args.raw_mode, raw_max_bytes=args.raw_max_bytes)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
+    )
+    if explicit_shaping_requested:
+        meta = payload.get("meta") or {}
+        effective_item_text_mode = args.item_text_mode or (
+            "snippet" if args.item_text_max_chars is not None else meta.get("item_text_mode") or "full"
+        )
+        effective_item_text_max_chars = (
+            args.item_text_max_chars if args.item_text_max_chars is not None else meta.get("item_text_max_chars")
+        )
+        effective_raw_mode = args.raw_mode or ("full" if args.raw_max_bytes is not None else meta.get("raw_mode") or "full")
+        try:
+            payload = apply_item_text_mode(
+                payload,
+                item_text_mode=effective_item_text_mode,
+                item_text_max_chars=effective_item_text_max_chars,
+            )
+            payload = apply_raw_mode(
+                payload,
+                raw_mode=effective_raw_mode,
+                raw_max_bytes=args.raw_max_bytes,
+            )
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
     if args.json:
         _print_json(payload)
     else:
@@ -1258,6 +1320,9 @@ def _cmd_plan_candidates(args) -> int:
     if args.limit < 1:
         print("limit must be greater than or equal to 1", file=sys.stderr)
         return 2
+    if args.max_per_author is not None and args.max_per_author < 1:
+        print("max-per-author must be greater than or equal to 1", file=sys.stderr)
+        return 2
     try:
         payload = build_candidates_payload(
             args.input,
@@ -1265,6 +1330,10 @@ def _cmd_plan_candidates(args) -> int:
             limit=args.limit,
             summary_only=args.summary_only,
             fields=args.fields,
+            max_per_author=args.max_per_author,
+            prefer_originals=args.prefer_originals,
+            drop_noise=args.drop_noise,
+            require_query_match=args.require_query_match,
         )
     except CandidatePlanError as exc:
         if args.json:

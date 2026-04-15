@@ -375,6 +375,52 @@ def test_summarize_ledger_input_can_filter_records(tmp_path):
     assert payload["error_records"] == 0
 
 
+def test_summarize_ledger_input_reports_shape_and_noise_diagnostics(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    result = build_result(
+        ok=True,
+        channel="twitter",
+        operation="search",
+        items=[
+            build_item(
+                item_id="tweet-1",
+                kind="post",
+                title="Useful",
+                url="https://x.com/openai/status/1",
+                text="hello world",
+                author="openai",
+                published_at="2026-04-10T00:00:00Z",
+                source="twitter",
+                extras={"timeline_item_kind": "original"},
+            )
+        ],
+        raw={"ok": True},
+        meta={
+            "input": "OpenAI",
+            "raw_mode": "none",
+            "item_text_mode": "snippet",
+            "raw_payload_bytes": 42,
+            "search_type": "top",
+            "filter_drop_counts": {"promo_phrase": 2},
+            "diagnostics": {"unbounded_time_window": True},
+        },
+        error=None,
+    )
+    record = build_ledger_record(result, run_id="run-1")
+    path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    payload = summarize_ledger_input(path)
+
+    assert payload["raw_mode_counts"] == {"none": 1}
+    assert payload["item_text_mode_counts"] == {"snippet": 1}
+    assert payload["search_type_counts"] == {"top": 1}
+    assert payload["filter_drop_reason_counts"] == {"promo_phrase": 2}
+    assert payload["timeline_item_kind_counts"] == {"original": 1}
+    assert payload["raw_payload_bytes_total"] == 42
+    assert payload["item_text_chars_total"] == 11
+    assert payload["unbounded_time_window_records"] == 1
+
+
 def test_query_ledger_input_filters_and_projects(tmp_path):
     path = tmp_path / "evidence.jsonl"
     records = [

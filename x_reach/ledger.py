@@ -386,6 +386,14 @@ def validate_ledger_input_with_filters(
     intent_counts: dict[str, int] = {}
     query_id_counts: dict[str, int] = {}
     source_role_counts: dict[str, int] = {}
+    raw_mode_counts: dict[str, int] = {}
+    item_text_mode_counts: dict[str, int] = {}
+    filter_drop_reason_counts: dict[str, int] = {}
+    timeline_item_kind_counts: dict[str, int] = {}
+    search_type_counts: dict[str, int] = {}
+    raw_payload_bytes_total = 0
+    item_text_chars_total = 0
+    unbounded_time_window_records = 0
     missing_metadata_counts = {"intent": 0, "query_id": 0, "source_role": 0}
     metadata_missing_records = 0
     missing_metadata_samples: list[dict[str, Any]] = []
@@ -478,6 +486,24 @@ def validate_ledger_input_with_filters(
                 source_role_counts,
                 record.get("source_role") if record.get("source_role") is not None else meta.get("source_role"),
             )
+            _increment_if_present(raw_mode_counts, _raw_mode_for_result(result, meta))
+            _increment_if_present(item_text_mode_counts, _item_text_mode_for_result(result, meta))
+            _increment_if_present(search_type_counts, meta.get("search_type"))
+            raw_filter_drop_counts = meta.get("filter_drop_counts")
+            if isinstance(raw_filter_drop_counts, dict):
+                for reason, count in raw_filter_drop_counts.items():
+                    if count is None:
+                        continue
+                    try:
+                        increment = int(count)
+                    except (TypeError, ValueError):
+                        continue
+                    filter_drop_reason_counts[str(reason)] = (
+                        filter_drop_reason_counts.get(str(reason), 0) + increment
+                    )
+            diagnostics = meta.get("diagnostics")
+            if isinstance(diagnostics, dict) and diagnostics.get("unbounded_time_window") is True:
+                unbounded_time_window_records += 1
             for name in missing_fields:
                 missing_metadata_counts[name] += 1
             if missing_fields:
@@ -492,7 +518,8 @@ def validate_ledger_input_with_filters(
                         "missing": missing_fields,
                     }
                 )
-            raw_length = _raw_payload_length(result.get("raw"))
+            raw_length = _raw_payload_bytes_for_result(result, meta)
+            raw_payload_bytes_total += raw_length
             if raw_length > _LARGE_RAW_CHARS and len(large_raw_payloads) < _DIAGNOSTIC_LIMIT:
                 large_raw_payloads.append(
                     {
@@ -508,6 +535,9 @@ def validate_ledger_input_with_filters(
             for item in items:
                 if not isinstance(item, dict):
                     continue
+                raw_extras = item.get("extras")
+                extras: dict[str, Any] = raw_extras if isinstance(raw_extras, dict) else {}
+                _increment_if_present(timeline_item_kind_counts, extras.get("timeline_item_kind"))
                 text = item.get("text")
                 if isinstance(text, str) and len(text) > _LARGE_TEXT_CHARS:
                     large_text_fields.append(
@@ -518,6 +548,9 @@ def validate_ledger_input_with_filters(
                             "text_length": len(text),
                         }
                     )
+                    item_text_chars_total += len(text)
+                elif isinstance(text, str):
+                    item_text_chars_total += len(text)
 
     metadata_valid = not require_metadata or metadata_missing_records == 0
     valid = invalid_line_count == 0 and invalid_record_count == 0 and metadata_valid
@@ -542,6 +575,14 @@ def validate_ledger_input_with_filters(
         "query_id_counts": query_id_counts,
         "source_role_counts": source_role_counts,
         "error_codes": error_codes,
+        "raw_mode_counts": raw_mode_counts,
+        "item_text_mode_counts": item_text_mode_counts,
+        "search_type_counts": search_type_counts,
+        "filter_drop_reason_counts": filter_drop_reason_counts,
+        "timeline_item_kind_counts": timeline_item_kind_counts,
+        "raw_payload_bytes_total": raw_payload_bytes_total,
+        "item_text_chars_total": item_text_chars_total,
+        "unbounded_time_window_records": unbounded_time_window_records,
         "missing_metadata": {
             **missing_metadata_counts,
             "records": metadata_missing_records,
@@ -589,6 +630,14 @@ def summarize_ledger_input(
         "query_id_counts": validation["query_id_counts"],
         "source_role_counts": validation["source_role_counts"],
         "error_codes": validation["error_codes"],
+        "raw_mode_counts": validation["raw_mode_counts"],
+        "item_text_mode_counts": validation["item_text_mode_counts"],
+        "search_type_counts": validation["search_type_counts"],
+        "filter_drop_reason_counts": validation["filter_drop_reason_counts"],
+        "timeline_item_kind_counts": validation["timeline_item_kind_counts"],
+        "raw_payload_bytes_total": validation["raw_payload_bytes_total"],
+        "item_text_chars_total": validation["item_text_chars_total"],
+        "unbounded_time_window_records": validation["unbounded_time_window_records"],
         "missing_metadata": validation["missing_metadata"],
         "invalid_lines": validation["invalid_lines"],
         "invalid_records": validation["invalid_records"],
@@ -754,6 +803,33 @@ def _raw_payload_length(raw_payload: Any) -> int:
         return len(json.dumps(raw_payload, ensure_ascii=False))
     except (TypeError, ValueError):
         return len(str(raw_payload))
+
+
+def _raw_payload_bytes_for_result(result: dict[str, Any], meta: dict[str, Any]) -> int:
+    raw_payload_bytes = meta.get("raw_payload_bytes")
+    if raw_payload_bytes is not None:
+        try:
+            return int(raw_payload_bytes)
+        except (TypeError, ValueError):
+            pass
+    return _raw_payload_length(result.get("raw"))
+
+
+def _raw_mode_for_result(result: dict[str, Any], meta: dict[str, Any]) -> str:
+    raw_mode = meta.get("raw_mode")
+    if raw_mode is not None:
+        return str(raw_mode)
+    return "none" if result.get("raw") is None else "full"
+
+
+def _item_text_mode_for_result(result: dict[str, Any], meta: dict[str, Any]) -> str:
+    item_text_mode = meta.get("item_text_mode")
+    if item_text_mode is not None:
+        return str(item_text_mode)
+    items = result.get("items") or []
+    if any(isinstance(item, dict) and isinstance(item.get("text"), str) for item in items):
+        return "full"
+    return "none"
 
 
 def _increment_if_present(counts: dict[str, int], value: Any) -> None:

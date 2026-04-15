@@ -10,6 +10,7 @@ from typing import Any
 
 from x_reach import __version__
 from x_reach.client import AgentReachClient
+from x_reach.high_signal import is_broad_operation
 from x_reach.ledger import (
     default_run_id,
     iter_ledger_records,
@@ -90,7 +91,11 @@ def run_batch_plan(
     started_at = utc_timestamp()
 
     def execute(index: int, query: dict[str, Any]) -> dict[str, Any]:
-        key = _query_key(query)
+        resume_query = {
+            **query,
+            "quality_profile": requested_quality if is_broad_operation(query["operation"]) else None,
+        }
+        key = _query_key(resume_query)
         if resume and key in completed_keys:
             return {
                 "query_id": query["query_id"],
@@ -126,6 +131,8 @@ def run_batch_plan(
         ):
             if query.get(option_name) is not None:
                 kwargs[option_name] = query[option_name]
+        if requested_quality is not None and is_broad_operation(query["operation"]):
+            kwargs["quality_profile"] = requested_quality
         payload = client.collect(query["channel"], query["operation"], query["input"], **kwargs)
         error = payload.get("error")
         return {
@@ -150,6 +157,7 @@ def run_batch_plan(
             "min_retweets": query.get("min_retweets"),
             "min_views": query.get("min_views"),
             "originals_only": query.get("originals_only"),
+            "quality_profile": requested_quality if is_broad_operation(query["operation"]) else None,
             "status": "ok" if payload.get("ok") else "error",
             "ok": bool(payload.get("ok")),
             "count": len(payload.get("items") or []),
@@ -319,7 +327,7 @@ def _prepare_batch_plan(
         for index, query in enumerate(queries)
     ]
     failure_policy = str(plan.get("failure_policy") or "partial")
-    requested_quality = str(quality or plan.get("quality_profile") or "precision")
+    requested_quality = str(quality or plan.get("quality_profile") or "balanced")
     return path, plan, normalized_queries, failure_policy, requested_quality
 
 
@@ -423,6 +431,7 @@ def _query_key(
         str(query.get("min_retweets")) if query.get("min_retweets") is not None else None,
         str(query.get("min_views")) if query.get("min_views") is not None else None,
         str(query.get("originals_only")) if query.get("originals_only") is not None else None,
+        str(query.get("quality_profile")) if query.get("quality_profile") is not None else None,
     )
 
 
@@ -458,6 +467,7 @@ def _completed_query_keys(
             "min_retweets": meta.get("min_retweets"),
             "min_views": meta.get("min_views"),
             "originals_only": meta.get("originals_only"),
+            "quality_profile": meta.get("quality_profile"),
         }
         if query["channel"] and query["operation"] and query["input"]:
             completed.add(_query_key(query))

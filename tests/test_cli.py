@@ -235,6 +235,28 @@ class TestCLI:
         assert captured["value"] == "OpenAI"
         assert captured["kwargs"]["min_views"] == 1000
 
+    def test_search_shortcut_passes_quality_profile(self, capsys, monkeypatch):
+        captured = {}
+
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                captured["kwargs"] = kwargs
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+
+        assert main(["search", "OpenAI", "--quality-profile", "precision", "--json"]) == 0
+
+        assert captured["kwargs"]["quality_profile"] == "precision"
+
     def test_hashtag_shortcut_routes_to_collect(self, capsys, monkeypatch):
         captured = {}
 
@@ -399,6 +421,42 @@ class TestCLI:
         )
         payload = json.loads(capsys.readouterr().out)
         assert payload["items"][0]["text"] is None
+
+    def test_plan_candidates_passes_new_filtering_args(self, capsys, monkeypatch):
+        captured = {}
+
+        def fake_build_candidates_payload(*args, **kwargs):
+            captured["kwargs"] = kwargs
+            return {
+                "command": "plan candidates",
+                "summary": {"candidate_count": 0, "returned": 0},
+                "candidates": [],
+            }
+
+        monkeypatch.setattr("agent_reach.cli.build_candidates_payload", fake_build_candidates_payload)
+
+        assert (
+            main(
+                [
+                    "plan",
+                    "candidates",
+                    "--input",
+                    "evidence.jsonl",
+                    "--max-per-author",
+                    "2",
+                    "--prefer-originals",
+                    "--drop-noise",
+                    "--require-query-match",
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        assert captured["kwargs"]["max_per_author"] == 2
+        assert captured["kwargs"]["prefer_originals"] is True
+        assert captured["kwargs"]["drop_noise"] is True
+        assert captured["kwargs"]["require_query_match"] is True
 
     def test_uninstall_dry_run_mentions_twitter_cleanup(self, capsys):
         assert main(["uninstall", "--dry-run"]) == 0
