@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-"""Tests for Agent Reach config module."""
+﻿# -*- coding: utf-8 -*-
+"""Tests for X Reach config module."""
 
 import pytest
 
@@ -51,6 +51,24 @@ class TestConfig:
         assert config2.get("key1") == "value1"
         assert config2.get("key2") == 42
 
+    def test_default_location_falls_back_to_legacy_config(self, tmp_path, monkeypatch):
+        config_dir = tmp_path / ".x-reach"
+        config_file = config_dir / "config.yaml"
+        legacy_dir = tmp_path / ".agent-reach"
+        legacy_file = legacy_dir / "config.yaml"
+        legacy_dir.mkdir(parents=True)
+        legacy_file.write_text("twitter_auth_token: legacy-token\n", encoding="utf-8")
+
+        monkeypatch.setattr(Config, "CONFIG_DIR", config_dir)
+        monkeypatch.setattr(Config, "CONFIG_FILE", config_file)
+        monkeypatch.setattr(Config, "LEGACY_CONFIG_DIR", legacy_dir)
+        monkeypatch.setattr(Config, "LEGACY_CONFIG_FILE", legacy_file)
+
+        config = Config()
+
+        assert config.config_path == config_file
+        assert config.get("twitter_auth_token") == "legacy-token"
+
     def test_delete(self, tmp_config):
         tmp_config.set("to_delete", "value")
         assert tmp_config.get("to_delete") == "value"
@@ -83,3 +101,4 @@ class TestConfig:
         assert masked["api_key"] == "super-se..."
         assert masked["service_client_secret"] == "client-s..."
         assert masked["normal_setting"] == "visible"
+

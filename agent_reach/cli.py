@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-"""CLI for the Windows/Codex Agent Reach fork."""
+﻿# -*- coding: utf-8 -*-
+"""CLI for the Windows/Codex X Reach fork."""
 
 from __future__ import annotations
 
@@ -22,7 +22,11 @@ from agent_reach.candidates import (
     render_candidates_text,
 )
 from agent_reach.client import AgentReachClient
-from agent_reach.integrations.codex import PACKAGED_SKILL_NAMES, packaged_skill_source
+from agent_reach.integrations.codex import (
+    LEGACY_PACKAGED_SKILL_NAMES,
+    PACKAGED_SKILL_NAMES,
+    packaged_skill_source,
+)
 from agent_reach.ledger import (
     append_result_json,
     default_run_id,
@@ -43,12 +47,10 @@ from agent_reach.scout import (
     build_scout_plan,
     render_scout_text,
 )
-from agent_reach.utils.commands import ensure_command_on_path, find_command
-from agent_reach.utils.paths import get_mcporter_config_path, render_mcporter_command, render_ytdlp_fix_command
+from agent_reach.utils.commands import find_command
 
 CHANNEL_SPECIFIC_INSTALL_CHANNELS = ("twitter",)
 
-EXA_SERVER_URL = "https://mcp.exa.ai/mcp"
 UPSTREAM_REPO = "Panniantong/Agent-Reach"
 
 
@@ -86,11 +88,11 @@ def _print_json(payload: object) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="agent-reach",
-        description="Windows-first research tooling for Codex and compatible agents",
+        prog="x-reach",
+        description="Windows-first X/Twitter research tooling for Codex and compatible agents",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show debug logs")
-    parser.add_argument("--version", action="version", version=f"Agent Reach v{__version__}")
+    parser.add_argument("--version", action="version", version=f"X Reach v{__version__}")
     sub = parser.add_subparsers(dest="command", help="Available commands")
 
     p_install = sub.add_parser("install", help="Install and configure the supported research stack")
@@ -391,12 +393,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ledger_append.add_argument("--source-role", help="Optional evidence ledger source role label")
     p_ledger_append.add_argument("--json", action="store_true", help="Print machine-readable append output")
 
-    p_uninstall = sub.add_parser("uninstall", help="Remove local Agent Reach state and skill files")
+    p_uninstall = sub.add_parser("uninstall", help="Remove local X Reach state and skill files")
     p_uninstall.add_argument("--dry-run", action="store_true", help="Preview what would be removed")
     p_uninstall.add_argument(
         "--keep-config",
         action="store_true",
-        help="Remove skill files only and keep ~/.agent-reach",
+        help="Remove skill files only and keep ~/.x-reach",
     )
 
     p_skill = sub.add_parser("skill", help="Install or remove the bundled skill suite")
@@ -407,7 +409,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_check_update = sub.add_parser("check-update", help="Check the upstream project for new releases")
     p_check_update.add_argument("--json", action="store_true", help="Print machine-readable update data")
 
-    sub.add_parser("version", help="Show the current Agent Reach version")
+    sub.add_parser("version", help="Show the current X Reach version")
     return parser
 
 
@@ -423,7 +425,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.command == "version":
-        print(f"Agent Reach v{__version__}")
+        print(f"X Reach v{__version__}")
         return 0
     if args.command == "install":
         return _cmd_install(args)
@@ -576,7 +578,7 @@ def _cmd_install(args) -> int:
         return 0
 
     print()
-    print("Agent Reach Installer")
+    print("X Reach Installer")
     print("========================================")
     print(f"Environment: {env}")
     print(f"Selected channels: {', '.join(requested_channels) if requested_channels else 'none'}")
@@ -604,15 +606,15 @@ def _cmd_install(args) -> int:
     if "twitter" in requested_channels:
         print()
         print("Next step for Twitter/X:")
-        print('  agent-reach configure twitter-cookies "auth_token=...; ct0=..."')
-        print("  Or: agent-reach configure --from-browser chrome")
+        print('  x-reach configure twitter-cookies "auth_token=...; ct0=..."')
+        print("  Or: x-reach configure --from-browser chrome")
 
     if failures:
         print()
         print("Some steps still need attention:")
         for item in failures:
             print(f"  - {item}")
-        print("Run `agent-reach install --safe` to print the exact Windows commands again.")
+        print("Run `x-reach install --safe` to print the exact Windows commands again.")
         return 1
 
     print()
@@ -635,7 +637,7 @@ def _manual_install_commands(requested_channels: Sequence[str]) -> List[str]:
     commands: List[str] = []
     if "twitter" in requested_channels and not find_command("twitter"):
         commands.append("uv tool install twitter-cli")
-    commands.append("agent-reach skill --install")
+    commands.append("x-reach skill --install")
     return commands
 
 
@@ -665,179 +667,6 @@ def _run(
     )
 
 
-def _ensure_gh_cli() -> bool:
-    existing = ensure_command_on_path("gh")
-    if existing:
-        _ensure_local_bin_wrapper("gh", existing)
-        print("  [OK] gh CLI already installed")
-        return True
-    print("  Installing gh CLI with winget...")
-    return _winget_install("GitHub.cli", "gh")
-
-
-def _ensure_ytdlp() -> bool:
-    existing = ensure_command_on_path("yt-dlp")
-    if existing:
-        _ensure_local_bin_wrapper("yt-dlp", existing)
-        print("  [OK] yt-dlp already installed")
-        return True
-    print("  Installing yt-dlp with winget...")
-    return _winget_install("yt-dlp.yt-dlp", "yt-dlp")
-
-
-def _ensure_nodejs() -> bool:
-    if shutil.which("node") and shutil.which("npm"):
-        print("  [OK] Node.js already installed")
-        return True
-    print("  Installing Node.js LTS with winget...")
-    if not _winget_install("OpenJS.NodeJS.LTS", "node"):
-        return False
-    if shutil.which("node") and shutil.which("npm"):
-        return True
-    print("  [WARN] Node.js installed but npm is not visible in the current shell yet")
-    return False
-
-
-def _winget_install(package_id: str, command_name: str) -> bool:
-    winget = shutil.which("winget")
-    if not winget:
-        print(f"  [WARN] winget is not available. Install {package_id} manually.")
-        return False
-    try:
-        result = _run(
-            [
-                winget,
-                "install",
-                "--id",
-                package_id,
-                "-e",
-                "--source",
-                "winget",
-                "--disable-interactivity",
-                "--accept-package-agreements",
-                "--accept-source-agreements",
-            ],
-            timeout=900,
-        )
-    except Exception as exc:
-        print(f"  [WARN] winget install failed for {package_id}: {exc}")
-        return False
-
-    installed_path = ensure_command_on_path(command_name)
-    if installed_path:
-        _ensure_local_bin_wrapper(command_name, installed_path)
-        print(f"  [OK] {command_name} is ready")
-        return True
-
-    stderr = (result.stderr or "").strip()
-    stdout = (result.stdout or "").strip()
-    message = stderr or stdout or "unknown winget failure"
-    print(f"  [WARN] {package_id} did not finish cleanly: {message[:200]}")
-    return False
-
-
-def _ensure_mcporter() -> bool:
-    if find_command("mcporter"):
-        print("  [OK] mcporter already installed")
-        return True
-    npm = shutil.which("npm")
-    if not npm:
-        print("  [WARN] npm is missing, so mcporter cannot be installed")
-        return False
-    print("  Installing mcporter with npm...")
-    try:
-        _run([npm, "install", "-g", "mcporter"], timeout=600)
-    except Exception as exc:
-        print(f"  [WARN] mcporter install failed: {exc}")
-        return False
-    if find_command("mcporter"):
-        print("  [OK] mcporter is ready")
-        return True
-    print("  [WARN] mcporter is still missing after npm install")
-    return False
-
-
-def _has_exa_config() -> bool:
-    command = _mcporter_command()
-    if not command:
-        return False
-    try:
-        result = _run([*command, "config", "list"], timeout=30)
-    except Exception:
-        return False
-    return "exa" in (result.stdout or "").lower()
-
-
-def _ensure_exa_config() -> bool:
-    command = _mcporter_command(create_dir=True)
-    if not command:
-        print("  [WARN] mcporter is missing, so Exa cannot be configured")
-        return False
-    if _has_exa_config():
-        print("  [OK] Exa MCP already configured")
-        return True
-    print("  Configuring Exa MCP...")
-    try:
-        _run([*command, "config", "add", "exa", EXA_SERVER_URL], timeout=60)
-    except Exception as exc:
-        print(f"  [WARN] Exa configuration failed: {exc}")
-        return False
-    if _has_exa_config():
-        print("  [OK] Exa MCP configured")
-        return True
-    print("  [WARN] Exa MCP is still not configured")
-    return False
-
-
-def _ytdlp_js_runtime_ready() -> bool:
-    from agent_reach.utils.paths import get_ytdlp_config_path
-    from agent_reach.utils.text import read_utf8_text
-
-    if not ensure_command_on_path("yt-dlp"):
-        return False
-    if shutil.which("deno"):
-        return True
-    if not shutil.which("node"):
-        return False
-
-    config_path = get_ytdlp_config_path()
-    if not config_path.exists():
-        return False
-    return "--js-runtimes" in read_utf8_text(config_path)
-
-
-def _ensure_ytdlp_js_runtime() -> bool:
-    from agent_reach.utils.paths import get_ytdlp_config_path, render_ytdlp_fix_command
-
-    if _ytdlp_js_runtime_ready():
-        print("  [OK] yt-dlp JS runtime already configured")
-        return True
-
-    if not ensure_command_on_path("yt-dlp"):
-        print("  [WARN] yt-dlp is missing, so the JS runtime could not be configured")
-        return False
-    if not shutil.which("node") and not shutil.which("deno"):
-        print("  [WARN] No JS runtime found for yt-dlp")
-        return False
-    if shutil.which("deno"):
-        print("  [OK] Deno is available for yt-dlp")
-        return True
-
-    config_path = get_ytdlp_config_path()
-    try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        existing = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
-        if "--js-runtimes node" not in existing:
-            prefix = "" if not existing or existing.endswith("\n") else "\n"
-            config_path.write_text(f"{existing}{prefix}--js-runtimes node\n", encoding="utf-8")
-        print(f"  [OK] Added Node.js runtime to {config_path}")
-        return True
-    except Exception as exc:
-        print(f"  [WARN] Could not update yt-dlp config: {exc}")
-        print(render_ytdlp_fix_command())
-        return False
-
-
 def _install_twitter_deps() -> bool:
     if find_command("twitter"):
         print("  [OK] twitter-cli already installed")
@@ -857,59 +686,6 @@ def _install_twitter_deps() -> bool:
         return True
     print("  [WARN] twitter-cli is still missing after uv tool install")
     return False
-
-
-def _install_reddit_deps() -> bool:
-    if find_command("rdt"):
-        print("  [OK] rdt-cli already installed")
-        return True
-    uv = shutil.which("uv")
-    if not uv:
-        print("  [WARN] uv is missing, so rdt-cli cannot be installed automatically")
-        return False
-    print("  Installing rdt-cli with uv tool...")
-    try:
-        _run([uv, "tool", "install", "rdt-cli"], timeout=600)
-    except Exception as exc:
-        print(f"  [WARN] rdt-cli install failed: {exc}")
-        return False
-    if find_command("rdt"):
-        print("  [OK] rdt-cli is ready")
-        return True
-    print("  [WARN] rdt-cli is still missing after uv tool install")
-    return False
-
-
-def _mcporter_command(create_dir: bool = False) -> List[str]:
-    mcporter = find_command("mcporter")
-    if not mcporter:
-        return []
-
-    config_path = get_mcporter_config_path()
-    if create_dir:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-    return [mcporter, "--config", str(config_path)]
-
-
-def _ensure_local_bin_wrapper(command_name: str, executable_path: str) -> None:
-    """Create a small shim under ~/.local/bin for newly-installed tools."""
-
-    local_bin = Path.home() / ".local" / "bin"
-    local_bin.mkdir(parents=True, exist_ok=True)
-    wrapper = local_bin / f"{command_name}.cmd"
-    try:
-        if str(Path(executable_path).resolve()).lower() == str(wrapper.resolve()).lower():
-            return
-    except Exception:
-        pass
-    try:
-        wrapper.write_text(
-            "@echo off\n"
-            f"\"{executable_path}\" %*\n",
-            encoding="utf-8",
-        )
-    except OSError:
-        return
 
 
 def _candidate_skill_roots() -> List[Path]:
@@ -933,6 +709,7 @@ def _candidate_skill_roots() -> List[Path]:
 def _install_skill() -> List[Path]:
     source_dir = packaged_skill_source()
     installed_paths: List[Path] = []
+    known_skill_names = [*LEGACY_PACKAGED_SKILL_NAMES, *PACKAGED_SKILL_NAMES]
 
     existing_roots = [root for root in _candidate_skill_roots() if root.exists()]
     if not existing_roots:
@@ -940,10 +717,12 @@ def _install_skill() -> List[Path]:
 
     for root in existing_roots:
         root.mkdir(parents=True, exist_ok=True)
-        for skill_name in PACKAGED_SKILL_NAMES:
+        for skill_name in known_skill_names:
             target = root / skill_name
             if target.exists():
                 shutil.rmtree(target)
+        for skill_name in PACKAGED_SKILL_NAMES:
+            target = root / skill_name
             shutil.copytree(source_dir / skill_name, target)
             installed_paths.append(target)
 
@@ -952,8 +731,9 @@ def _install_skill() -> List[Path]:
 
 def _uninstall_skill() -> List[Path]:
     removed: List[Path] = []
+    known_skill_names = [*LEGACY_PACKAGED_SKILL_NAMES, *PACKAGED_SKILL_NAMES]
     for root in _candidate_skill_roots():
-        for skill_name in PACKAGED_SKILL_NAMES:
+        for skill_name in known_skill_names:
             target = root / skill_name
             if target.exists():
                 shutil.rmtree(target)
@@ -1128,7 +908,7 @@ def _compact_text_snippet(text: str | None, max_chars: int | None) -> str | None
 
 def _render_collect_text(payload: CollectionResult, max_text_chars: int | None = None) -> str:
     lines = [
-        "Agent Reach Collection",
+        "X Reach Collection",
         "========================================",
         f"Channel: {payload['channel']}",
         f"Operation: {payload['operation']}",
@@ -1467,7 +1247,7 @@ def _cmd_ledger_merge(args) -> int:
         print(
             "\n".join(
                 [
-                    "Agent Reach Ledger Merge",
+                    "X Reach Ledger Merge",
                     "========================================",
                     f"Input: {payload['input']}",
                     f"Output: {payload['output']}",
@@ -1491,7 +1271,7 @@ def _cmd_ledger_validate(args) -> int:
         print(
             "\n".join(
                 [
-                    "Agent Reach Ledger Validate",
+                    "X Reach Ledger Validate",
                     "========================================",
                     f"Input: {payload['input']}",
                     f"Valid: {'yes' if payload['valid'] else 'no'}",
@@ -1521,7 +1301,7 @@ def _cmd_ledger_summarize(args) -> int:
         print(
             "\n".join(
                 [
-                    "Agent Reach Ledger Summary",
+                    "X Reach Ledger Summary",
                     "========================================",
                     f"Input: {payload['input']}",
                     f"Filters: {', '.join(item['expression'] for item in payload['filters']) if payload['filters'] else 'none'}",
@@ -1583,7 +1363,7 @@ def _cmd_ledger_append(args) -> int:
         print(
             "\n".join(
                 [
-                    "Agent Reach Ledger Append",
+                    "X Reach Ledger Append",
                     "========================================",
                     f"Input: {payload['input']}",
                     f"Output: {payload['output']}",
@@ -1599,7 +1379,7 @@ def _cmd_ledger_append(args) -> int:
 
 def _render_ledger_query_text(payload: dict[str, object]) -> str:
     lines = [
-        "Agent Reach Ledger Query",
+        "X Reach Ledger Query",
         "========================================",
         f"Input: {payload['input']}",
         f"Files checked: {payload['files_checked']}",
@@ -1627,7 +1407,7 @@ def _render_ledger_query_text(payload: dict[str, object]) -> str:
 
 def _render_channels_text(contracts: Sequence[dict]) -> str:
     lines = [
-        "Agent Reach Channels",
+        "X Reach Channels",
         "========================================",
         "",
     ]
@@ -1739,12 +1519,17 @@ def _cmd_uninstall(args) -> int:
 
     config_path = Config.CONFIG_FILE
     config_dir = Config.CONFIG_DIR
-    skill_paths = [root / skill_name for root in _candidate_skill_roots() for skill_name in PACKAGED_SKILL_NAMES]
+    legacy_config_path = Config.LEGACY_CONFIG_FILE
+    legacy_config_dir = Config.LEGACY_CONFIG_DIR
+    skill_names = [*LEGACY_PACKAGED_SKILL_NAMES, *PACKAGED_SKILL_NAMES]
+    skill_paths = [root / skill_name for root in _candidate_skill_roots() for skill_name in skill_names]
 
     if args.dry_run:
         print("Dry-run uninstall plan:")
         if not args.keep_config:
             print(f"  Remove config dir: {config_dir}")
+            if legacy_config_dir != config_dir:
+                print(f"  Remove legacy config dir: {legacy_config_dir}")
         for path in skill_paths:
             if path.exists():
                 print(f"  Remove skill: {path}")
@@ -1758,6 +1543,13 @@ def _cmd_uninstall(args) -> int:
         removed_any = True
     elif not args.keep_config and config_path.exists():
         config_path.unlink(missing_ok=True)
+
+    if not args.keep_config and legacy_config_dir != config_dir and legacy_config_dir.exists():
+        shutil.rmtree(legacy_config_dir)
+        print(f"Removed legacy config dir: {legacy_config_dir}")
+        removed_any = True
+    elif not args.keep_config and legacy_config_path != config_path and legacy_config_path.exists():
+        legacy_config_path.unlink(missing_ok=True)
 
     for path in skill_paths:
         if path.exists():
@@ -2036,3 +1828,4 @@ def _cmd_check_update(args) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

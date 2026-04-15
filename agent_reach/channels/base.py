@@ -17,7 +17,7 @@ _DEFAULT_INPUT_KINDS = {
 
 
 class Channel(ABC):
-    """A research source that Agent Reach can diagnose for availability."""
+    """A research source that X Reach can diagnose for availability."""
 
     name: str = ""
     description: str = ""

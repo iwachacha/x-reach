@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Health checks and machine-readable diagnostics for supported channels."""
 
 from __future__ import annotations
@@ -318,7 +318,7 @@ def format_report(
         require_all=require_all,
     )
     lines = [
-        "[bold cyan]Agent Reach Health[/bold cyan]",
+        "[bold cyan]X Reach Health[/bold cyan]",
         "[cyan]========================================[/cyan]",
     ]
     if probe:
@@ -372,3 +372,4 @@ def format_report(
             )
 
     return "\n".join(lines)
+

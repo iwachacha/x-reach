@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Tests for evidence ledger JSONL helpers."""
 
 import json
@@ -108,7 +108,7 @@ def test_build_ledger_record_error_shape():
 
 
 def test_append_ledger_record_writes_jsonl(tmp_path):
-    path = tmp_path / ".agent-reach" / "evidence.jsonl"
+    path = tmp_path / ".x-reach" / "evidence.jsonl"
     first = build_ledger_record(_success_result(), run_id="run-1")
     second = build_ledger_record(_error_result(), run_id="run-1")
 
@@ -460,3 +460,4 @@ def test_query_ledger_input_rejects_invalid_filter(tmp_path):
 
     with pytest.raises(ValueError):
         query_ledger_input(path, filters=["channel github"])
+

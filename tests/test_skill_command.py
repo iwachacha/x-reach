@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Tests for skill install and uninstall helpers."""
+"""Tests for X Reach skill install and uninstall helpers."""
 
 from agent_reach.cli import _candidate_skill_roots, _install_skill, _uninstall_skill
-from agent_reach.integrations.codex import PACKAGED_SKILL_NAMES
+from agent_reach.integrations.codex import LEGACY_PACKAGED_SKILL_NAMES, PACKAGED_SKILL_NAMES
 
 
 def test_install_skill_prefers_codex_home(monkeypatch, tmp_path):
@@ -33,6 +33,24 @@ def test_uninstall_skill_removes_known_locations(monkeypatch, tmp_path):
     removed = _uninstall_skill()
 
     assert removed == targets
+    for target in targets:
+        assert not target.exists()
+
+
+def test_uninstall_skill_also_removes_legacy_skill_names(monkeypatch, tmp_path):
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr("agent_reach.cli.Path.home", lambda: tmp_path)
+
+    targets = []
+    for skill_name in LEGACY_PACKAGED_SKILL_NAMES:
+        target = tmp_path / ".codex" / "skills" / skill_name
+        target.mkdir(parents=True)
+        (target / "SKILL.md").write_text("legacy", encoding="utf-8")
+        targets.append(target)
+
+    removed = _uninstall_skill()
+
+    assert set(removed) == set(targets)
     for target in targets:
         assert not target.exists()
 

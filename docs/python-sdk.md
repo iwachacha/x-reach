@@ -1,6 +1,6 @@
-# Agent Reach Python SDK
+﻿# X Reach Python SDK
 
-`AgentReachClient` remains available, but this fork only exposes the `twitter` namespace.
+`XReachClient` is the primary SDK surface, and this fork only exposes the `twitter` namespace.
 
 ## Install
 
@@ -19,15 +19,15 @@ uv pip install -e .
 Or install the current fork directly:
 
 ```powershell
-uv pip install "agent-reach @ git+https://github.com/iwachacha/twitter-reach.git"
+uv pip install "x-reach @ git+https://github.com/iwachacha/twitter-reach.git"
 ```
 
 ## Basic usage
 
 ```python
-from agent_reach import AgentReachClient
+from x_reach import XReachClient
 
-client = AgentReachClient()
+client = XReachClient()
 
 twitter_posts = client.twitter.user_posts("openai", limit=5)
 windowed_search = client.collect(
@@ -40,7 +40,9 @@ windowed_search = client.collect(
 )
 ```
 
-If your host project only needs a machine-readable subprocess interface, prefer `agent-reach collect --json`.
+Legacy compatibility imports such as `from agent_reach import XReachClient` still work when a downstream project has not switched yet.
+
+If your host project only needs a machine-readable subprocess interface, prefer `x-reach collect --json`.
 
 ## Result shape
 
@@ -58,5 +60,7 @@ Use `items` for downstream automation and `raw` when you need backend-native det
 
 ## Choosing CLI vs SDK
 
-- Use `agent-reach collect --json` when the host project can shell out and wants the most portable integration surface.
-- Use `AgentReachClient` when the host project already manages a Python environment and can install Agent Reach into it.
+- Use `x-reach collect --json` when the host project can shell out and wants the most portable integration surface.
+- Use `XReachClient` when the host project already manages a Python environment and can install X Reach into it.
+
+

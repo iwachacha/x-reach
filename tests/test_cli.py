@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Tests for the Twitter-only CLI surface."""
 
 import json
@@ -10,7 +10,7 @@ from agent_reach.cli import main
 class TestCLI:
     def test_version(self, capsys):
         assert main(["version"]) == 0
-        assert "Agent Reach v" in capsys.readouterr().out
+        assert "X Reach v" in capsys.readouterr().out
 
     def test_no_command_shows_help(self):
         assert main([]) == 0
@@ -32,7 +32,7 @@ class TestCLI:
         assert main(["install", "--safe", "--channels=twitter"]) == 0
         output = capsys.readouterr().out
         assert "uv tool install twitter-cli" in output
-        assert "agent-reach skill --install" in output
+        assert "x-reach skill --install" in output
         assert "GitHub.cli" not in output
 
     def test_install_dry_run_json(self, capsys, monkeypatch):
@@ -238,3 +238,4 @@ class TestCLI:
         assert main(["uninstall", "--dry-run"]) == 0
         output = capsys.readouterr().out
         assert "uv tool uninstall twitter-cli" in output
+

@@ -1,0 +1,45 @@
+﻿name: X Reach Smoke
+
+"on":
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install X Reach
+        uses: ./.github/actions/setup-x-reach
+        with:
+          install-twitter-cli: "true"
+
+      - name: Run smoke collection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .x-reach
+          x-reach channels --json > .x-reach/channels.json
+          x-reach doctor --json > .x-reach/doctor.json
+          x-reach collect --json --save .x-reach/evidence.jsonl --run-id smoke-twitter --intent smoke --query-id twitter-openai --source-role social_search --channel twitter --operation search --input "OpenAI" --limit 1 > .x-reach/twitter.json || true
+          x-reach ledger summarize --input .x-reach/evidence.jsonl --json > .x-reach/summary.json
+          x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 10 --json > .x-reach/candidates.json
+
+      - name: Upload raw smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-reach-smoke
+          path: |
+            .x-reach/channels.json
+            .x-reach/doctor.json
+            .x-reach/evidence.jsonl
+            .x-reach/summary.json
+            .x-reach/twitter.json
+            .x-reach/candidates.json
+

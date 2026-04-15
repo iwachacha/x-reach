@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Tests for evidence-ledger candidate planning."""
 
 import json
@@ -326,7 +326,7 @@ def test_candidates_supports_neutral_identifier_dedupe_modes(tmp_path):
     github_item = build_item(
         item_id="repo-api-id",
         kind="repository",
-        title="Agent Reach",
+        title="X Reach",
         url="https://github.com/iwachacha/Agent-Reach",
         text=None,
         author="iwachacha",
@@ -355,3 +355,4 @@ def test_candidates_supports_neutral_identifier_dedupe_modes(tmp_path):
     assert by_source_item_id["candidates"][0]["extras"]["candidate_key"] == "source_item_id:github:iwachacha/Agent-Reach"
     assert by_source_item_id["candidates"][0]["engagement"] == {"stars": 10}
     assert by_normalized_url["candidates"][1]["extras"]["candidate_key"] == "normalized_url:https://example.com/post"
+

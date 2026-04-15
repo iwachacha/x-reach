@@ -1,7 +1,7 @@
-{
+﻿{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-reach.local/schemas/collection-result.schema.json",
-  "title": "Agent Reach CollectionResult",
+  "$id": "https://x-reach.local/schemas/collection-result.schema.json",
+  "title": "X Reach CollectionResult",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -204,3 +204,4 @@
     }
   }
 }
+

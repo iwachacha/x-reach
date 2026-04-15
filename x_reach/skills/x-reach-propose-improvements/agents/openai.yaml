@@ -1,0 +1,5 @@
+﻿interface:
+  display_name: "X Reach Propose Improvements"
+  short_description: "Shape raw findings into x-reach proposals"
+  default_prompt: "Use $x-reach-propose-improvements to turn this external research or friction report into a short list of policy-compatible X Reach improvement proposals before formal adopt/reject review."
+

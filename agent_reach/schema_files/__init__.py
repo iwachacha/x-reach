@@ -1,2 +1,2 @@
 # -*- coding: utf-8 -*-
-"""Packaged JSON Schema resources for Agent Reach contracts."""
+"""Packaged JSON Schema resources for X Reach contracts."""

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Shared schema helpers for machine-readable Agent Reach output."""
+"""Shared schema helpers for machine-readable X Reach output."""
 
 from __future__ import annotations
 

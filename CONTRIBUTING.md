@@ -1,12 +1,12 @@
-# Contributing to Agent Reach
+﻿# Contributing to X Reach
 
 Thank you for contributing. This fork is intentionally narrow: Windows-first, Codex-friendly, and focused on external integration surfaces that other projects can depend on.
 
 ## Local setup
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/Agent-Reach.git
-cd Agent-Reach
+git clone https://github.com/YOUR_USERNAME/twitter-reach.git
+cd twitter-reach
 uv sync --extra dev
 ```
 
@@ -22,8 +22,8 @@ Run these before submitting changes:
 
 ```powershell
 python -m pytest -q
-uvx ruff check agent_reach tests
-uvx mypy agent_reach
+uvx ruff check agent_reach x_reach tests
+uvx mypy agent_reach x_reach
 uvx --from build pyproject-build --wheel --sdist
 ```
 
@@ -39,7 +39,7 @@ Keep contributions aligned with the current fork goals:
 
 - Windows-native install and diagnostics
 - machine-readable registry and readiness output
-- thin read-only collection via `AgentReachClient` and `agent-reach collect --json`
+- thin read-only collection via `XReachClient` and `x-reach collect --json`
 - downstream integration support for Codex and similar hosts
 
 Avoid reintroducing:
@@ -80,7 +80,7 @@ Every channel contract must include:
 ```powershell
 git pull --ff-only
 uv tool install . --reinstall
-agent-reach doctor --json
+x-reach doctor --json
 ```
 
 ## Pull requests
@@ -89,3 +89,5 @@ agent-reach doctor --json
 - Include tests for new behavior
 - Update docs when the public surface changes
 - Keep machine-readable outputs stable unless a schema change is deliberate
+
+

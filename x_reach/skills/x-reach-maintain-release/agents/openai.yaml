@@ -1,0 +1,5 @@
+﻿interface:
+  display_name: "X Reach Maintain Release"
+  short_description: "Ship approved x-reach changes"
+  default_prompt: "Use $x-reach-maintain-release to implement these approved x-reach changes safely, keep public surfaces consistent, and carry them through commit, push, and exact-ref reinstall."
+

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Reach"
-  short_description: "Explicit-opt-in Twitter/X collection and diagnostics"
-  default_prompt: "When the user explicitly asks for Agent Reach, use it to discover the live Twitter/X channel contract, inspect caller-defined readiness requirements, check probe attention, validate evidence ledgers, and run thin read-only collection over `twitter` when configured. Always refer to channels by their stable names from `agent-reach channels --json`. Agent Reach does not choose scope; the calling workflow chooses time windows and scale for the task. Keep lightweight asks on collect by default, treat batch and scout as explicit opt-in helpers, and keep ranking, summarization, scheduling, media analysis, and publishing outside Agent Reach. For large JSON handoffs, prefer `--raw-mode none|minimal` plus `--item-text-mode snippet|none`; keep full item text for shortlisted deep reads."

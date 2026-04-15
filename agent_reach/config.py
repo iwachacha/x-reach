@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-"""Configuration management for the Twitter-only Agent Reach fork."""
+﻿# -*- coding: utf-8 -*-
+"""Configuration management for the Twitter-only X Reach fork."""
 
 from __future__ import annotations
 
@@ -11,10 +11,12 @@ import yaml
 
 
 class Config:
-    """Manages Agent Reach configuration."""
+    """Manages X Reach configuration."""
 
-    CONFIG_DIR = Path.home() / ".agent-reach"
+    CONFIG_DIR = Path.home() / ".x-reach"
     CONFIG_FILE = CONFIG_DIR / "config.yaml"
+    LEGACY_CONFIG_DIR = Path.home() / ".agent-reach"
+    LEGACY_CONFIG_FILE = LEGACY_CONFIG_DIR / "config.yaml"
     ENV_ALIASES = {
         "twitter_auth_token": ("TWITTER_AUTH_TOKEN", "AUTH_TOKEN"),
         "twitter_ct0": ("TWITTER_CT0", "CT0"),
@@ -27,6 +29,7 @@ class Config:
     def __init__(self, config_path: Path | None = None):
         self.config_path = Path(config_path) if config_path else self.CONFIG_FILE
         self.config_dir = self.config_path.parent
+        self.legacy_config_path = self.LEGACY_CONFIG_FILE
         self.data: dict[str, Any] = {}
         self._ensure_dir()
         self.load()
@@ -39,8 +42,16 @@ class Config:
     def load(self) -> None:
         """Load config from YAML file."""
 
-        if self.config_path.exists():
-            with open(self.config_path, "r", encoding="utf-8") as handle:
+        load_path = self.config_path
+        if (
+            self.config_path == self.CONFIG_FILE
+            and not self.config_path.exists()
+            and self.legacy_config_path.exists()
+        ):
+            load_path = self.legacy_config_path
+
+        if load_path.exists():
+            with open(load_path, "r", encoding="utf-8") as handle:
                 self.data = yaml.safe_load(handle) or {}
         else:
             self.data = {}
@@ -111,3 +122,4 @@ class Config:
             else:
                 masked[key] = value
         return masked
+

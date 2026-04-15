@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this fork are documented here.
 
@@ -6,8 +6,10 @@ All notable changes to this fork are documented here.
 
 ### Changed
 
-- narrowed bundled Codex skill guidance and exported runtime policy so Agent Reach is explicit opt-in and lightweight lookups stay on native browsing/search unless the user asks for Agent Reach
-- added a public budget-planning skill and tightened broad-run guidance so large Agent Reach investigations can stay compact before deep reads
+- renamed the primary public surface to X Reach / `x_reach` while keeping legacy `agent-reach` and `agent_reach` compatibility aliases
+- removed leftover non-Twitter dependencies, stale skill paths, and dead helper modules from the Twitter/X-only fork
+- narrowed bundled Codex skill guidance and exported runtime policy so X Reach is explicit opt-in and lightweight lookups stay on native browsing/search unless the user asks for X Reach
+- added a public budget-planning skill and tightened broad-run guidance so large X Reach investigations can stay compact before deep reads
 
 ## [1.12.0] - 2026-04-12
 
@@ -28,7 +30,7 @@ All notable changes to this fork are documented here.
 
 ### Added
 
-- bundled maintainer-only proposal-shaping skill `agent-reach-propose-improvements` for turning external research into policy-compatible Agent Reach improvement shortlists
+- bundled maintainer-only proposal-shaping skill `x-reach-propose-improvements` for turning external research into policy-compatible X Reach improvement shortlists
 - handoff guidance that separates proposal generation, maintainer review, and approved-change shipping into distinct skill stages
 
 ### Changed
@@ -39,7 +41,7 @@ All notable changes to this fork are documented here.
 
 ### Added
 
-- bundled maintainer-only Codex skills for proposal review and approved-change shipping: `agent-reach-maintain-proposals` and `agent-reach-maintain-release`
+- bundled maintainer-only Codex skills for proposal review and approved-change shipping: `x-reach-maintain-proposals` and `x-reach-maintain-release`
 - maintainer guidance references for policy-safe adoption decisions, scoped implementation, and push plus reinstall flow
 
 ### Changed
@@ -62,7 +64,7 @@ All notable changes to this fork are documented here.
 ### Added
 
 - top-level `schema_version` and `agent_reach_version` on `CollectionResult` envelopes
-- packaged `collection-result` JSON Schema exposed through `agent-reach schema collection-result --json`
+- packaged `collection-result` JSON Schema exposed through `x-reach schema collection-result --json`
 - normalized item diagnostics for `canonical_url`, `source_item_id`, `engagement`, `media_references`, and neutral `identifiers`
 - cross-channel `error.category` taxonomy while preserving source-specific `error.code`
 - `collect --raw-mode full|minimal|none` and `--raw-max-bytes` for caller-controlled raw payload retention
@@ -79,7 +81,7 @@ All notable changes to this fork are documented here.
 
 ### Changed
 
-- flattened the channel registry so Agent Reach no longer ships built-in core/optional source tiers
+- flattened the channel registry so X Reach no longer ships built-in core/optional source tiers
 - replaced doctor's static exit policy with caller-defined readiness controls through `--require-channel`, `--require-channels`, and `--require-all`
 - updated the Python SDK, integration exports, bundled skill guidance, and docs to treat channel choice and readiness gating as caller-owned policy
 - generalized install planning metadata from fixed core/optional channel buckets to flat selected-channel inputs
@@ -95,10 +97,10 @@ All notable changes to this fork are documented here.
 
 ### Added
 
-- field research improvement handoff for future Agent Reach work
-- Agent Reach Nexus concept note for capability graph, scout, ledger, planner, and guard ideas
+- field research improvement handoff for future X Reach work
+- X Reach Nexus concept note for capability graph, scout, ledger, planner, and guard ideas
 - evidence ledger persistence for raw `CollectionResult` JSONL records
-- `agent-reach plan candidates` for no-model URL or ID dedupe over evidence ledgers
+- `x-reach plan candidates` for no-model URL or ID dedupe over evidence ledgers
 - conservative source hints and web extraction diagnostics
 - downstream examples and a manual GitHub Actions smoke workflow for raw collection artifacts
 
@@ -114,7 +116,7 @@ All notable changes to this fork are documented here.
 ### Added
 
 - no-copy downstream usage guide for Codex, GitHub Actions, and Discord bot projects
-- composite GitHub Action for installing Agent Reach from this repository in downstream workflows
+- composite GitHub Action for installing X Reach from this repository in downstream workflows
 - machine-readable `external_project_usage` metadata in Codex integration exports
 
 ## [1.5.1] - 2026-04-10
@@ -136,8 +138,8 @@ All notable changes to this fork are documented here.
 
 ### Added
 
-- `AgentReachClient` as the primary external Python SDK
-- `agent-reach collect --json` as the thin read-only CLI collection surface
+- `XReachClient` as the primary external Python SDK
+- `x-reach collect --json` as the thin read-only CLI collection surface
 - normalized `CollectionResult` and `NormalizedItem` envelopes with backend-native `raw` payloads
 - dedicated collection adapters for `web`, `exa_search`, `github`, `hatena_bookmark`, `bluesky`, `qiita`, `youtube`, `rss`, and `twitter`
 - `twitter` collection operations for `user`, `user_posts`, and `tweet`
@@ -161,14 +163,15 @@ All notable changes to this fork are documented here.
 
 ### Added
 
-- machine-readable channel contracts through `agent-reach channels --json`
-- machine-readable diagnostics through `agent-reach doctor --json`
-- lightweight live checks through `agent-reach doctor --json --probe`
-- non-mutating integration export through `agent-reach export-integration --client codex`
-- JSON install preview through `agent-reach install --dry-run --json`
+- machine-readable channel contracts through `x-reach channels --json`
+- machine-readable diagnostics through `x-reach doctor --json`
+- lightweight live checks through `x-reach doctor --json --probe`
+- non-mutating integration export through `x-reach export-integration --client codex`
+- JSON install preview through `x-reach install --dry-run --json`
 - repo-local `.codex-plugin/plugin.json` and `.mcp.json`
 
 ### Changed
 
 - narrowed the supported surface to `web`, `exa_search`, `github`, `youtube`, `rss`, and optional `twitter`
 - rewrote the Windows/Codex docs around bootstrap, registry, readiness, and integration flows
+

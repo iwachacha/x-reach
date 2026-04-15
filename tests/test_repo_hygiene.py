@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Tests that lock in repository cleanup decisions."""
 
 from pathlib import Path
@@ -12,10 +12,16 @@ def test_legacy_files_are_removed():
     repo_root = _repo_root()
 
     assert not (repo_root / ".mcp.json").exists()
+    assert not (repo_root / ".github" / "actions" / "setup-agent-reach").exists()
+    assert not (repo_root / ".github" / "workflows" / "agent-reach-smoke.yml").exists()
     assert not (repo_root / "agent_reach" / "channels" / "github.py").exists()
     assert not (repo_root / "agent_reach" / "channels" / "web.py").exists()
     assert not (repo_root / "agent_reach" / "adapters" / "reddit.py").exists()
-    assert not (repo_root / "agent_reach" / "skills" / "agent-reach" / "references" / "search.md").exists()
+    assert not (repo_root / "agent_reach" / "skills").exists()
+    assert not (repo_root / "agent_reach" / "source_hints.py").exists()
+    assert not (repo_root / "agent_reach" / "extraction_hygiene.py").exists()
+    assert not (repo_root / "agent_reach" / "utils" / "paths.py").exists()
+    assert not (repo_root / "x_reach" / "skills" / "x-reach" / "references" / "search.md").exists()
 
 
 def test_docs_folder_only_contains_supported_docs():
@@ -45,13 +51,13 @@ def test_caller_control_policy_is_documented_consistently():
     repo_root = _repo_root()
     files = {
         "readme": repo_root / "README.md",
-        "skill": repo_root / "agent_reach" / "skills" / "agent-reach" / "SKILL.md",
-        "agent_prompt": repo_root / "agent_reach" / "skills" / "agent-reach" / "agents" / "openai.yaml",
+        "skill": repo_root / "x_reach" / "skills" / "x-reach" / "SKILL.md",
+        "agent_prompt": repo_root / "x_reach" / "skills" / "x-reach" / "agents" / "openai.yaml",
     }
 
     texts = {name: path.read_text(encoding="utf-8") for name, path in files.items()}
 
-    assert "Agent Reach does not choose" in texts["readme"]
+    assert "X Reach does not choose" in texts["readme"]
     assert "auto-escalate" in texts["readme"]
     assert "explicit opt-in" in texts["readme"]
     assert "--limit 20" in texts["readme"]
@@ -66,18 +72,19 @@ def test_caller_control_policy_is_documented_consistently():
 
 def test_skill_suite_files_exist():
     repo_root = _repo_root()
-    suite_root = repo_root / "agent_reach" / "skills"
+    suite_root = repo_root / "x_reach" / "skills"
     expected = [
-        "agent-reach",
-        "agent-reach-shape-brief",
-        "agent-reach-budgeted-research",
-        "agent-reach-orchestrate",
-        "agent-reach-propose-improvements",
-        "agent-reach-maintain-proposals",
-        "agent-reach-maintain-release",
+        "x-reach",
+        "x-reach-shape-brief",
+        "x-reach-budgeted-research",
+        "x-reach-orchestrate",
+        "x-reach-propose-improvements",
+        "x-reach-maintain-proposals",
+        "x-reach-maintain-release",
     ]
 
     for skill_name in expected:
         skill_dir = suite_root / skill_name
         assert (skill_dir / "SKILL.md").exists()
         assert (skill_dir / "agents" / "openai.yaml").exists()
+

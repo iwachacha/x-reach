@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Tests for repo-shipped integration artifacts."""
 
 import json
@@ -22,20 +22,20 @@ def test_codex_plugin_manifest_exists_and_is_valid():
     manifest_path = _repo_root() / ".codex-plugin" / "plugin.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    assert manifest["name"] == "agent-reach"
-    assert manifest["skills"] == "../agent_reach/skills"
+    assert manifest["name"] == "x-reach"
+    assert manifest["skills"] == "../x_reach/skills"
     assert "mcpServers" not in manifest
-    assert manifest["interface"]["displayName"] == "Agent Reach"
+    assert manifest["interface"]["displayName"] == "X Reach"
     assert "Collection" in manifest["interface"]["capabilities"]
     assert len(manifest["interface"]["defaultPrompt"]) == 4
 
 
 def test_setup_agent_reach_action_installs_from_repo_root():
-    action_path = _repo_root() / ".github" / "actions" / "setup-agent-reach" / "action.yml"
+    action_path = _repo_root() / ".github" / "actions" / "setup-x-reach" / "action.yml"
     action_text = action_path.read_text(encoding="utf-8")
     action = yaml.safe_load(action_text)
 
-    assert action["name"] == "Setup Agent Reach"
+    assert action["name"] == "Setup X Reach"
     assert action["runs"]["using"] == "composite"
     assert 'repo_root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)"' in action_text
     assert 'uv tool install --force "$repo_root"' in action_text
@@ -44,19 +44,19 @@ def test_setup_agent_reach_action_installs_from_repo_root():
 
 
 def test_agent_reach_smoke_workflow_collects_and_uploads_raw_artifacts():
-    workflow_path = _repo_root() / ".github" / "workflows" / "agent-reach-smoke.yml"
+    workflow_path = _repo_root() / ".github" / "workflows" / "x-reach-smoke.yml"
     workflow_text = workflow_path.read_text(encoding="utf-8")
     workflow = yaml.safe_load(workflow_text)
 
     assert "workflow_dispatch" in workflow["on"]
-    assert "uses: ./.github/actions/setup-agent-reach" in workflow_text
+    assert "uses: ./.github/actions/setup-x-reach" in workflow_text
     assert "install-twitter-cli: \"true\"" in workflow_text
-    assert "agent-reach channels --json" in workflow_text
-    assert "agent-reach doctor --json" in workflow_text
-    assert "agent-reach collect --json --save" in workflow_text
+    assert "x-reach channels --json" in workflow_text
+    assert "x-reach doctor --json" in workflow_text
+    assert "x-reach collect --json --save" in workflow_text
     assert "actions/upload-artifact" in workflow_text
-    assert ".agent-reach/twitter.json" in workflow_text
-    assert ".agent-reach/candidates.json" in workflow_text
+    assert ".x-reach/twitter.json" in workflow_text
+    assert ".x-reach/candidates.json" in workflow_text
 
 
 def test_downstream_examples_are_collect_only_patterns():
@@ -67,8 +67,8 @@ def test_downstream_examples_are_collect_only_patterns():
 
     for path in example_paths:
         text = path.read_text(encoding="utf-8")
-        assert "agent-reach collect --json --save" in text
-        assert "agent-reach plan candidates" in text
+        assert "x-reach collect --json --save" in text
+        assert "x-reach plan candidates" in text
         assert ".codex-plugin" not in text
         assert "agent_reach" not in text
 
@@ -91,11 +91,12 @@ def test_export_points_at_existing_checkout_artifacts():
     assert payload["skill"]["names"]
     assert Path(payload["skill"]["source"]).exists()
     assert payload["python_sdk"]["availability"] == "project_env_only"
+    assert payload["python_sdk"]["import"] == "from x_reach import XReachClient"
     assert any("client.twitter.user_posts" in line for line in payload["python_sdk"]["quickstart"])
     assert payload["readiness_controls"]["doctor_args"][0] == "--require-channel <name>"
-    assert payload["external_project_usage"]["preferred_interface"] == "agent-reach collect --json"
-    assert payload["codex_runtime_policy"]["default_interface"] == "agent-reach collect --json"
-    assert any(command.startswith("agent-reach collect ") for command in payload["verification_commands"])
+    assert payload["external_project_usage"]["preferred_interface"] == "x-reach collect --json"
+    assert payload["codex_runtime_policy"]["default_interface"] == "x-reach collect --json"
+    assert any(command.startswith("x-reach collect ") for command in payload["verification_commands"])
 
 
 def test_export_runtime_minimal_omits_bootstrap_payloads():
@@ -116,10 +117,10 @@ def test_export_renderers_support_twitter_only_payload():
     powershell = render_codex_integration_powershell(payload)
 
     assert "Channels: twitter" in text
-    assert "agent-reach collect --channel twitter" in text
+    assert "x-reach collect --channel twitter" in text
     assert "$pluginManifestJson = @'" in powershell
     assert "$mcpConfigJson = $null" in powershell
-    assert "agent-reach doctor --json --probe" in powershell
+    assert "x-reach doctor --json --probe" in powershell
 
 
 def test_export_tool_install_omits_dead_paths(tmp_path):
@@ -136,6 +137,7 @@ def test_export_tool_install_omits_dead_paths(tmp_path):
     assert payload["plugin_manifest"] is None
     assert payload["mcp_config"] is None
     assert payload["recommended_docs"] == []
-    assert payload["plugin_manifest_inline"]["name"] == "agent-reach"
+    assert payload["plugin_manifest_inline"]["name"] == "x-reach"
     assert payload["mcp_config_inline"] is None
     assert payload["external_project_usage"]["github_actions"]["uses"].startswith("iwachacha/twitter-reach/")
+

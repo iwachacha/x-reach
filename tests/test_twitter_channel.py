@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Tests for the Twitter/X channel."""
 
 from unittest.mock import Mock, patch
@@ -50,7 +50,7 @@ def test_check_reports_warn_when_live_operations_are_unverified():
     assert "collect may work" in message
     assert extra["diagnostic_basis"] == "twitter_status_authenticated"
     assert extra["usability_hint"] == "authenticated_but_unprobed"
-    assert extra["recommended_probe_command"] == "agent-reach doctor --json --probe"
+    assert extra["recommended_probe_command"] == "x-reach doctor --json --probe"
     assert extra["probe_run_coverage"] == "not_run"
     assert extra["unprobed_operations"] == ["search", "user", "user_posts", "tweet"]
     assert extra["operation_statuses"]["search"]["status"] == "unknown"
@@ -188,3 +188,4 @@ def test_probe_reports_search_failure_separately_from_live_user_lookup():
     assert extra["unprobed_operations"] == ["user_posts", "tweet"]
     assert extra["operation_statuses"]["user"]["status"] == "ok"
     assert extra["operation_statuses"]["search"]["error_code"] == "not_found"
+

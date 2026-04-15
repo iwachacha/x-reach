@@ -1,6 +1,6 @@
-# Twitter Reach
+﻿# X Reach
 
-Twitter Reach is a Twitter-only split of Agent Reach for Codex-style workflows.
+X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 
 ## Quick start
 
@@ -13,22 +13,24 @@ Twitter Reach is a Twitter-only split of Agent Reach for Codex-style workflows.
 
 ## Stable surfaces
 
-- `agent-reach channels --json`
-- `agent-reach doctor --json`
-- `agent-reach doctor --json --probe`
-- `agent-reach collect --channel twitter --operation <op> --input <value> --json`
-- `agent-reach schema collection-result --json`
-- `agent-reach plan candidates --input .agent-reach/evidence.jsonl --json`
-- `agent-reach ledger validate --input .agent-reach/evidence.jsonl --json`
-- `agent-reach ledger summarize --input .agent-reach/evidence.jsonl --json`
-- `agent-reach ledger query --input .agent-reach/evidence.jsonl --filter "channel == twitter" --json`
-- `agent-reach ledger append --input RESULT.json --output .agent-reach/evidence.jsonl --json`
-- `agent-reach export-integration --client codex --format json`
-- Python: `from agent_reach import AgentReachClient`
+- `x-reach channels --json`
+- `x-reach doctor --json`
+- `x-reach doctor --json --probe`
+- `x-reach collect --channel twitter --operation <op> --input <value> --json`
+- `x-reach schema collection-result --json`
+- `x-reach plan candidates --input .x-reach/evidence.jsonl --json`
+- `x-reach ledger validate --input .x-reach/evidence.jsonl --json`
+- `x-reach ledger summarize --input .x-reach/evidence.jsonl --json`
+- `x-reach ledger query --input .x-reach/evidence.jsonl --filter "channel == twitter" --json`
+- `x-reach ledger append --input RESULT.json --output .x-reach/evidence.jsonl --json`
+- `x-reach export-integration --client codex --format json`
+- Python: `from x_reach import XReachClient`
 
 ## Scope
 
 - Supported channel: `twitter`
 - Purpose: channel registry, readiness diagnostics, thin read-only collection helper
-- Agent Reach does not choose request scale, collection routes, ranking, summarization, or posting
-- External projects should prefer `agent-reach collect --json` and should not copy `.codex-plugin` or `agent_reach/skills` by default
+- X Reach does not choose request scale, collection routes, ranking, summarization, or posting
+- External projects should prefer `x-reach collect --json` and should not copy `.codex-plugin` or `x_reach/skills` by default
+
+

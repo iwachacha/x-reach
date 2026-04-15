@@ -1,10 +1,11 @@
-# -*- coding: utf-8 -*-
-"""Agent Reach Windows/Codex fork."""
+﻿# -*- coding: utf-8 -*-
+"""Legacy compatibility package for X Reach."""
 
 from agent_reach._version import __version__
 
 __author__ = "Neo Reid"
 
-from agent_reach.core import AgentReach, AgentReachClient
+from agent_reach.core import AgentReach, AgentReachClient, XReach, XReachClient
 
-__all__ = ["AgentReach", "AgentReachClient", "__version__"]
+__all__ = ["AgentReach", "AgentReachClient", "XReach", "XReachClient", "__version__"]
+

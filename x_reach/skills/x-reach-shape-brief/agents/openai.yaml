@@ -1,0 +1,5 @@
+﻿interface:
+  display_name: "X Reach Shape Brief"
+  short_description: "On explicit X Reach opt-in, turn rough research asks into fixed briefs"
+  default_prompt: "When the user explicitly asks for X Reach, use $x-reach-shape-brief to turn this rough research request into a structured brief for X Reach."
+

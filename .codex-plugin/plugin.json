@@ -1,5 +1,5 @@
 {
-  "name": "agent-reach",
+  "name": "x-reach",
   "version": "1.13.0",
   "description": "Twitter-only Windows research integration and orchestration suite for Codex.",
   "author": {
@@ -14,11 +14,11 @@
     "diagnostics",
     "integration"
   ],
-  "skills": "../agent_reach/skills",
+  "skills": "../x_reach/skills",
   "interface": {
-    "displayName": "Agent Reach",
-    "shortDescription": "Twitter-only Agent Reach integration",
-    "longDescription": "Bootstraps, documents, diagnoses, and exposes thin read-only Twitter/X collection plus in-session orchestration skills for explicit Agent Reach workflows on Windows.",
+    "displayName": "X Reach",
+    "shortDescription": "Twitter-only X Reach integration",
+    "longDescription": "Bootstraps, documents, diagnoses, and exposes thin read-only Twitter/X collection plus in-session orchestration skills for explicit X Reach workflows on Windows.",
     "developerName": "Neo Reid",
     "category": "Developer Tools",
     "capabilities": [
@@ -28,10 +28,10 @@
       "Orchestration"
     ],
     "defaultPrompt": [
-      "Using Agent Reach, show me whether Twitter/X collection is ready on this machine.",
-      "Using Agent Reach, turn this Twitter/X research request into a bounded execution plan that keeps artifacts small.",
-      "Using Agent Reach, turn this rough Twitter/X research request into a structured brief.",
-      "Using Agent Reach, take this rough Twitter/X research ask and start the Agent Reach investigation."
+      "Using X Reach, show me whether Twitter/X collection is ready on this machine.",
+      "Using X Reach, turn this Twitter/X research request into a bounded execution plan that keeps artifacts small.",
+      "Using X Reach, turn this rough Twitter/X research request into a structured brief.",
+      "Using X Reach, take this rough Twitter/X research ask and start the X Reach investigation."
     ],
     "brandColor": "#0F766E"
   }

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Capability-only scout helpers for the Twitter-only fork."""
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def render_scout_text(payload: dict[str, Any]) -> str:
     """Render a capability snapshot for humans."""
 
     lines = [
-        "Agent Reach Scout Capability Snapshot",
+        "X Reach Scout Capability Snapshot",
         "========================================",
         f"Topic: {payload['topic']}",
         f"Budget hint: {payload['budget']}",
@@ -129,7 +129,8 @@ def render_scout_text(payload: dict[str, Any]) -> str:
 
 
 def _readiness_checks(channels: list[dict[str, Any]]) -> list[str]:
-    checks = ["agent-reach channels --json", "agent-reach doctor --json"]
+    checks = ["x-reach channels --json", "x-reach doctor --json"]
     if any(channel.get("supports_probe") for channel in channels):
-        checks.append("agent-reach doctor --json --probe")
+        checks.append("x-reach doctor --json --probe")
     return checks
+

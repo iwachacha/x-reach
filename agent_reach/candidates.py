@@ -167,7 +167,7 @@ def render_candidates_text(payload: dict[str, Any]) -> str:
 
     summary = payload["summary"]
     lines = [
-        "Agent Reach Candidate Plan",
+        "X Reach Candidate Plan",
         "========================================",
         f"Input: {payload['input']}",
         f"Mode: {payload['by']}",

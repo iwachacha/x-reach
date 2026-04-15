@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Reach Budgeted Research"
-  short_description: "On explicit Agent Reach opt-in, bound broad research before collection"
-  default_prompt: "When the user explicitly asks for Agent Reach, use $agent-reach-budgeted-research to turn this broad research request into a bounded execution plan that keeps artifacts small and phases collection safely."

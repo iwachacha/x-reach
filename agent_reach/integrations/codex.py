@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Codex-oriented integration exports for the Twitter-only fork."""
 
 from __future__ import annotations
@@ -13,6 +13,15 @@ from agent_reach.channels import get_all_channel_contracts
 from agent_reach.schemas import SCHEMA_VERSION, utc_timestamp
 
 PACKAGED_SKILL_NAMES = (
+    "x-reach",
+    "x-reach-shape-brief",
+    "x-reach-budgeted-research",
+    "x-reach-orchestrate",
+    "x-reach-propose-improvements",
+    "x-reach-maintain-proposals",
+    "x-reach-maintain-release",
+)
+LEGACY_PACKAGED_SKILL_NAMES = (
     "agent-reach",
     "agent-reach-shape-brief",
     "agent-reach-budgeted-research",
@@ -30,7 +39,7 @@ def _repo_root() -> Path:
 
 
 def packaged_skill_source() -> Path:
-    return Path(__file__).resolve().parents[1] / "skills"
+    return _repo_root() / "x_reach" / "skills"
 
 
 def _current_working_dir() -> Path:
@@ -112,7 +121,7 @@ def _suggested_destinations(execution_context: str, repo_root: Path) -> dict[str
 
 def _default_plugin_manifest(skill_source: str) -> dict[str, Any]:
     return {
-        "name": "agent-reach",
+        "name": "x-reach",
         "version": __version__,
         "description": "Twitter-only Windows research integration and orchestration suite for Codex.",
         "author": {"name": "Neo Reid"},
@@ -127,8 +136,8 @@ def _default_plugin_manifest(skill_source: str) -> dict[str, Any]:
         ],
         "skills": skill_source,
         "interface": {
-            "displayName": "Agent Reach",
-            "shortDescription": "Twitter-only Agent Reach integration for Codex",
+            "displayName": "X Reach",
+            "shortDescription": "Twitter-only X Reach integration for Codex",
             "longDescription": (
                 "Bootstraps, documents, diagnoses, and exposes thin read-only "
                 "Twitter/X collection plus in-session orchestration skills for Codex."
@@ -137,10 +146,10 @@ def _default_plugin_manifest(skill_source: str) -> dict[str, Any]:
             "category": "Developer Tools",
             "capabilities": ["Readiness", "Registry", "Collection", "Orchestration"],
             "defaultPrompt": [
-                "Using Agent Reach, show me whether Twitter/X collection is ready on this Windows machine.",
-                "Using Agent Reach, turn this Twitter/X research request into a bounded execution plan that keeps artifacts small.",
-                "Using Agent Reach, turn this rough Twitter/X research request into a structured brief.",
-                "Using Agent Reach, take this rough Twitter/X research ask and start the collection workflow.",
+                "Using X Reach, show me whether Twitter/X collection is ready on this Windows machine.",
+                "Using X Reach, turn this Twitter/X research request into a bounded execution plan that keeps artifacts small.",
+                "Using X Reach, turn this rough Twitter/X research request into a structured brief.",
+                "Using X Reach, take this rough Twitter/X research ask and start the collection workflow.",
             ],
             "brandColor": "#0F766E",
         },
@@ -161,14 +170,14 @@ def _plugin_manifest_inline(
 def _documentation_summary() -> list[str]:
     return [
         f"Install the latest Twitter-only fork from `{FORK_REPO_URL}` or pin a commit/ref when reproducibility matters.",
-        "`agent-reach skill --install` installs the bundled Codex skill suite for Twitter/X diagnostics, shaping, planning, orchestration, and maintainer workflows.",
-        "Use Agent Reach only when the user explicitly asks for Agent Reach or one of its bundled skills; otherwise prefer the model's native browsing/search for lightweight lookups.",
-        "Use `agent-reach collect --json` as the primary external interface in arbitrary projects.",
-        "Let the caller choose request scale, ranking, summarization, and posting; Agent Reach exposes a Twitter/X collection capability but does not choose scope for the caller.",
-        "Inspect `agent-reach channels --json` operation contracts before choosing `since` or `until` for Twitter/X search.",
-        "Use `agent-reach doctor --json --probe` when downstream automation needs live Twitter/X operation readiness rather than authenticated-only status.",
-        "Use `agent-reach ledger validate`, `ledger summarize`, `ledger query`, and `plan candidates` for evidence-ledger workflows.",
-        "Use `agent-reach check-update --json` as an upstream Agent Reach release check; this fork can intentionally diverge from upstream.",
+        "`x-reach skill --install` installs the bundled Codex skill suite for Twitter/X diagnostics, shaping, planning, orchestration, and maintainer workflows.",
+        "Use X Reach only when the user explicitly asks for X Reach or one of its bundled skills; otherwise prefer the model's native browsing/search for lightweight lookups.",
+        "Use `x-reach collect --json` as the primary external interface in arbitrary projects.",
+        "Let the caller choose request scale, ranking, summarization, and posting; X Reach exposes a Twitter/X collection capability but does not choose scope for the caller.",
+        "Inspect `x-reach channels --json` operation contracts before choosing `since` or `until` for Twitter/X search.",
+        "Use `x-reach doctor --json --probe` when downstream automation needs live Twitter/X operation readiness rather than authenticated-only status.",
+        "Use `x-reach ledger validate`, `ledger summarize`, `ledger query`, and `plan candidates` for evidence-ledger workflows.",
+        "Use `x-reach check-update --json` as an upstream X Reach release check; this fork can intentionally diverge from upstream.",
     ]
 
 
@@ -193,7 +202,7 @@ def _readiness_controls() -> dict[str, Any]:
             "probe_attention",
         ],
         "notes": [
-            "Agent Reach does not impose a fixed required-channel set.",
+            "X Reach does not impose a fixed required-channel set.",
             "Downstream tools choose whether Twitter/X must be ready for a given run.",
             "Without `--require-*`, doctor stays in diagnostic-only mode.",
         ],
@@ -203,21 +212,21 @@ def _readiness_controls() -> dict[str, Any]:
 def _external_project_usage() -> dict[str, Any]:
     return {
         "copy_files_required": False,
-        "preferred_interface": "agent-reach collect --json",
+        "preferred_interface": "x-reach collect --json",
         "codex_global_install": {
             "commands": [
                 f"uv tool install --force git+{FORK_REPO_URL}",
-                "agent-reach skill --install",
-                "agent-reach doctor --json --probe",
+                "x-reach skill --install",
+                "x-reach doctor --json --probe",
             ],
             "notes": [
-                "Use Agent Reach only when the user explicitly asks for Agent Reach or one of its bundled skills.",
+                "Use X Reach only when the user explicitly asks for X Reach or one of its bundled skills.",
                 "The skill install writes the bundled skill suite to the user's Codex skill home, not to the downstream project.",
-                "Downstream projects do not need `.codex-plugin`, `.mcp.json`, or `agent_reach/skills` files when using the CLI.",
+                "Downstream projects do not need `.codex-plugin`, `.mcp.json`, or `x_reach/skills` files when using the CLI.",
             ],
         },
         "github_actions": {
-            "uses": "iwachacha/twitter-reach/.github/actions/setup-agent-reach@main",
+            "uses": "iwachacha/twitter-reach/.github/actions/setup-x-reach@main",
             "notes": [
                 "Use the composite action to install the CLI in the workflow without vendoring repo files.",
                 "Pin `uses` to a tag or commit for reproducible automation.",
@@ -226,9 +235,9 @@ def _external_project_usage() -> dict[str, Any]:
         "discord_bot": {
             "recommended_pattern": "subprocess collector",
             "notes": [
-                "Call `agent-reach collect --json` and map Twitter/X items into the bot's normalized item type.",
-                "Use `--save .agent-reach/evidence.jsonl` when the bot or CI job needs a raw evidence artifact.",
-                "Use `agent-reach plan candidates` when the bot or CI job wants a no-model dedupe pass before deeper reads.",
+                "Call `x-reach collect --json` and map Twitter/X items into the bot's normalized item type.",
+                "Use `--save .x-reach/evidence.jsonl` when the bot or CI job needs a raw evidence artifact.",
+                "Use `x-reach plan candidates` when the bot or CI job wants a no-model dedupe pass before deeper reads.",
             ],
         },
     }
@@ -237,11 +246,11 @@ def _external_project_usage() -> dict[str, Any]:
 def _request_scale_policy() -> dict[str, Any]:
     return {
         "principle": (
-            "Agent Reach exposes a Twitter/X collection capability. The calling workflow chooses "
+            "X Reach exposes a Twitter/X collection capability. The calling workflow chooses "
             "scope, time windows, ranking, summarization, and posting."
         ),
         "rules": [
-            "Agent Reach does not choose request scale, collection routes, ranking, summarization, or posting.",
+            "X Reach does not choose request scale, collection routes, ranking, summarization, or posting.",
             "Keep light requests light; do not auto-escalate a narrow ask into large-scale research.",
             "`collect --json` remains the default interface for thin downstream collection.",
             "`batch` and `scout` are explicit opt-in helpers, not the default route for everyday collection.",
@@ -252,7 +261,7 @@ def _request_scale_policy() -> dict[str, Any]:
             "intent": "narrow asks and lightweight verification",
             "pattern": "single normalized collect or read",
             "recommended_commands": [
-                "Run one `agent-reach collect --json` command, or a very small caller-chosen set of Twitter/X collection commands.",
+                "Run one `x-reach collect --json` command, or a very small caller-chosen set of Twitter/X collection commands.",
                 "Do not reach for `batch`, `scout`, or evidence-ledger fan-out unless the caller explicitly asks for a broader run.",
             ],
         },
@@ -271,10 +280,10 @@ def _request_scale_policy() -> dict[str, Any]:
             "steps": [
                 "Start with 2-4 caller-chosen discovery queries at small limits such as 5-10.",
                 "Inspect `channels --json` operation contracts and choose any `since` or `until` bounds downstream instead of relying on a fixed route.",
-                "Run `agent-reach batch --plan PLAN.json --validate-only --json` before executing a saved batch plan.",
-                "Append raw collection envelopes with `--save .agent-reach/evidence.jsonl` when traceability matters.",
-                "Run `agent-reach ledger summarize --input .agent-reach/evidence.jsonl --json` when downstream automation needs neutral artifact health counts.",
-                "Run `agent-reach plan candidates --input .agent-reach/evidence.jsonl --by normalized_url --limit 20 --json` for no-model dedupe.",
+                "Run `x-reach batch --plan PLAN.json --validate-only --json` before executing a saved batch plan.",
+                "Append raw collection envelopes with `--save .x-reach/evidence.jsonl` when traceability matters.",
+                "Run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when downstream automation needs neutral artifact health counts.",
+                "Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --json` for no-model dedupe.",
             ],
             "recommended_limits": {
                 "discovery": 10,
@@ -288,19 +297,19 @@ def _request_scale_policy() -> dict[str, Any]:
 def _codex_runtime_policy() -> dict[str, Any]:
     request_scale_policy = _request_scale_policy()
     return {
-        "default_interface": "agent-reach collect --json",
+        "default_interface": "x-reach collect --json",
         "activation_policy": {
             "explicit_user_opt_in_only": True,
-            "rule": "Use Agent Reach only when the user explicitly asks for Agent Reach or names one of its bundled skills.",
-            "light_search_fallback": "Use the model's native browsing/search for ordinary lightweight lookups instead of Agent Reach.",
+            "rule": "Use X Reach only when the user explicitly asks for X Reach or names one of its bundled skills.",
+            "light_search_fallback": "Use the model's native browsing/search for ordinary lightweight lookups instead of X Reach.",
         },
         "no_copy_rule": (
             "Use the globally installed CLI and skill suite. Do not copy `.codex-plugin`, `.mcp.json`, "
-            "or Agent Reach source files into a downstream repository unless the user explicitly asks for repo-local artifacts."
+            "or `x_reach` source files into a downstream repository unless the user explicitly asks for repo-local artifacts."
         ),
         "decision_order": [
-            "Before invoking Agent Reach, confirm that the user explicitly asked for Agent Reach or one of its bundled skills.",
-            "If readiness is unknown, run `agent-reach channels --json` and `agent-reach doctor --json` first.",
+            "Before invoking X Reach, confirm that the user explicitly asked for X Reach or one of its bundled skills.",
+            "If readiness is unknown, run `x-reach channels --json` and `x-reach doctor --json` first.",
             "Read `doctor.summary.required_not_ready`, `doctor.summary.informational_not_ready`, and `doctor.summary.probe_attention`; let the caller choose `--require-channel`, `--require-channels`, or `--require-all` for the run.",
             "Let the caller choose request scale first: keep narrow asks as `collect`, use bounded multi-collect runs only when needed, and treat large-scale research as explicit opt-in.",
             "Inspect the live channel contract and let the calling workflow choose Twitter/X operations for the task.",
@@ -311,7 +320,7 @@ def _codex_runtime_policy() -> dict[str, Any]:
         "request_scale_policy": request_scale_policy,
         "large_scale_research": request_scale_policy["large_scale_research"],
         "failure_policy": [
-            "Do not fall back to backend-specific CLIs unless debugging a failed Agent Reach operation.",
+            "Do not fall back to backend-specific CLIs unless debugging a failed X Reach operation.",
             "If `doctor --json` marks Twitter/X warn or off and that channel is required, surface the readiness gap clearly.",
             "Inspect `doctor.summary.probe_attention` before assuming probe coverage is complete.",
             "For Twitter/X, authenticated-but-unprobed `warn` means collection may work but operation readiness is unverified until `doctor --json --probe`.",
@@ -322,20 +331,20 @@ def _codex_runtime_policy() -> dict[str, Any]:
 def _verification_commands(profile: str) -> list[str]:
     if profile == "runtime-minimal":
         return [
-            "agent-reach channels --json",
-            "agent-reach doctor --json",
-            'agent-reach collect --channel twitter --operation search --input "OpenAI" --limit 3 --json',
-            "agent-reach export-integration --client codex --format json --profile runtime-minimal",
+            "x-reach channels --json",
+            "x-reach doctor --json",
+            'x-reach collect --channel twitter --operation search --input "OpenAI" --limit 3 --json',
+            "x-reach export-integration --client codex --format json --profile runtime-minimal",
         ]
     return [
-        "agent-reach channels --json",
-        "agent-reach doctor --json",
-        "agent-reach doctor --json --probe",
-        'agent-reach collect --channel twitter --operation search --input "OpenAI" --limit 3 --json',
-        'agent-reach collect --channel twitter --operation user --input "openai" --json',
-        'agent-reach collect --channel twitter --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
-        "agent-reach export-integration --client codex --format json",
-        "agent-reach export-integration --client codex --format json --profile runtime-minimal",
+        "x-reach channels --json",
+        "x-reach doctor --json",
+        "x-reach doctor --json --probe",
+        'x-reach collect --channel twitter --operation search --input "OpenAI" --limit 3 --json',
+        'x-reach collect --channel twitter --operation user --input "openai" --json',
+        'x-reach collect --channel twitter --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
+        "x-reach export-integration --client codex --format json",
+        "x-reach export-integration --client codex --format json --profile runtime-minimal",
     ]
 
 
@@ -409,14 +418,14 @@ def export_codex_integration(profile: str = "full") -> dict[str, Any]:
         "verification_commands": _verification_commands("full"),
         "python_sdk": {
             "availability": "project_env_only",
-            "import": "from agent_reach import AgentReachClient",
+            "import": "from x_reach import XReachClient",
             "install_examples": [
                 "uv pip install -e C:\\path\\to\\twitter-reach",
-                "uv pip install C:\\path\\to\\dist\\agent_reach-<version>-py3-none-any.whl",
+                "uv pip install C:\\path\\to\\dist\\x_reach-<version>-py3-none-any.whl",
             ],
             "quickstart": [
-                "from agent_reach import AgentReachClient",
-                "client = AgentReachClient()",
+                "from x_reach import XReachClient",
+                "client = XReachClient()",
                 'client.twitter.user_posts("openai", limit=5)',
                 'client.collect("twitter", "search", "OpenAI", limit=5, since="2026-01-01", until="2026-12-31")',
             ],
@@ -441,7 +450,7 @@ def render_codex_integration_text(payload: dict[str, Any]) -> str:
         channel_names = list(payload.get("channel_names", []))
 
     lines = [
-        "Agent Reach integration export for Codex on Windows",
+        "X Reach integration export for Codex on Windows",
         "========================================",
         "",
         f"Execution context: {payload['execution_context']}",
@@ -492,7 +501,7 @@ def render_codex_integration_powershell(payload: dict[str, Any]) -> str:
     plugin_manifest_path = payload.get("plugin_manifest") or payload["suggested_destinations"]["plugin_manifest"]
     return "\n".join(
         [
-            "# Agent Reach integration export for Codex on Windows",
+            "# X Reach integration export for Codex on Windows",
             f'$executionContext = "{payload["execution_context"]}"',
             f'$profile = "{payload["profile"]}"',
             f'$pluginManifestPath = "{plugin_manifest_path}"',
@@ -518,9 +527,11 @@ def render_codex_integration_powershell(payload: dict[str, Any]) -> str:
 __all__ = [
     "FORK_REPO_URL",
     "INTEGRATION_PROFILES",
+    "LEGACY_PACKAGED_SKILL_NAMES",
     "PACKAGED_SKILL_NAMES",
     "export_codex_integration",
     "render_codex_integration_powershell",
     "render_codex_integration_text",
     "packaged_skill_source",
 ]
+

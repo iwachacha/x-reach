@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Tests for doctor output."""
 
 import re
@@ -114,7 +114,7 @@ def test_format_report_lists_required_markers():
 
     plain = re.sub(r"\[[^\]]*\]", "", report)
     assert "(required)" in report
-    assert "Agent Reach Health" in plain
+    assert "X Reach Health" in plain
     assert "Readiness policy: required channels = twitter" in plain
 
 
@@ -140,3 +140,4 @@ def test_doctor_rejects_unknown_required_channel():
 
     with pytest.raises(ValueError, match="Unknown required channel"):
         doctor.make_doctor_payload(results, required_channels=["missing"])
+

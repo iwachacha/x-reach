@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Twitter/X channel checks."""
 
 from __future__ import annotations
@@ -54,17 +54,17 @@ class TwitterChannel(Channel):
     required_commands = ["twitter"]
     host_patterns = ["https://x.com/*", "https://twitter.com/*"]
     example_invocations = [
-        'agent-reach collect --channel twitter --operation search --input "gpt-5.4" --limit 10 --json',
-        'agent-reach collect --channel twitter --operation user --input "openai" --json',
-        'agent-reach collect --channel twitter --operation user_posts --input "openai" --limit 20 --json',
-        'agent-reach collect --channel twitter --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
+        'x-reach collect --channel twitter --operation search --input "gpt-5.4" --limit 10 --json',
+        'x-reach collect --channel twitter --operation user --input "openai" --json',
+        'x-reach collect --channel twitter --operation user_posts --input "openai" --limit 20 --json',
+        'x-reach collect --channel twitter --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json',
         'twitter status',
     ]
     supports_probe = True
     probe_operations = ["user", "search"]
     install_hints = [
         "Install twitter-cli with uv tool install twitter-cli.",
-        'Configure cookies with agent-reach configure twitter-cookies "auth_token=...; ct0=...".',
+        'Configure cookies with x-reach configure twitter-cookies "auth_token=...; ct0=...".',
     ]
 
     def _all_operation_statuses(self, status: str, message: str) -> dict[str, dict[str, str]]:
@@ -73,7 +73,7 @@ class TwitterChannel(Channel):
     def _authenticated_unprobed_statuses(self) -> dict[str, dict[str, str]]:
         message = (
             "Authenticated by twitter status, but this operation has not been live-probed. "
-            "It may work; run agent-reach doctor --json --probe for operation-level readiness."
+            "It may work; run x-reach doctor --json --probe for operation-level readiness."
         )
         return {
             operation: {
@@ -81,7 +81,7 @@ class TwitterChannel(Channel):
                 "message": message,
                 "diagnostic_basis": "twitter_status_authenticated",
                 "usability_hint": "authenticated_but_unprobed",
-                "recommended_probe_command": "agent-reach doctor --json --probe",
+                "recommended_probe_command": "x-reach doctor --json --probe",
             }
             for operation in self.operations
         }
@@ -165,7 +165,7 @@ class TwitterChannel(Channel):
                 **self._probe_state(probe_run_coverage="not_run"),
                 "operation_statuses": self._all_operation_statuses(
                     "unknown",
-                    "twitter-cli status could not be checked. Run agent-reach doctor --json --probe.",
+                    "twitter-cli status could not be checked. Run x-reach doctor --json --probe.",
                 ),
             }
 
@@ -173,11 +173,11 @@ class TwitterChannel(Channel):
         if result.returncode == 0 and "ok: true" in output:
             return (
                 "warn",
-                "twitter-cli session is authenticated; collect may work, but live Twitter operations are unverified until agent-reach doctor --json --probe",
+                "twitter-cli session is authenticated; collect may work, but live Twitter operations are unverified until x-reach doctor --json --probe",
                 {
                     "diagnostic_basis": "twitter_status_authenticated",
                     "usability_hint": "authenticated_but_unprobed",
-                    "recommended_probe_command": "agent-reach doctor --json --probe",
+                    "recommended_probe_command": "x-reach doctor --json --probe",
                     **self._probe_state(probe_run_coverage="not_run"),
                     "operation_statuses": self._authenticated_unprobed_statuses(),
                 },
@@ -186,13 +186,13 @@ class TwitterChannel(Channel):
             return (
                 "warn",
                 "twitter-cli is installed but not authenticated. "
-                "Run agent-reach configure twitter-cookies \"auth_token=...; ct0=...\"",
+                "Run x-reach configure twitter-cookies \"auth_token=...; ct0=...\"",
                 {
                     "diagnostic_basis": "twitter status",
                     **self._probe_state(probe_run_coverage="not_run"),
                     "operation_statuses": self._all_operation_statuses(
                         "off",
-                        "Authentication is required. Run agent-reach configure twitter-cookies \"auth_token=...; ct0=...\"",
+                        "Authentication is required. Run x-reach configure twitter-cookies \"auth_token=...; ct0=...\"",
                     ),
                 },
             )
@@ -201,7 +201,7 @@ class TwitterChannel(Channel):
             **self._probe_state(probe_run_coverage="not_run"),
             "operation_statuses": self._all_operation_statuses(
                 "unknown",
-                "twitter-cli did not report a healthy session. Run agent-reach doctor --json --probe.",
+                "twitter-cli did not report a healthy session. Run x-reach doctor --json --probe.",
             ),
         }
 
@@ -236,7 +236,7 @@ class TwitterChannel(Channel):
 
         operation_statuses = self._all_operation_statuses(
             "unknown",
-            "Not probed by agent-reach doctor --json --probe.",
+            "Not probed by x-reach doctor --json --probe.",
         )
         operation_statuses["user"] = self._operation_status_from_result(
             user_payload,
@@ -273,7 +273,7 @@ class TwitterChannel(Channel):
         if user_code == "not_authenticated" and search_code in {"", "not_authenticated"}:
             return "warn", (
                 "twitter-cli is installed but live Twitter probes are not authenticated. "
-                "Run agent-reach configure twitter-cookies \"auth_token=...; ct0=...\""
+                "Run x-reach configure twitter-cookies \"auth_token=...; ct0=...\""
             ), {
                 **self._probe_state(probe_run_coverage="partial"),
                 "probe_inputs": {
@@ -339,3 +339,4 @@ def _twitter_runtime_env(config=None) -> dict[str, str]:
         env["AUTH_TOKEN"] = str(auth_token)
         env["CT0"] = str(ct0)
     return env
+

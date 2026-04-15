@@ -239,7 +239,7 @@ def render_batch_text(payload: dict[str, Any]) -> str:
     summary = payload["summary"]
     if payload.get("validate_only"):
         lines = [
-            "Agent Reach Batch Validation",
+            "X Reach Batch Validation",
             "========================================",
             f"Plan: {payload['plan']}",
             f"Valid: {'yes' if payload.get('valid') else 'no'}",
@@ -258,7 +258,7 @@ def render_batch_text(payload: dict[str, Any]) -> str:
         return "\n".join(lines)
 
     lines = [
-        "Agent Reach Batch",
+        "X Reach Batch",
         "========================================",
         f"Plan: {payload['plan']}",
         (

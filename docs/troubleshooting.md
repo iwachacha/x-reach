@@ -1,18 +1,18 @@
-# Troubleshooting
+﻿# Troubleshooting
 
 ## `twitter status` says unauthenticated
 
 Set cookies again:
 
 ```powershell
-agent-reach configure twitter-cookies "auth_token=...; ct0=..."
+x-reach configure twitter-cookies "auth_token=...; ct0=..."
 twitter status
 ```
 
 Or re-import from a browser:
 
 ```powershell
-agent-reach configure --from-browser chrome
+x-reach configure --from-browser chrome
 ```
 
 ## Browser import fails
@@ -28,8 +28,8 @@ agent-reach configure --from-browser chrome
 Run targeted checks:
 
 ```powershell
-agent-reach collect --channel twitter --operation user --input "openai" --json
-agent-reach collect --channel twitter --operation search --input "OpenAI" --limit 1 --json
+x-reach collect --channel twitter --operation user --input "openai" --json
+x-reach collect --channel twitter --operation search --input "OpenAI" --limit 1 --json
 ```
 
 ## Raw `twitter --help` fails with `UnicodeEncodeError` on Windows
@@ -41,3 +41,4 @@ $env:PYTHONIOENCODING="utf-8"
 $env:PYTHONUTF8="1"
 twitter --help
 ```
+

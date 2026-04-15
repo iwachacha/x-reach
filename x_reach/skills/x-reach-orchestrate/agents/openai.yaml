@@ -1,0 +1,5 @@
+﻿interface:
+  display_name: "X Reach Orchestrate"
+  short_description: "On explicit X Reach opt-in, start X Reach research in-session"
+  default_prompt: "When the user explicitly asks for X Reach, use $x-reach-orchestrate to turn this rough research ask into an executable brief and start the X Reach investigation."
+

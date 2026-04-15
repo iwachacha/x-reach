@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
-"""Tests for the external Agent Reach SDK surface."""
+﻿# -*- coding: utf-8 -*-
+"""Tests for the renamed X Reach SDK surface and legacy aliases."""
 
-from agent_reach.client import AgentReach, AgentReachClient
 from agent_reach.config import Config
 from agent_reach.results import build_result
+from x_reach import AgentReach, XReach, XReachClient
 
 
 class _StubAdapter:
@@ -39,27 +39,29 @@ class _StubAdapter:
         )
 
 
-def test_agent_reach_alias_and_namespace_access(tmp_path, monkeypatch):
+def test_x_reach_surface_and_legacy_aliases_share_the_same_client(tmp_path, monkeypatch):
     config = Config(config_path=tmp_path / "config.yaml")
     monkeypatch.setattr("agent_reach.client.get_adapter", lambda channel, config=None: _StubAdapter(config=config))
 
-    client = AgentReachClient(config=config)
+    client = XReachClient(config=config)
     legacy = AgentReach(config=config)
+    renamed = XReach(config=config)
 
-    assert isinstance(legacy, AgentReachClient)
+    assert isinstance(legacy, XReachClient)
+    assert isinstance(renamed, XReachClient)
     assert client.twitter._channel == "twitter"
     assert client.twitter.search("OpenAI")["ok"] is True
 
 
 def test_collect_rejects_blank_input(tmp_path):
-    client = AgentReachClient(config=Config(config_path=tmp_path / "config.yaml"))
+    client = XReachClient(config=Config(config_path=tmp_path / "config.yaml"))
     payload = client.collect("twitter", "search", "   ")
     assert payload["ok"] is False
     assert payload["error"]["code"] == "invalid_input"
 
 
 def test_collect_rejects_invalid_limit(tmp_path):
-    client = AgentReachClient(config=Config(config_path=tmp_path / "config.yaml"))
+    client = XReachClient(config=Config(config_path=tmp_path / "config.yaml"))
     payload = client.collect("twitter", "search", "OpenAI", limit=0)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "invalid_input"
@@ -68,7 +70,7 @@ def test_collect_rejects_invalid_limit(tmp_path):
 def test_collect_reports_unsupported_operation(tmp_path, monkeypatch):
     config = Config(config_path=tmp_path / "config.yaml")
     monkeypatch.setattr("agent_reach.client.get_adapter", lambda channel, config=None: _StubAdapter(config=config))
-    client = AgentReachClient(config=config)
+    client = XReachClient(config=config)
 
     payload = client.collect("twitter", "user", "openai")
 
@@ -80,7 +82,7 @@ def test_collect_reports_unsupported_operation(tmp_path, monkeypatch):
 def test_collect_reports_unknown_channel(tmp_path, monkeypatch):
     config = Config(config_path=tmp_path / "config.yaml")
     monkeypatch.setattr("agent_reach.client.get_adapter", lambda channel, config=None: None)
-    client = AgentReachClient(config=config)
+    client = XReachClient(config=config)
 
     payload = client.collect("missing", "search", "value")
 
@@ -91,7 +93,7 @@ def test_collect_reports_unknown_channel(tmp_path, monkeypatch):
 def test_collect_passes_twitter_since_until_from_contract(tmp_path, monkeypatch):
     config = Config(config_path=tmp_path / "config.yaml")
     monkeypatch.setattr("agent_reach.client.get_adapter", lambda channel, config=None: _StubAdapter(config=config))
-    client = AgentReachClient(config=config)
+    client = XReachClient(config=config)
 
     payload = client.collect("twitter", "search", "OpenAI", since="2026-01-01", until="2026-12-31")
 
@@ -109,9 +111,10 @@ def test_collect_catches_unexpected_adapter_error(tmp_path, monkeypatch):
 
     config = Config(config_path=tmp_path / "config.yaml")
     monkeypatch.setattr("agent_reach.client.get_adapter", lambda channel, config=None: _BoomAdapter())
-    client = AgentReachClient(config=config)
+    client = XReachClient(config=config)
 
     payload = client.collect("twitter", "search", "OpenAI")
 
     assert payload["ok"] is False
     assert payload["error"]["code"] == "internal_error"
+

@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-"""Public SDK for external Agent Reach consumers."""
+﻿# -*- coding: utf-8 -*-
+"""Public SDK implementation shared by X Reach and legacy Agent Reach imports."""
 
 from __future__ import annotations
 
@@ -254,3 +254,11 @@ class AgentReachClient:
 
 class AgentReach(AgentReachClient):
     """Backward-compatible facade for existing health-check consumers."""
+
+
+XReachClient = AgentReachClient
+XReach = AgentReach
+
+
+__all__ = ["AgentReach", "AgentReachClient", "XReach", "XReachClient"]
+
