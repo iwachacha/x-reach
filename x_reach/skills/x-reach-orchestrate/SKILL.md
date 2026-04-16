@@ -26,6 +26,7 @@ Take a rough or structured research ask and move it to actual X Reach collection
 - Keep subagent usage conservative. Use at most one intake-only subagent per user request, and only when delegation is available and the ambiguity would materially change the research route.
 - Keep `channels --json`, `doctor --json`, channel choice, collection start, and the final deliverable on the main agent.
 - Keep lightweight asks lightweight. Default to `x-reach collect --json`.
+- For broad, resumable, artifact-heavy requests, prefer a mission spec and `x-reach collect --spec` over improvised command chains.
 - Collection-only or evidence-pack handoff is a valid endpoint. Do not force synthesis when the caller wants posts or machine-readable artifacts.
 - When you name channels in commands or handoffs, use the exact stable names from `x-reach channels --json`.
 - Use pagination or time-window controls only after checking live `operation_contracts`.

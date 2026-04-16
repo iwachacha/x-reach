@@ -75,6 +75,8 @@ def _artifact_paths(repo_root: Path) -> dict[str, Path]:
     return {
         "plugin_manifest": repo_root / ".codex-plugin" / "plugin.json",
         "mcp_config": repo_root / ".mcp.json",
+        "docs_project_principles": repo_root / "docs" / "project-principles.md",
+        "docs_implementation_plan": repo_root / "docs" / "implementation-plan.md",
         "docs_install": repo_root / "docs" / "install.md",
         "docs_codex_integration": repo_root / "docs" / "codex-integration.md",
         "docs_downstream_usage": repo_root / "docs" / "downstream-usage.md",
@@ -102,6 +104,8 @@ def _existing_path(path: Path) -> str | None:
 
 def _recommended_docs(repo_root: Path) -> list[str]:
     docs = [
+        _artifact_paths(repo_root)["docs_project_principles"],
+        _artifact_paths(repo_root)["docs_implementation_plan"],
         _artifact_paths(repo_root)["docs_install"],
         _artifact_paths(repo_root)["docs_codex_integration"],
         _artifact_paths(repo_root)["docs_downstream_usage"],
@@ -140,7 +144,8 @@ def _default_plugin_manifest(skill_source: str) -> dict[str, Any]:
             "shortDescription": "Twitter-only X Reach integration for Codex",
             "longDescription": (
                 "Bootstraps, documents, diagnoses, and exposes thin read-only "
-                "Twitter/X collection plus in-session orchestration skills for Codex."
+                "Twitter/X collection, mission specs, ledgers, and in-session "
+                "orchestration skills for Codex."
             ),
             "developerName": "Neo Reid",
             "category": "Developer Tools",
@@ -170,11 +175,14 @@ def _plugin_manifest_inline(
 def _documentation_summary() -> list[str]:
     return [
         f"Install the latest Twitter-only fork from `{FORK_REPO_URL}` or pin a commit/ref when reproducibility matters.",
+        "Use `docs/project-principles.md` as the design boundary: X Reach executes reproducible X collection and handoff, while callers own research meaning and final deliverables.",
+        "Use `docs/implementation-plan.md` for the accepted near-term maintainer work sequence.",
         "`x-reach skill --install` installs the bundled Codex skill suite for Twitter/X diagnostics, shaping, planning, orchestration, and maintainer workflows.",
         "Use X Reach only when the user explicitly asks for X Reach or one of its bundled skills; otherwise prefer the model's native browsing/search for lightweight lookups.",
         "Use `x-reach collect --json` as the primary external interface in arbitrary projects.",
+        "Use `x-reach collect --spec` for broad, resumable, artifact-heavy X research runs.",
         "Broad discovery operations default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet` unless the caller explicitly asks for fuller payloads.",
-        "Let the caller choose request scale, ranking, summarization, and posting; X Reach exposes a Twitter/X collection capability but does not choose scope for the caller.",
+        "Let the caller choose final request scope, topic assumptions, synthesis, final selection, and posting; X Reach exposes a Twitter/X collection capability but does not choose scope for the caller.",
         "Inspect `x-reach channels --json` operation contracts before choosing `since` or `until` for Twitter/X search.",
         "Use `x-reach doctor --json --probe` when downstream automation needs live Twitter/X operation readiness rather than authenticated-only status.",
         "Use `x-reach ledger validate`, `ledger summarize`, `ledger query`, and `plan candidates` for evidence-ledger workflows.",
@@ -248,12 +256,13 @@ def _request_scale_policy() -> dict[str, Any]:
     return {
         "principle": (
             "X Reach exposes a Twitter/X collection capability. The calling workflow chooses "
-            "scope, time windows, ranking, summarization, and posting."
+            "scope, time windows, topic assumptions, final selection, synthesis, and posting."
         ),
         "rules": [
-            "X Reach does not choose request scale, collection routes, ranking, summarization, or posting.",
+            "X Reach does not choose request scale, final selection, synthesis, publishing, or posting.",
             "Keep light requests light; do not auto-escalate a narrow ask into large-scale research.",
             "`collect --json` remains the default interface for thin downstream collection.",
+            "`collect --spec` is the preferred declarative interface for broad, resumable, artifact-heavy X research runs.",
             "Broad discovery defaults stay compact: `search`, `hashtag`, and `user_posts` default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet`.",
             "`batch` and `scout` are explicit opt-in helpers, not the default route for everyday collection.",
             "`plan candidates` keeps its default `--limit 20`; raise it only when the caller explicitly wants a wider review set.",
@@ -282,6 +291,7 @@ def _request_scale_policy() -> dict[str, Any]:
             "steps": [
                 "Start with 2-4 caller-chosen discovery queries at small limits such as 5-10.",
                 "Inspect `channels --json` operation contracts and choose any `since` or `until` bounds downstream instead of relying on a fixed route.",
+                "Prefer `x-reach collect --spec` when the run can be expressed as one declared mission with queries, filters, diversity, coverage, and outputs.",
                 "Run `x-reach batch --plan PLAN.json --validate-only --json` before executing a saved batch plan.",
                 "Append raw collection envelopes with `--save .x-reach/evidence.jsonl` when traceability matters.",
                 "Run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when downstream automation needs neutral artifact health counts.",
@@ -317,7 +327,7 @@ def _codex_runtime_policy() -> dict[str, Any]:
             "Inspect the live channel contract and let the calling workflow choose Twitter/X operations for the task.",
             "Inspect `operation_contracts` and let the calling workflow choose `since` or `until` when Twitter/X search needs bounded windows.",
             "Use Twitter/X only when configured credentials and `doctor --json --probe` show the required operation is ready.",
-            "Keep ranking, summarization, scheduling, publishing, and state in the downstream project.",
+            "Keep final interpretation, synthesis, scheduling, publishing, and caller-owned state in the downstream project.",
         ],
         "request_scale_policy": request_scale_policy,
         "large_scale_research": request_scale_policy["large_scale_research"],

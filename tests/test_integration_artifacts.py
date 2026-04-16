@@ -82,6 +82,8 @@ def test_export_points_at_existing_checkout_artifacts():
     assert payload["plugin_manifest"] is not None
     assert payload["mcp_config"] is None
     assert all(Path(path).exists() for path in payload["recommended_docs"])
+    assert any(path.endswith("project-principles.md") for path in payload["recommended_docs"])
+    assert any(path.endswith("implementation-plan.md") for path in payload["recommended_docs"])
     channel_contracts = {channel["name"]: channel for channel in payload["channels"]}
     assert list(channel_contracts) == ["twitter"]
     assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][0]["name"] == "from"

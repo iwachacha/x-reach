@@ -11,6 +11,7 @@ def _repo_root() -> Path:
 def test_legacy_files_are_removed():
     repo_root = _repo_root()
 
+    assert not (repo_root / "policy.md").exists()
     assert not (repo_root / ".mcp.json").exists()
     assert not (repo_root / ".github" / "actions" / "setup-agent-reach").exists()
     assert not (repo_root / ".github" / "workflows" / "agent-reach-smoke.yml").exists()
@@ -32,8 +33,10 @@ def test_docs_folder_only_contains_supported_docs():
         "compatibility-shim.md",
         "codex-integration.md",
         "downstream-usage.md",
+        "implementation-plan.md",
         "install.md",
         "mission-spec.md",
+        "project-principles.md",
         "python-sdk.md",
         "troubleshooting.md",
     }
@@ -44,6 +47,8 @@ def test_docs_folder_only_contains_supported_docs():
 def test_llms_txt_points_at_current_fork_docs():
     llms = (_repo_root() / "llms.txt").read_text(encoding="utf-8")
 
+    assert "github.com/iwachacha/x-reach/blob/main/docs/project-principles.md" in llms
+    assert "github.com/iwachacha/x-reach/blob/main/docs/implementation-plan.md" in llms
     assert "github.com/iwachacha/x-reach/blob/main/docs/install.md" in llms
     assert "github.com/iwachacha/Agent-Reach/blob/main/" not in llms
     assert "twitter" in llms
@@ -52,6 +57,7 @@ def test_llms_txt_points_at_current_fork_docs():
 def test_caller_control_policy_is_documented_consistently():
     repo_root = _repo_root()
     files = {
+        "principles": repo_root / "docs" / "project-principles.md",
         "readme": repo_root / "README.md",
         "skill": repo_root / "x_reach" / "skills" / "x-reach" / "SKILL.md",
         "agent_prompt": repo_root / "x_reach" / "skills" / "x-reach" / "agents" / "openai.yaml",
@@ -59,14 +65,20 @@ def test_caller_control_policy_is_documented_consistently():
 
     texts = {name: path.read_text(encoding="utf-8") for name, path in files.items()}
 
+    assert "Deterministic Before LLM" in texts["principles"]
+    assert "Mission Spec First For Broad Runs" in texts["principles"]
+    assert "caller owns" in texts["principles"].casefold()
+
     assert "X Reach does not choose" in texts["readme"]
     assert "auto-escalate" in texts["readme"]
     assert "explicit opt-in" in texts["readme"]
+    assert "collect --spec" in texts["readme"]
     assert "--limit 20" in texts["readme"]
 
     assert "The caller chooses scale" in texts["skill"]
     assert "auto-escalate" in texts["skill"]
     assert "explicit opt-in" in texts["skill"]
+    assert "deterministic processing" in texts["skill"]
     assert "--limit 20" in texts["skill"]
 
     assert "does not choose scope" in texts["agent_prompt"]

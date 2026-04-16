@@ -35,11 +35,13 @@ uv lock
 
 ## Project direction
 
-Keep contributions aligned with the current fork goals:
+Keep contributions aligned with [docs/project-principles.md](docs/project-principles.md) and the current fork goals:
 
 - Windows-native install and diagnostics
 - machine-readable registry and readiness output
 - thin read-only collection via `XReachClient` and `x-reach collect --json`
+- declarative broad collection via `x-reach collect --spec`
+- deterministic filtering, dedupe, candidate scoring, diversity constraints, and auditable handoff artifacts
 - downstream integration support for Codex and similar hosts
 
 Avoid reintroducing:
@@ -47,7 +49,17 @@ Avoid reintroducing:
 - removed legacy channels
 - shell-specific Linux or Bash-first automation
 - interactive prompts inside the collection path
-- docs that claim this repo owns scheduling, ranking, or publishing
+- docs that claim this repo owns final interpretation, synthesis, scheduling, publishing, or caller scope
+
+When a design choice is unclear, use this order:
+
+1. improve X collection result quality
+2. keep large runs from becoming fragile
+3. make agent and downstream usage stable
+4. improve reproducibility and auditability
+5. preserve broad topic usefulness without hard-coded domain policy
+6. keep caller control explicit
+7. minimize maintenance weight
 
 ## Adding or changing channels
 

@@ -18,6 +18,7 @@
 
 ## Broad Research
 
+- prefer `x-reach collect --spec` when the run has multiple queries, resume expectations, artifact layers, coverage topics, or judge handoff
 - start with 2-4 small discovery queries
 - choose an explicit artifact budget before collection starts
 - for machine-readable discovery handoffs, prefer `--raw-mode minimal|none`, `--item-text-mode snippet|none`, and a small `--item-text-max-chars`

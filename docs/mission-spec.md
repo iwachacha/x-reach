@@ -2,6 +2,10 @@
 
 `x-reach collect --spec mission.json` is the mission-driven collection path for larger X research jobs. It turns one declarative JSON spec into a deterministic batch run, then writes raw, canonical, and curated artifacts for later inspection.
 
+Mission specs are the broad-run interface described in [project-principles.md](project-principles.md). They fix caller intent, budgets, filters, coverage expectations, and outputs before collection starts so agents do not have to improvise shell orchestration mid-run.
+
+For narrow probes, readiness checks, or one-off reads, prefer `x-reach collect --json`. Reach for mission specs when the run needs multiple queries, resumability, artifact layers, candidate planning, coverage diagnostics, or explicit judge handoff.
+
 ## Quick Start
 
 ```powershell

@@ -37,7 +37,7 @@ Produce a short list of proposals that:
 - normalized impact, trust, importance, or ranking scores
 - automatic source selection or route selection
 - fake channel uniformity that papers over real backend differences
-- broad workflow ownership such as planning, ranking, summarization, or publishing
+- broad workflow ownership such as final interpretation, synthesis, scheduling, publishing, or caller scope
 - domain-specific defaults that turn one investigation example into product policy
 
 ## Split Rule

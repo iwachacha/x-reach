@@ -1,363 +1,73 @@
-## 1. いちばん大きい課題は「ツール呼び出し」中心で、「調査ミッション」中心になっていないこと
+前回の方針文書との一致度は高く、x_reach はもう単なる「X を叩ける CLI」ではなく、**mission spec・raw/canonical/ranked・candidate planning・quality profile・coverage/judge 契約**まで持つ、かなり明確な **X 調査ランタイム寄り** の形になっています。README でも x_reach は Agent-Reach の X/Twitter 専用 split とされ、`x-reach collect --spec`、`plan candidates`、ledger、`x_reach` SDK を安定面として前に出しています。リポジトリ構成も `mission.py`、`high_signal.py`、`candidates.py`、`ledger.py`、`operation_contracts.py`、`scout.py` など、方針で重視した責務に対応した形です。 ([GitHub][1])
 
-Codex 系エージェントに大規模調査を任せるなら、
-`twitter search を何回か叩く` では足りません。
+まず、**特に良いところ**です。
+一番大きいのは、方針文書にある「Mission Spec First」「Raw / Canonical / Curated」「Deterministic First, LLM Second」「3 つの quality profile」が、文書だけでなく README と実装の両方に反映されていることです。`collect --spec` は raw/canonical/ranked と resumable handoff を前提にしており、`docs/project-principles.md` でも同じ思想が明文化されています。 ([GitHub][1])
 
-必要なのは、エージェントがこういう単位で仕事できることです。
+次に、**caller-control の思想がかなり良い**です。
+README では、x_reach は最終 scope・final selection・synthesis・publishing を勝手に決めず、topic-agnostic を維持しつつ、`collect --json` を薄い既定インターフェースにし、`batch` と `scout` は opt-in に留めています。さらに broad discovery で `quality_profile=balanced`、`raw_mode=none`、`item_text_mode=snippet` を既定にして artifacts を無駄に重くしない設計も、かなり実務的です。これは「広く使えるが薄すぎない」という方針にかなり合っています。 ([GitHub][1])
 
-* 調査目的
-* 対象テーマ
-* 期間
-* 言語
-* 除外ノイズ
-* 欲しい証拠の種類
-* 収集件数の目安
-* 品質優先か網羅優先か
-* 途中停止 / 再開
-* 最終出力形式
+また、**ノイズ処理の初期基盤はすでにある**のも良いです。
+`high_signal.py` には `precision / balanced / recall` の quality profile、engagement gate、retweet/reply 除外、構造ノイズ、promo phrase、low-content 判定があり、`candidates.py` 側でも `max_per_author`、`prefer_originals`、`drop_noise`、`drop_title_duplicates`、`require_query_match`、`min_seen_in` といった後段フィルタが入っています。README でも large-scale research では compact discovery の後に `plan candidates --max-per-author 2 --prefer-originals --drop-noise` を挟む二段構えを推しています。 ([GitHub][2])
 
-つまり **コマンド実行基盤** ではなく **mission-driven research runtime** が必要です。
+さらに、**安定面への意識も強い**です。
+`operation_contracts.py` は channel/operation ごとの contract を読み、unsupported option や invalid input を明示的に弾く実装になっていて、`TwitterChannel` でも operations と options がかなり明文化されています。テスト群も `test_candidates.py`、`test_channel_contracts.py`、`test_mission.py`、`test_results.py`、`test_twitter_channel.py` などが揃っていて、薄い CLI ツールではなく「壊れにくい基盤」にしようとしているのが見えます。 ([GitHub][3])
 
-### 強く推したい改善
+そのうえで、**まだ方針と少しズレている部分 / もっと強化したい部分**もかなりあります。
 
-`xreach collect --spec mission.json` を最上位 API にしてください。
-Agent には細かい shell orchestration をさせず、**1つの宣言的 spec を渡す** 形に寄せたほうが圧倒的に安定します。
+いちばん大きいのは、**リネームと境界整理がまだ中途半端**な点です。
+README では `x_reach` を primary Python SDK surface としていますが、実際の wheel は `agent_reach` と `x_reach` を両方含み、リポジトリ直下にも両パッケージが残っています。しかも `tests/test_mission.py` では `agent_reach.mission` と `agent_reach.results` から import しつつ `x_reach.cli` を使っています。互換性維持としては理解できますが、今のままだと「どちらが本体か」がやや曖昧です。 ([GitHub][1])
 
-たとえば最低でもこんな spec を持たせるべきです。
+次に、**quality / ranking はまだ v1 感が強い**です。
+今ある quality 判定は、retweet/reply、query match、structural noise、promo phrase、low-content、engagement gate といった前処理としては十分有用です。ですが、`docs/project-principles.md` が目標にしている「テーマ関連性・情報量・具体性・一次体験性・新規性・多様性への寄与」まで見るにはまだ浅いです。現状の公開コードから強く見えるのは、まず候補化して、ノイズを落として、diversity 制約を当てる流れであり、**“調査目的に照らした証拠価値” を評価する層**はまだ薄いです。 ([GitHub][4])
 
-```json
-{
-  "objective": "新機能Xに対する実利用者の不満と要望を把握する",
-  "queries": ["機能X 不便", "機能X バグ", "\"機能X\" lang:ja"],
-  "time_range": {"since": "2026-03-01", "until": "2026-04-15"},
-  "languages": ["ja"],
-  "target_posts": 500,
-  "quality_profile": "research_high_precision",
-  "exclude": {
-    "keywords": ["宣伝", "抽選", "フォロー&RT"],
-    "min_account_age_days": 30,
-    "max_same_author_posts": 3,
-    "drop_retweets": true,
-    "drop_low_content_posts": true
-  },
-  "diversity": {
-    "max_posts_per_thread": 4,
-    "max_posts_per_author": 3,
-    "require_topic_spread": true
-  },
-  "outputs": ["raw.jsonl", "ranked.jsonl", "summary.md"]
-}
-```
+**ノイズ除去も、まだ伸びしろが大きい**です。
+promo phrase は現状かなり小さめの固定語群で、low-content も「明らかに薄い quote を落とす」には効きますが、多言語・多テーマ・長期運用のスパム対策としてはまだ軽めです。`docs/project-principles.md` が想定する「明らかな宣伝」「同一アカウントの偏り」「同一スレッド内の過剰冗長」まで本気で抑えるなら、author 単位のスパム傾向、近似重複、同一テンプレ連投、quote-shell 的な薄い投稿、thread collapse をもう一段強くしたいです。 ([GitHub][2])
 
-この形にすると、プロジェクトごとの柔軟性を保ちながら、共通基盤を強化できます。
+**多様性も “入口はあるが完成していない” 印象**です。
+`plan candidates` には `max_per_author` や `min_seen_in` があり、mission spec の diversity にも `max_posts_per_author`、`max_posts_per_url`、`min_seen_in`、`require_topic_spread` があります。ですが、公開されている curated path では `build_candidates_payload` → `_rank_candidates` → `_apply_diversity_constraints` → coverage annotation という流れが見え、`require_topic_spread` は正規化されている一方で、その名前に対応する別の明示的ステージは少なくとも私が確認した範囲では見当たりませんでした。つまり、多様性は「author/url 方向」は進んでいるが、「topic spread」まではまだ本実装が薄そうです。 ([GitHub][5])
 
----
+**coverage は良いが、まだ保守的です。**
+これは思想としてはかなり良いです。README でも coverage は opt-in で、explicit topic gap だけ埋め、ranked-count gap では自動 query expansion しないと明記されています。実装でも `coverage.max_rounds` は現状 1 のみ、`min_posts_per_topic` や `max_queries` を持ちつつ、topic gap を分析して follow-up query を組む設計です。つまり「暴走しない gap fill」はできていますが、逆に言うと **大規模調査で recall を自動補強する層はまだかなり抑制的**です。 ([GitHub][1])
 
-## 2. x-reach は「収集器」だけでなく「評価器」を持つべきです
+**judge はまだ“契約先行”です。**
+README がはっきり書いている通り、judge は opt-in の forward-compatible contract で、judge runner 未設定時は fallback record を書き、`ranked.jsonl` は deterministic に維持します。実装も `judge_runner_not_configured` を理由に `not_run` / `unjudged` の fallback を返す形です。これは設計としては非常に誠実ですが、実運用としては「最終曖昧判定を外部 judge に渡す本体」がまだない、ということでもあります。 ([GitHub][1])
 
-あなたの要件で重要なのは、**小規模〜大規模調査まで対応しつつ、明らかなノイズを落として質を上げる**ことです。
-そのためには取得と評価を分ける必要があります。
+さらに、**mission 実行の探索面はまだ search 中心**です。
+mission の batch plan 生成では query ごとに `channel: twitter`、`operation: search` を組み立てています。一方で公開 channel contract の operations は `search`、`hashtag`、`user`、`user_posts`、`tweet` の 5 つです。つまり今は broad recall を `search` 主体で回す設計で、**有望投稿を起点に thread / quote / replies / author history を二段目で掘る X 調査専用オーケストレーション**は、まだ本格実装の余地があります。 ([GitHub][6])
 
-### 推奨する 5 段階パイプライン
+優先度順に言うと、次に効くのはこの順です。
 
-1. **Broad Recall**
+**P0**
 
-   * 広めに収集
-   * クエリ展開
-   * 類義語 / 表記ゆれ / ハッシュタグ / 引用語を増やす
+1. **境界整理**
+   `x_reach` を本体、`agent_reach` を明示的 compatibility shim にするか、段階的 deprecation に寄せる。README・tests・wheel package の三者を揃える。 ([GitHub][1])
 
-2. **Normalization**
+2. **調査品質 scoring v2**
+   今のノイズ判定は活かしつつ、その上に「テーマ関連性」「具体性」「一次体験性」「証拠密度」「新規性」を短い deterministic reasons 付きで載せる。`docs/project-principles.md` の目標に一番近づく改善です。 ([GitHub][4])
 
-   * 投稿、スレッド、ユーザー、URL、メディアを正規化
-   * RT / quote / reply / thread root を関係づける
+3. **二段目の証拠拡張**
+   broad search で拾った seed から、`tweet`・thread・quote・reply・author 近傍を掘る X 専用 research flow を mission に入れる。これは「X 一本化した価値」が最も出る部分です。 ([GitHub][6])
 
-3. **Dedup / Collapse**
+4. **`require_topic_spread` を本当に効かせる**
+   今のままなら名前だけ先行しやすいので、topic bucket を作って最終選抜に diversity quota を入れるか、まだなら一度消す。 ([GitHub][6])
 
-   * 同文、近似文、同じ thread 内の冗長投稿を束ねる
-   * URL 共有だけの焼き直しも統合
+**P1**
+5. **coverage を “暴走しない範囲で” もう一段だけ強くする**
+今の explicit topic gap fill は良いので維持しつつ、query expansion は完全自動ではなく、bounded opt-in で追加する。 ([GitHub][1])
 
-4. **Quality Ranking**
+6. **judge runner の最小実装**
+   最初は external command / JSONL in-out でも十分です。今の fallback は残しつつ、「外部 LLM/VLM 判定を接続できる」状態にすると mission の完成度が一気に上がります。 ([GitHub][1])
 
-   * 情報量
-   * 具体性
-   * 一次体験性
-   * ノイズ度
-   * アカウント信頼性
-   * 多様性
-     でスコアリング
+7. **observability 強化**
+   今も dropped diagnostics はありますが、query ごとの yield、author/thread 偏り、topic coverage、time spread を summary に足すと改善ループが速くなります。README の caller-control と相性も良いです。 ([GitHub][1])
 
-5. **Coverage Gap Fill**
+総評すると、
+**x_reach はすでに方針から大きく外れていません。むしろかなり沿っています。**
+いまの課題は「思想が弱い」ことではなく、**思想に対して実装がまだ 1 段浅い箇所がある**ことです。特に次の飛躍点は、`境界整理`、`quality scoring v2`、`X 専用の二段目証拠拡張` の 3 つです。そこまで入ると、かなり本格的な **AI エージェント向け X 調査実行基盤** になります。 ([GitHub][1])
 
-   * 足りない観点だけ再探索
-   * すでに十分な観点は深掘り停止
-
-この 5 段階を分けないと、
-「たくさん集めたけど広告・bot・RT・薄い感想ばかり」という状態になります。
-
----
-
-## 3. ノイズ削減は「ルール + 軽量モデル + LLM最終判定」の三層がよいです
-
-ここは非常に重要です。
-全部 LLM に投げるとコストもブレも大きいので、まずは前段を強くしてください。
-
-### 第1層: ハードフィルタ
-
-ここは deterministic に切るべきです。
-
-* RT / repost 除外
-* 極端に短い投稿除外
-* URL だらけ・ハッシュタグだらけ除外
-* 同一 author の連投制限
-* 同一文面の重複除外
-* フォロワー稼ぎ文言、懸賞文言、定型宣伝文言除外
-* 投稿本文に実質的内容がないものを除外
-
-### 第2層: heuristic scoring
-
-ここで「質の高そうなもの」を上に持っていきます。
-
-* 一次体験を示す語彙
-  例: 「使ってみた」「導入した」「検証した」「障害出た」
-* 具体性
-  数値、手順、再現条件、スクショ参照、URL、固有名詞
-* 投稿者属性
-  新規捨て垢っぽさ、過剰宣伝比率、投稿履歴の偏り
-* エンゲージメントは補助指標としてのみ使う
-  伸びていても中身が薄い投稿は多い
-
-### 第3層: LLM judging
-
-上位候補だけ LLM に回す。
-
-判定軸は固定してください。
-
-* この投稿は調査目的に関連するか
-* 一次情報 / 二次情報 / 雑談 / 宣伝 のどれか
-* 具体的な主張や証拠があるか
-* 既存収集群に対して新規性があるか
-* 重要度は高いか
-
-ここで大事なのは、**LLM に yes/no だけでなく理由も短く返させる**ことです。
-後でデバッグできます。
-
----
-
-## 4. 大規模調査に必要なのは「検索」より「ジョブ管理」です
-
-上流は installer / doctor に強いですが、大規模収集ではそこが主戦場ではありません。
-必要なのは次です。
-
-### 必須機能
-
-* job 単位の実行
-* checkpoint / resume
-* query shard 分割
-* 進捗管理
-* retry/backoff
-* 失敗タスクの再投入
-* 途中結果の保存
-* 収集 budget 管理
-* 終了条件管理
-
-### 推奨する保存レイヤ
-
-3層に分けると運用が安定します。
-
-* **raw**
-
-  * API / CLI から得た生データ
-  * 後から再解釈できる
-
-* **canonical**
-
-  * 正規化済み投稿
-  * thread / author / url 関係を整理
-
-* **curated**
-
-  * dedup 済み
-  * スコア付き
-  * 最終分析用
-
-これをやらないと、あとでルールや評価基準を変えた時に全取り直しになります。
-
----
-
-## 5. X 専用最適化はしてよいが、抽象境界は汎用に保つべきです
-
-あなたの方針は正しいです。
-X 一本化で最適化しつつ、共通部分は強くするべきです。
-
-そのためには、**X-specific と research-common を分離**してください。
-
-### X-specific に置くもの
-
-* 認証
-* 検索クエリ表現
-* 投稿 / thread / reply / quote の取得方法
-* X 固有メタデータ
-* rate / failure パターンへの対処
-* URL / handle / post ID 解決
-
-### common core に置くもの
-
-* mission spec
-* job runner
-* result schema
-* dedup
-* scoring
-* ranking
-* export
-* sample inspection
-* observability
-* resume / retry
-
-この分離ができていれば、将来 Reddit 版や forum 版を作っても再利用できます。
-
----
-
-## 6. 今の channel 設計は軽すぎるので、Capability ベースに拡張したほうがいいです
-
-上流の `Channel` は `can_handle()` と `check()` が中心で、かなり薄いです。これは installer と doctor には合っていますが、調査基盤には足りません。 ([GitHub][3])
-
-x-reach では、少なくとも X adapter に以下の capability を持たせるとよいです。
-
-* `search_posts(query, options)`
-* `read_post(url_or_id)`
-* `read_thread(post_id)`
-* `get_author(author_id)`
-* `search_author_posts(author, options)`
-* `search_replies(post_id, options)`
-* `search_quotes(post_id, options)`
-* `hydrate(posts)`
-* `healthcheck()`
-
-さらに返り値は必ず JSON schema 固定にしてください。
-Agent に自然言語テキストを返すより、**構造化データ + 人間向け要約** の二系統が安定します。
-
----
-
-## 7. Codex 前提なら、Agent に「自由に考えさせすぎない」ほうが強いです
-
-上流は Claude Code / Cursor / OpenClaw / Codex など、shell 実行できる agent で使う想定です。 ([GitHub][4])
-
-ただ、調査タスクでは agent の自由度が高すぎると、
-
-* 無駄に検索を増やす
-* 同じ観点を何度も回る
-* ノイズ判定がぶれる
-* 途中状態が壊れる
-* 出力再現性がなくなる
-
-という問題が出ます。
-
-なので、Codex に対しては
-
-* まず plan を作る
-* 次に spec を固定する
-* その spec を x-reach が実行する
-* Agent は sample inspection と refinement だけやる
-
-という分担が最適です。
-
-要は
-**Agent = strategist / reviewer**
-**x-reach = deterministic executor**
-に寄せるべきです。
-
----
-
-## 8. 品質を上げるなら「多様性制約」が必須です
-
-良い調査結果は「上位スコア順」だけでは出ません。
-同じクラスタの似た投稿が上位を占めます。
-
-そこで ranking の後に diversity constraint を入れてください。
-
-### 入れるべき制約
-
-* 同一 author 上限
-* 同一 thread 上限
-* 同一 URL 上限
-* 同一 stance 上限
-* 同一 subtopic 上限
-* 同一時間帯上限
-
-これにより、
-「有名投稿の周辺ノイズだけ大量に取れる」問題をかなり抑えられます。
-
----
-
-## 9. 観測性を入れないと改善が回りません
-
-本気で強くするなら、最低限これを毎 job で残してください。
-
-* 何 query 打ったか
-* query ごとの hit 数
-* dedup で何件落ちたか
-* hard filter で何件落ちたか
-* heuristic / LLM で何件採用されたか
-* 最終件数
-* author/thread の偏り
-* サブトピックの偏り
-* 代表サンプル
-* 失敗理由内訳
-
-これがないと、
-「なぜ質が悪かったのか」が分からず、改善が勘になります。
-
----
-
-## 10. 優先順位付きで言うと、先にやるべきはこの順番です
-
-### 最優先
-
-1. **Mission spec の導入**
-2. **Canonical result schema の固定**
-3. **Dedup / noise filter / ranking の三段構え**
-4. **Job checkpoint / resume**
-5. **JSON-first の stable API**
-
-### 次点
-
-6. Thread / quote / reply を束ねた evidence graph
-7. Coverage gap fill
-8. 調査プロファイル
-
-   * high precision
-   * balanced
-   * broad recall
-     の切り替え
-
-### その後
-
-9. LLM judge の自己改善
-10. sample-based active refinement
-11. analyst 向け export
-12. cross-project preset library
-
----
-
-## 11. いまの方針に対する私の最終評価
-
-方向性はかなり良いです。
-**「Agent-Reach の X 部分だけを切り出して、X 専用に最適化する」**のは正しいです。
-
-ただし、真に価値が出るのは X 専用化そのものではなく、
-
-* 調査ミッションを宣言的に記述できること
-* ノイズを系統的に落とせること
-* 大規模でも途中再開できること
-* Agent が迷わず使えること
-* 出力の再現性があること
-
-この5点を揃えた時です。
-
-逆に言うと、
-**x-reach を「twitter-cli を便利に使う道具」で止めると限界が早い**です。
-**「X 調査 OS」まで引き上げると、かなり強い基盤になります。**
-
-[1]: https://github.com/Panniantong/Agent-Reach/tree/main/agent_reach "Agent-Reach/agent_reach at main · Panniantong/Agent-Reach · GitHub"
-[2]: https://github.com/Panniantong/Agent-Reach/blob/main/agent_reach/channels/twitter.py "Agent-Reach/agent_reach/channels/twitter.py at main · Panniantong/Agent-Reach · GitHub"
-[3]: https://github.com/Panniantong/Agent-Reach/blob/main/agent_reach/channels/base.py "Agent-Reach/agent_reach/channels/base.py at main · Panniantong/Agent-Reach · GitHub"
+[1]: https://github.com/iwachacha/x-reach "https://github.com/iwachacha/x-reach"
+[2]: https://github.com/iwachacha/x-reach/blob/main/x_reach/high_signal.py "https://github.com/iwachacha/x-reach/blob/main/x_reach/high_signal.py"
+[3]: https://github.com/iwachacha/x-reach/blob/main/x_reach/operation_contracts.py "x-reach/x_reach/operation_contracts.py at main · iwachacha/x-reach · GitHub"
+[4]: https://github.com/iwachacha/x-reach/blob/main/docs/project-principles.md "https://github.com/iwachacha/x-reach/blob/main/docs/project-principles.md"
+[5]: https://github.com/iwachacha/x-reach/blob/main/x_reach/candidates.py "https://github.com/iwachacha/x-reach/blob/main/x_reach/candidates.py"
+[6]: https://github.com/iwachacha/x-reach/blob/main/x_reach/mission.py "x-reach/x_reach/mission.py at main · iwachacha/x-reach · GitHub"

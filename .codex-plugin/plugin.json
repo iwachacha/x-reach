@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "X Reach",
     "shortDescription": "Twitter-only X Reach integration",
-    "longDescription": "Bootstraps, documents, diagnoses, and exposes thin read-only Twitter/X collection plus in-session orchestration skills for explicit X Reach workflows on Windows.",
+    "longDescription": "Bootstraps, documents, diagnoses, and exposes thin read-only Twitter/X collection, mission specs, ledgers, and in-session orchestration skills for explicit X Reach workflows on Windows.",
     "developerName": "Neo Reid",
     "category": "Developer Tools",
     "capabilities": [

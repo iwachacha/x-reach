@@ -13,13 +13,14 @@ Use this skill even when the user also asks for implementation in the same turn:
 
 ## Workflow
 
-1. Read [references/policy-tests.md](references/policy-tests.md) to apply the adoption gate.
-2. Read [references/review-output.md](references/review-output.md) to keep the decision record compact and reusable.
-3. Inspect the current repo surface before judging overlap. Check `README.md`, `docs/`, `implementation_plan.md`, relevant CLI/runtime modules, schemas, tests, and existing skills when needed.
-4. Judge each proposal independently first. Only bundle accepted items when they clearly share one primitive or one release boundary.
-5. Split proposals that mix a valuable primitive with risky automation. Use `adopt_primitives_only` when the primitive is worth shipping but the policy layer is not.
-6. If the user asked for implementation too, briefly record the gate decision in working notes or docs, then edit only `adopt_now` or `adopt_primitives_only` slices.
-7. If implementation is not requested, stop after the decision record.
+1. Read [../../../docs/project-principles.md](../../../docs/project-principles.md) as the source of current project policy.
+2. Read [references/policy-tests.md](references/policy-tests.md) to apply the adoption gate.
+3. Read [references/review-output.md](references/review-output.md) to keep the decision record compact and reusable.
+4. Inspect the current repo surface before judging overlap. Check `README.md`, `docs/`, `docs/implementation-plan.md`, relevant CLI/runtime modules, schemas, tests, and existing skills when needed.
+5. Judge each proposal independently first. Only bundle accepted items when they clearly share one primitive or one release boundary.
+6. Split proposals that mix a valuable primitive with risky automation. Use `adopt_primitives_only` when the primitive is worth shipping but the policy layer is not.
+7. If the user asked for implementation too, briefly record the gate decision in working notes or docs, then edit only `adopt_now` or `adopt_primitives_only` slices.
+8. If implementation is not requested, stop after the decision record.
 
 ## Core Rules
 
@@ -27,10 +28,10 @@ Use this skill even when the user also asks for implementation in the same turn:
 - Preserve topic generality. Gourmet, product feedback, incident response, politics, entertainment, OSS, and local events are examples only; do not accept domain-specific defaults unless the caller explicitly supplies them through mission spec, queries, coverage topics, judge intent, or exclude rules.
 - Prefer general primitives for theme fit: caller-declared objectives, query terms, coverage topics, deterministic diagnostics, low-content/noise filters, bounded judge contracts, and auditable fallback artifacts.
 - X Reach may be more built-out than Agent Reach when the feature is explicit, bounded, observable, and directly improves X post collection.
-- Keep caller control. Reject hidden fan-out, unbounded loops, opaque LLM decisions, silent default changes, automatic posting, and broad summarization ownership.
-- Apply deterministic before LLM: implement query shaping, dedupe, diagnostics, filters, schema, and artifact improvements before considering model judgment.
+- Keep caller control. Reject hidden fan-out, unbounded loops, opaque LLM decisions, silent default changes, automatic posting, final interpretation ownership, final selection ownership, and synthesis ownership.
+- Apply deterministic before LLM: implement query shaping, dedupe, diagnostics, filters, candidate scoring, diversity constraints, schema, and artifact improvements before considering model judgment.
 - LLM or VLM use is acceptable only as an opt-in final judge after deterministic narrowing, with retained reasons and a bounded candidate set.
-- Prefer neutral diagnostics, schema clarity, artifact ergonomics, and explicit opt-in controls over invisible policy.
+- Prefer neutral diagnostics, schema clarity, artifact ergonomics, deterministic candidate utility signals, and explicit opt-in controls over invisible policy.
 - Reject or defer proposals that duplicate `collect`, `collect --spec`, `doctor`, `channels`, `batch`, `plan candidates`, `ledger`, or existing skill workflows without improving usability.
 - When uncertain, choose `defer` if evidence may justify the idea later, or `reject` if it broadens ownership or hides risk.
 

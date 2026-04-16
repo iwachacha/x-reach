@@ -4,19 +4,19 @@ Use these checks before adopting any X Reach proposal.
 
 ## Fast Accept Signals
 
-- The change has direct X-specific value for collecting, filtering, ranking, diagnosing, or handing off posts.
+- The change has direct X-specific value for collecting, filtering, deterministic candidate scoring, diagnosing, or handing off posts.
 - The change improves theme-fit quality without hard-coding one research domain into defaults.
 - The change makes existing collection behavior easier to inspect through neutral metadata, diagnostics, schemas, or artifacts.
 - The change is explicit opt-in, bounded, resumable, and observable.
 - The change removes repeated maintainer friction without inventing hidden workflow policy.
-- The change implements deterministic filters, query shaping, or ledger ergonomics before relying on LLM/VLM judgment.
+- The change implements deterministic filters, query shaping, candidate scoring, diversity constraints, diagnostics, or ledger ergonomics before relying on LLM/VLM judgment.
 
 ## Fast Reject Signals
 
-- The feature silently chooses scope, expands queries, deep-reads, retries, summarizes, posts, or routes on behalf of the caller.
+- The feature silently chooses caller scope, expands queries, deep-reads, retries, synthesizes, posts, publishes, or chooses final selection on behalf of the caller.
 - The feature bakes a topic-specific assumption into general runtime behavior, such as treating restaurant, product, event, political, OSS, or media-discourse terms as universal defaults.
 - The feature adds hidden fan-out, unbounded loops, opaque LLM decisions, or silent default changes.
-- The feature normalizes impact, trust, recommendation, or importance in a way that hides raw signals.
+- The feature normalizes impact, trust, recommendation, final importance, or final meaning in a way that hides raw signals.
 - The feature duplicates `collect`, `collect --spec`, `batch`, `plan candidates`, `ledger`, or existing skills without reducing user friction.
 - The feature requires broad cross-project behavior but lacks tests, docs, diagnostics, and handoff artifacts.
 
@@ -31,7 +31,7 @@ return `adopt_primitives_only`. Keep the primitive and reject or defer the polic
 
 Examples:
 
-- Keep dropped-post diagnostics, reject opaque quality scoring.
+- Keep dropped-post diagnostics or auditable quality reasons, reject opaque final importance scoring.
 - Keep opt-in coverage topics, reject automatic open-ended query expansion.
 - Keep deterministic low-content filtering, defer LLM semantic judgment until candidates are narrowed.
 - Keep a generic judge result schema, reject domain-specific judge prompts baked into runtime defaults.

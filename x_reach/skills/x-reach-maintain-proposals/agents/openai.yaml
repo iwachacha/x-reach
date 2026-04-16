@@ -1,4 +1,4 @@
 interface:
   display_name: "X Reach Maintain Proposals"
   short_description: "Gate x-reach improvement proposals"
-  default_prompt: "Use $x-reach-maintain-proposals to review this concrete x-reach proposal list as an adoption gate for topic-agnostic X post collection value, safety, deterministic-before-LLM design, and adopt_now/adopt_primitives_only/defer/reject decisions before any edits. If implementation is requested too, gate first and then edit only approved slices."
+  default_prompt: "Use $x-reach-maintain-proposals to review this concrete x-reach proposal list against docs/project-principles.md as an adoption gate for topic-agnostic X post collection value, deterministic candidate quality, diagnostics, artifact handoff, caller control, and deterministic-before-LLM design. Decide adopt_now/adopt_primitives_only/defer/reject before any edits; if implementation is requested too, gate first and then edit only approved slices."

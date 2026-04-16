@@ -15,9 +15,10 @@ This fork is intentionally narrow. Treat it as:
 - a readiness and diagnostics layer
 - an integration helper for downstream projects
 - a thin read-only Twitter/X collection surface
+- a deterministic mission, ledger, and candidate handoff layer for explicit broad runs
 
-Do not assume this fork owns scheduling, ranking, summarization, or publishing.
-Do not assume this fork chooses investigation scope. The caller chooses scale, time windows, ranking, summarization, and posting.
+Do not assume this fork owns final interpretation, synthesis, scheduling, publishing, or caller scope.
+Do not assume this fork chooses the investigation. The caller chooses scale, time windows, topic assumptions, final selection, synthesis, and posting.
 
 ## Operating Rules For Codex
 
@@ -27,6 +28,8 @@ Do not assume this fork chooses investigation scope. The caller chooses scale, t
 - Collection-only or raw-evidence handoff is a valid final deliverable. Do not force a synthesis step when the caller wants posts, ledgers, or machine-readable artifacts.
 - When naming channels in prompts or commands, use the exact stable names from `x-reach channels --json`.
 - Keep lightweight asks lightweight. Do not auto-escalate a narrow request into large-scale research.
+- Use `x-reach collect --spec` for broad, resumable, artifact-heavy runs where one declared mission should own queries, filters, diversity, coverage, and outputs.
+- Treat deterministic processing as the default route: query terms, hard filters, dedupe, candidate scoring, and diagnostics before any LLM/VLM judge handoff.
 - Inspect `x-reach channels --json` `operation_contracts` before choosing `since` or `until`.
 - Use `x-reach collect --json --save .x-reach/evidence.jsonl` when a research run needs one shared evidence ledger.
 - Use `x-reach collect --json --save-dir .x-reach/shards` when per-command shards or parallel collection are easier than appending into one file.
@@ -73,14 +76,15 @@ x-reach export-integration --client codex --format json --profile runtime-minima
 8. Use diagnostic hints only to explain provenance or extraction shape; downstream code owns ranking and selection.
 9. Choose advanced collection controls such as `since` and `until` from the live `operation_contracts`.
 10. Treat large-scale research as explicit opt-in. Keep narrow asks on `collect --json` unless the caller clearly wants a broader run.
-11. Treat Twitter/X as opt-in and cookie-based; authenticated-but-unprobed `warn` means collect may work, but operation readiness is unverified.
+11. Prefer `collect --spec` when a broad run needs reproducibility, checkpoint/resume behavior, raw/canonical/ranked artifacts, coverage diagnostics, or judge fallback records.
+12. Treat Twitter/X as opt-in and cookie-based; authenticated-but-unprobed `warn` means collect may work, but operation readiness is unverified.
 
 ## Large-Scale Research Pattern
 
 1. Run `x-reach doctor --json` and inspect `operation_statuses` when readiness matters.
 2. Start with 2-4 caller-chosen discovery queries at `--limit 5` to `--limit 10`.
 3. Choose `since` and `until` from the live contract instead of assuming a fixed route.
-4. If a saved batch plan exists, run `x-reach batch --plan PLAN.json --validate-only --json` before the write-producing batch run.
+4. Prefer `x-reach collect --spec` when one declared mission can cover the broad run; if a saved batch plan exists, run `x-reach batch --plan PLAN.json --validate-only --json` before the write-producing batch run.
 5. Save raw `CollectionResult` envelopes with `--save .x-reach/evidence.jsonl` or `--save-dir .x-reach/shards` when the run needs an evidence trail.
 6. If the run produced shards, merge them before summary or candidate planning.
 7. Run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when CI or downstream automation needs health counts.

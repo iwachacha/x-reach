@@ -2,6 +2,8 @@
 
 X Reach is meant to be consumed as a CLI or Python dependency from another project, not copied into that project.
 
+For project-level design boundaries, see [project-principles.md](project-principles.md). In short: X Reach collects, normalizes, filters, dedupes, and hands off X evidence; the host project owns the research meaning and final deliverable.
+
 ## Install
 
 ```powershell
@@ -34,10 +36,11 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 ## Caller control
 
 - The caller chooses scope.
-- X Reach does not choose routes, ranking, summarization, or posting.
+- X Reach does not choose final scope, synthesis, publishing, or final selection.
 - Collection-only or raw-evidence handoff is a valid final deliverable when the caller wants posts or machine-readable artifacts instead of prose synthesis.
 - Keep narrow asks narrow and avoid auto-escalate behavior.
 - Large-scale collection is explicit opt-in.
+- Use `collect --spec` for broad, resumable, artifact-heavy X runs instead of ad hoc shell orchestration.
 - `plan candidates` keeps the default `--limit 20` unless the caller asks for more.
 - `--min-seen-in` is useful for broad or multilingual runs where you want candidates that resurfaced across multiple queries; keep it off for narrow probes.
 - Saved evidence does not warn by default; use `--warn-missing-evidence-metadata` when downstream provenance completeness matters.

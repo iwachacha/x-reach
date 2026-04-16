@@ -72,8 +72,10 @@ def test_skill_suite_supports_collection_first_handoffs():
     )
 
     assert "Collection-only or raw-evidence handoff" in base_skill
+    assert "collect --spec" in base_skill
     assert "do not synthesize unless the user asked for it" in base_metadata
     assert "Collection-only or evidence-pack handoff" in orchestrate_skill
+    assert "collect --spec" in orchestrate_skill
     assert "Collection-only handoff is valid" in flow
     assert "answer-first asks" in brief_contract
     assert "collection-first asks" in defaults
@@ -106,8 +108,11 @@ def test_maintain_proposals_skill_is_adoption_gate():
     )
 
     assert "adoption gate" in skill
+    assert "docs/project-principles.md" in metadata
+    assert "../../../docs/project-principles.md" in skill
     assert "X-specific value" in skill
     assert "deterministic before LLM" in skill
+    assert "candidate scoring" in skill
     assert "adopt_primitives_only" in skill
     assert "topic generality" in skill
     assert "gate first" in metadata

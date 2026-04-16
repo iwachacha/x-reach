@@ -5,7 +5,7 @@ Keep maintenance patches inside the approved scope.
 ## Must-Stay-True Rules
 
 - X Reach stays a thin capability and diagnostics layer.
-- The caller still owns scope, routing, ranking, summarization, publishing, and final selection.
+- The caller still owns scope, topic assumptions, final interpretation, synthesis, publishing, and final selection.
 - Prefer extending an existing surface over adding a second parallel workflow.
 - Prefer neutral metadata over interpreted scores.
 - Keep maintainer convenience explicit and bounded.

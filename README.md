@@ -2,6 +2,8 @@
 
 X Reach is the X/Twitter-only split of the Windows-first Agent Reach fork. It keeps the same `x-reach` CLI, evidence ledger helpers, and Codex skill suite shape, but removes every non-Twitter channel and makes `x_reach` the primary Python SDK surface.
 
+Its design center is agent-assisted, reproducible X collection: stable JSON contracts, deterministic noise reduction, resumable mission runs, and compact handoff artifacts. The detailed decision criteria live in [docs/project-principles.md](docs/project-principles.md).
+
 ## What stays the same
 
 - `x-reach channels --json`
@@ -71,12 +73,13 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 
 ## Caller-control policy
 
-- X Reach does not choose investigation scope, ranking, summarization, or publishing.
+- X Reach does not choose final investigation scope, final selection, synthesis, scheduling, or publishing.
 - X Reach is topic-agnostic: examples such as restaurant research, product feedback, incident reports, creator discourse, or OSS adoption are only examples. Do not hard-code domain-specific assumptions into runtime defaults.
 - Collection quality means preserving caller-defined scope while reducing off-topic posts, thin content, duplicates, obvious spam/promotion, and other auditable noise through explicit, inspectable controls.
 - Collection-only or raw-evidence handoff is a first-class outcome. Do not force synthesis when the caller wants high-signal posts, ledgers, or machine-readable artifacts.
 - The caller chooses scope. Keep lightweight asks lightweight instead of trying to auto-escalate them into large-scale research.
 - `x-reach collect --json` is the default thin interface for downstream collection.
+- `x-reach collect --spec` is the preferred declarative interface for broad, resumable, artifact-heavy X research runs.
 - Broad discovery operations (`search`, `hashtag`, `posts`) default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet` so saved artifacts stay compact unless the caller explicitly opts into fuller payloads.
 - `batch` and `scout` are explicit opt-in helpers. They are not the default route for everyday collection.
 - Inspect `x-reach channels --json` `operation_contracts` before choosing `since` or `until`.
@@ -92,6 +95,8 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 
 ## Docs
 
+- Project principles: [docs/project-principles.md](docs/project-principles.md)
+- Implementation plan: [docs/implementation-plan.md](docs/implementation-plan.md)
 - Install guide: [docs/install.md](docs/install.md)
 - Downstream usage: [docs/downstream-usage.md](docs/downstream-usage.md)
 - Codex integration: [docs/codex-integration.md](docs/codex-integration.md)
