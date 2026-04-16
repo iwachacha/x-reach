@@ -29,3 +29,10 @@ def mission_spec_schema() -> dict:
     text = files("x_reach.schema_files").joinpath("mission_spec.schema.json").read_text(encoding="utf-8")
     return json.loads(text)
 
+
+def judge_result_schema() -> dict:
+    """Return the packaged JSON Schema for judge result records."""
+
+    text = files("x_reach.schema_files").joinpath("judge_result.schema.json").read_text(encoding="utf-8")
+    return json.loads(text)
+

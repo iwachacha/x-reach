@@ -45,6 +45,8 @@ def test_mission_plan_normalizes_review_style_spec(tmp_path):
     assert query["raw_mode"] == "minimal"
     assert query["item_text_mode"] == "snippet"
     assert query["item_text_max_chars"] == 120
+    assert payload["judge"]["enabled"] is False
+    assert payload["judge"]["fallback_policy"] == "keep_ranked"
 
 
 def test_mission_run_writes_raw_canonical_ranked_and_summary(tmp_path):
@@ -117,6 +119,71 @@ def test_mission_run_writes_raw_canonical_ranked_and_summary(tmp_path):
     assert ranked[0]["quality_score"] > ranked[1]["quality_score"]
     assert calls[0]["kwargs"]["raw_mode"] == "full"
     assert calls[0]["kwargs"]["item_text_mode"] == "full"
+
+
+def test_mission_run_writes_topic_agnostic_judge_fallback_artifact(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    output_dir = tmp_path / "mission-output"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "Collect concrete product launch feedback",
+            "queries": ["ExampleProduct launch feedback"],
+            "target_posts": 2,
+            "quality_profile": "balanced",
+            "judge": {
+                "enabled": True,
+                "candidate_limit": 1,
+                "intent": "mission-relevant evidence, not off-topic chatter or promotion",
+                "criteria": [
+                    "The post matches the mission objective",
+                    {"id": "specific_claim", "description": "The post contains a concrete claim"},
+                ],
+            },
+            "retention": {"raw_mode": "full", "item_text_mode": "full"},
+        },
+    )
+
+    class _FakeClient:
+        def collect(self, channel, operation, value, **kwargs):
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=[
+                    _post("1", "alice", "ExampleProduct launch feedback with practical migration notes", likes=25),
+                    _post("2", "bob", "ExampleProduct launch feedback with a concrete regression", likes=10),
+                ],
+                raw={"value": value, "kwargs": kwargs},
+                meta={"input": value, "count": 2, "query_tokens": ["exampleproduct", "launch"]},
+                error=None,
+            )
+
+    payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-judge",
+        client_factory=_FakeClient,
+    )
+
+    assert payload["summary"]["ranked_candidates"] == 2
+    assert payload["summary"]["judge_enabled"] is True
+    assert payload["summary"]["judge_status"] == "not_run"
+    assert payload["summary"]["judge_fallback_used"] is True
+    assert payload["judge"]["fallback"]["reason"] == "judge_runner_not_configured"
+    assert payload["judge"]["records_written"] == 1
+    assert (output_dir / "judge.jsonl").exists()
+
+    records = [
+        json.loads(line)
+        for line in (output_dir / "judge.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(records) == 1
+    assert records[0]["record_type"] == "judge_result"
+    assert records[0]["status"] == "unjudged"
+    assert records[0]["decision"] == "fallback_keep"
+    assert records[0]["fallback"]["policy"] == "keep_ranked"
+    assert records[0]["candidate"]["rank"] == 1
 
 
 def test_mission_run_executes_coverage_gap_fill_for_missing_topic(tmp_path):

@@ -19,6 +19,7 @@ Turn external findings into clean candidate proposals for X Reach itself.
 
 - Start from observed maintainer or user friction, not from abstract product ideation.
 - Prefer extending an existing surface over inventing a parallel command or workflow.
+- Preserve topic generality. Turn topic-specific incidents into reusable primitives instead of proposing hard-coded defaults for that domain.
 - Split a good primitive away from any hidden policy layer.
 - Self-reject auto-routing, auto-ranking, hidden deep-read, impact scoring, or fake uniformity proposals.
 - If the user already pasted a concrete proposal list and asked for adopt/reject/defer judgment, do not reshape it again here; hand it to `x-reach-maintain-proposals`.

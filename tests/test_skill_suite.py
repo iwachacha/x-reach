@@ -109,7 +109,22 @@ def test_maintain_proposals_skill_is_adoption_gate():
     assert "X-specific value" in skill
     assert "deterministic before LLM" in skill
     assert "adopt_primitives_only" in skill
+    assert "topic generality" in skill
+    assert "gate first" in metadata
     assert "opaque LLM" in policy
+    assert "topic-specific assumption" in policy
     assert "deterministic-before-LLM" in review
+    assert "topic_generality" in review
     assert "adoption gate" in metadata
+
+
+def test_proposal_shaping_preserves_topic_generality():
+    skill = (_skill_dir("x-reach-propose-improvements") / "SKILL.md").read_text(encoding="utf-8")
+    shaping = (_skill_dir("x-reach-propose-improvements") / "references" / "proposal-shaping.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Preserve topic generality" in skill
+    assert "topic generality" in shaping
+    assert "domain-specific defaults" in shaping
 

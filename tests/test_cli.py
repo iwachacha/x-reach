@@ -538,6 +538,13 @@ class TestCLI:
         assert captured["kwargs"]["require_query_match"] is True
         assert captured["kwargs"]["min_seen_in"] == 2
 
+    def test_schema_judge_result_json(self, capsys):
+        assert main(["schema", "judge-result", "--json"]) == 0
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["title"] == "X Reach JudgeResult"
+        assert "fallback_keep" in payload["properties"]["decision"]["enum"]
+
     def test_uninstall_dry_run_mentions_twitter_cleanup(self, capsys):
         assert main(["uninstall", "--dry-run"]) == 0
         output = capsys.readouterr().out

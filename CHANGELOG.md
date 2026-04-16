@@ -4,6 +4,12 @@ All notable changes to this fork are documented here.
 
 ## Unreleased
 
+### Added
+
+- added a schema-first mission `judge` contract with fallback-only `judge.jsonl` records and `x-reach schema judge-result --json`
+- documented the `agent_reach` compatibility shim retention and deletion criteria
+- documented X Reach's topic-agnostic research-runtime policy and tightened proposal-review skills against domain-specific overfit
+
 ### Changed
 
 - renamed the primary public surface to X Reach / `x_reach` while keeping legacy `agent-reach` and `agent_reach` compatibility aliases

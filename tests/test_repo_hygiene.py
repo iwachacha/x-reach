@@ -29,6 +29,7 @@ def test_docs_folder_only_contains_supported_docs():
     names = {path.name for path in docs_dir.iterdir()}
 
     expected_docs = {
+        "compatibility-shim.md",
         "codex-integration.md",
         "downstream-usage.md",
         "install.md",

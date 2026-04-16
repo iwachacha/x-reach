@@ -44,6 +44,17 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
       }
     ]
   },
+  "judge": {
+    "enabled": false,
+    "mode": "llm",
+    "candidate_limit": 20,
+    "intent": "mission-relevant evidence, not off-topic chatter or promotion",
+    "criteria": [
+      "The post matches the mission objective",
+      "The post contains concrete evidence or a first-hand claim"
+    ],
+    "fallback_policy": "keep_ranked"
+  },
   "retention": {
     "raw_mode": "full",
     "item_text_mode": "full"
@@ -60,6 +71,7 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
 - `raw.jsonl`: merged collection-result ledger.
 - `canonical.jsonl`: one normalized item per line with run/query provenance.
 - `ranked.jsonl`: deduped, keyword-filtered, diversity-constrained candidates with `rank`, `quality_score`, `quality_reasons`, and matched `coverage_topics` when coverage topics are configured.
+- `judge.jsonl`: opt-in judge records for the top ranked candidates. The current runtime does not call a model; when `judge.enabled=true`, it writes `unjudged` fallback records so downstream tooling can test the contract without changing `ranked.jsonl`.
 - `summary.md`: human-readable job counts, filter drops, and top candidates.
 - `mission-result.json`: JSON-first manifest for downstream tools.
 - `mission-state.json`: resumable status marker for handoff/debugging.
@@ -81,6 +93,25 @@ Ranked candidates that match topic terms include `coverage_topics`, so downstrea
 
 `min_ranked_posts` and `target_gap` are diagnostics only. They show that the run is short of the requested ranked count, but they do not generate follow-up queries by themselves. x-reach only fills gaps for explicit `topics` that can produce a new, non-duplicate query.
 
+## Judge Contract
+
+The `judge` block is a schema-first placeholder for future LLM/VLM or external judging after deterministic narrowing. It is explicit opt-in and bounded by `candidate_limit`.
+
+The contract is intentionally topic-agnostic. Put the caller's current research theme in `objective`, `queries`, `coverage.topics`, and `judge.intent`; do not rely on built-in assumptions about restaurants, products, incidents, politics, software, entertainment, or any other domain.
+
+Supported fields:
+
+- `enabled`: when false, no judge artifact is written.
+- `mode`: `llm`, `vlm`, or `external`. This records the intended judge type only.
+- `provider` / `model`: optional caller-owned labels for future runners.
+- `candidate_limit`: maximum ranked candidates to send to a judge.
+- `intent`: the short task the judge should evaluate.
+- `criteria`: string or object criteria that a future judge must answer against.
+- `labels`: optional evidence categories. Defaults to `primary_evidence`, `secondary_evidence`, `chatter`, `promotion`, and `off_topic`.
+- `fallback_policy`: currently `keep_ranked` or `mark_unjudged`.
+
+No LLM/VLM call is made by this release. If `judge.enabled=true`, x-reach writes `judge.jsonl` records with `status=unjudged`, `decision=fallback_keep` for `keep_ranked`, and `fallback.reason=judge_runner_not_configured`. This lets downstream code adopt the `x-reach schema judge-result --json` contract while deterministic `ranked.jsonl` remains the source of truth.
+
 ## Implemented In This Pass
 
 - Mission spec normalization and validation.
@@ -92,10 +123,11 @@ Ranked candidates that match topic terms include `coverage_topics`, so downstrea
 - Quality filter dropped samples for debugging filter thresholds.
 - One-round deterministic coverage gap fill for explicit coverage topics. Ranked-count gaps remain report-only unless a missing topic can generate a follow-up query.
 - `x-reach schema mission-spec --json`.
+- `x-reach schema judge-result --json` plus judge fallback records for opt-in mission specs.
 - SDK helpers: `XReachClient.mission_plan()` and `XReachClient.collect_spec()`.
 
 ## Still Deferred
 
-- LLM/VLM judging after deterministic narrowing.
+- Actual LLM/VLM judging after deterministic narrowing.
 - Multi-round active refinement and semantic topic detection.
 - Stance/subtopic classification beyond current deterministic metadata and diversity caps.

@@ -5,6 +5,7 @@ Use these checks before adopting any X Reach proposal.
 ## Fast Accept Signals
 
 - The change has direct X-specific value for collecting, filtering, ranking, diagnosing, or handing off posts.
+- The change improves theme-fit quality without hard-coding one research domain into defaults.
 - The change makes existing collection behavior easier to inspect through neutral metadata, diagnostics, schemas, or artifacts.
 - The change is explicit opt-in, bounded, resumable, and observable.
 - The change removes repeated maintainer friction without inventing hidden workflow policy.
@@ -13,6 +14,7 @@ Use these checks before adopting any X Reach proposal.
 ## Fast Reject Signals
 
 - The feature silently chooses scope, expands queries, deep-reads, retries, summarizes, posts, or routes on behalf of the caller.
+- The feature bakes a topic-specific assumption into general runtime behavior, such as treating restaurant, product, event, political, OSS, or media-discourse terms as universal defaults.
 - The feature adds hidden fan-out, unbounded loops, opaque LLM decisions, or silent default changes.
 - The feature normalizes impact, trust, recommendation, or importance in a way that hides raw signals.
 - The feature duplicates `collect`, `collect --spec`, `batch`, `plan candidates`, `ledger`, or existing skills without reducing user friction.
@@ -32,6 +34,7 @@ Examples:
 - Keep dropped-post diagnostics, reject opaque quality scoring.
 - Keep opt-in coverage topics, reject automatic open-ended query expansion.
 - Keep deterministic low-content filtering, defer LLM semantic judgment until candidates are narrowed.
+- Keep a generic judge result schema, reject domain-specific judge prompts baked into runtime defaults.
 
 ## Overlap Checks
 
@@ -48,6 +51,8 @@ Before adopting, search whether the repo already provides the idea through:
 - `x-reach schema mission-spec --json`
 - `x-reach export-integration --client codex --format json`
 - bundled skills under `x_reach/skills`
+
+Also search for topic-overfit risks in docs, tests, and examples. Topic-specific fixtures are fine when they are clearly examples; public guidance and runtime defaults must stay theme-neutral.
 
 If a close surface already exists, prefer extending that surface instead of creating a parallel command or mode.
 

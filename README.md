@@ -11,6 +11,7 @@ X Reach is the X/Twitter-only split of the Windows-first Agent Reach fork. It ke
 - `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`
 - `x-reach schema collection-result --json`
 - `x-reach schema mission-spec --json`
+- `x-reach schema judge-result --json`
 - `x-reach plan candidates --input .x-reach/evidence.jsonl --json`
 - `x-reach ledger merge|validate|summarize|query|append`
 - `x-reach export-integration --client codex --format json`
@@ -71,6 +72,8 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 ## Caller-control policy
 
 - X Reach does not choose investigation scope, ranking, summarization, or publishing.
+- X Reach is topic-agnostic: examples such as restaurant research, product feedback, incident reports, creator discourse, or OSS adoption are only examples. Do not hard-code domain-specific assumptions into runtime defaults.
+- Collection quality means preserving caller-defined scope while reducing off-topic posts, thin content, duplicates, obvious spam/promotion, and other auditable noise through explicit, inspectable controls.
 - Collection-only or raw-evidence handoff is a first-class outcome. Do not force synthesis when the caller wants high-signal posts, ledgers, or machine-readable artifacts.
 - The caller chooses scope. Keep lightweight asks lightweight instead of trying to auto-escalate them into large-scale research.
 - `x-reach collect --json` is the default thin interface for downstream collection.
@@ -85,6 +88,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - `plan candidates --drop-noise` and mission `exclude.drop_low_content_posts` remove obvious low-content quote posts before ranking.
 - For declarative large-scale X collection, use `collect --spec`: it runs a mission plan, writes raw/canonical/ranked artifacts, and leaves a manifest for resumable handoff.
 - Mission `coverage` is opt-in and fills only explicit topic gaps; ranked-count gaps are reported but do not trigger automatic query expansion.
+- Mission `judge` is an opt-in forward-compatible contract. Until a judge runner is configured, it writes auditable fallback records and leaves deterministic `ranked.jsonl` unchanged.
 
 ## Docs
 
@@ -93,6 +97,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - Codex integration: [docs/codex-integration.md](docs/codex-integration.md)
 - Python SDK: [docs/python-sdk.md](docs/python-sdk.md)
 - Mission spec runtime: [docs/mission-spec.md](docs/mission-spec.md)
+- Compatibility shim policy: [docs/compatibility-shim.md](docs/compatibility-shim.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 
 

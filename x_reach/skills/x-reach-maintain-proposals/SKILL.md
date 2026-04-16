@@ -1,6 +1,6 @@
 ---
 name: x-reach-maintain-proposals
-description: Evaluate proposed changes to X Reach itself as an adoption gate. Use when Codex needs to review concrete external proposals, AI review findings, or follow-up improvement ideas against X-specific collection value, safety, deterministic-before-LLM policy, existing repo surfaces, and handoff quality, then decide adopt_now, adopt_primitives_only, defer, or reject before any edits.
+description: Evaluate proposed changes to X Reach itself as an adoption gate before implementation. Use when Codex receives concrete external proposals, AI review findings, follow-up improvement ideas, or user asks to both judge and safely implement X Reach improvements; review them against topic-agnostic X post collection value, safety, deterministic-before-LLM policy, existing repo surfaces, and handoff quality, then decide adopt_now, adopt_primitives_only, defer, or reject before any edits.
 ---
 
 # X Reach Maintain Proposals
@@ -9,6 +9,8 @@ Review proposed changes to X Reach before code changes.
 
 This is the right maintainer skill when someone has already pasted candidate improvements and asks whether they are worth adopting. It is an adoption gate, not an ideation skill.
 
+Use this skill even when the user also asks for implementation in the same turn: gate first, then implement only the approved slice.
+
 ## Workflow
 
 1. Read [references/policy-tests.md](references/policy-tests.md) to apply the adoption gate.
@@ -16,11 +18,14 @@ This is the right maintainer skill when someone has already pasted candidate imp
 3. Inspect the current repo surface before judging overlap. Check `README.md`, `docs/`, `implementation_plan.md`, relevant CLI/runtime modules, schemas, tests, and existing skills when needed.
 4. Judge each proposal independently first. Only bundle accepted items when they clearly share one primitive or one release boundary.
 5. Split proposals that mix a valuable primitive with risky automation. Use `adopt_primitives_only` when the primitive is worth shipping but the policy layer is not.
-6. If at least one item is `adopt_now` or `adopt_primitives_only`, define the smallest safe implementation slice before editing.
+6. If the user asked for implementation too, briefly record the gate decision in working notes or docs, then edit only `adopt_now` or `adopt_primitives_only` slices.
+7. If implementation is not requested, stop after the decision record.
 
 ## Core Rules
 
 - Prefer changes with clear X-specific value for post collection, candidate quality, diagnostics, evidence artifacts, mission specs, or handoff.
+- Preserve topic generality. Gourmet, product feedback, incident response, politics, entertainment, OSS, and local events are examples only; do not accept domain-specific defaults unless the caller explicitly supplies them through mission spec, queries, coverage topics, judge intent, or exclude rules.
+- Prefer general primitives for theme fit: caller-declared objectives, query terms, coverage topics, deterministic diagnostics, low-content/noise filters, bounded judge contracts, and auditable fallback artifacts.
 - X Reach may be more built-out than Agent Reach when the feature is explicit, bounded, observable, and directly improves X post collection.
 - Keep caller control. Reject hidden fan-out, unbounded loops, opaque LLM decisions, silent default changes, automatic posting, and broad summarization ownership.
 - Apply deterministic before LLM: implement query shaping, dedupe, diagnostics, filters, schema, and artifact improvements before considering model judgment.
@@ -38,6 +43,7 @@ For every proposal, verify:
 - the feature improves post collection, candidate quality, diagnostics, artifacts, or handoff
 - hidden fan-out, unbounded retries, opaque LLM use, and silent default changes are absent
 - deterministic alternatives were considered before LLM/VLM
+- topic-specific assumptions were either caller-declared or rejected as hard-coded defaults
 - the patch boundary includes tests, docs, diagnostics, and handoff artifacts when needed
 
 ## Output

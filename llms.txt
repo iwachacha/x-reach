@@ -9,6 +9,7 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 - Codex integration: https://github.com/iwachacha/x-reach/blob/main/docs/codex-integration.md
 - Python SDK: https://github.com/iwachacha/x-reach/blob/main/docs/python-sdk.md
 - Mission spec runtime: https://github.com/iwachacha/x-reach/blob/main/docs/mission-spec.md
+- Compatibility shim policy: https://github.com/iwachacha/x-reach/blob/main/docs/compatibility-shim.md
 - Troubleshooting: https://github.com/iwachacha/x-reach/blob/main/docs/troubleshooting.md
 - Repository README: https://github.com/iwachacha/x-reach/blob/main/README.md
 
@@ -21,6 +22,7 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 - `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`
 - `x-reach schema collection-result --json`
 - `x-reach schema mission-spec --json`
+- `x-reach schema judge-result --json`
 - `x-reach plan candidates --input .x-reach/evidence.jsonl --json`
 - `x-reach ledger validate --input .x-reach/evidence.jsonl --json`
 - `x-reach ledger summarize --input .x-reach/evidence.jsonl --json`
@@ -34,8 +36,10 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 - Supported channel: `twitter`
 - Purpose: X/Twitter collection, readiness diagnostics, evidence ledgers, candidate curation, and mission-spec artifact generation
 - X Reach does not choose request scale, summarization, or posting
+- X Reach is topic-agnostic; examples should not become domain-specific runtime defaults
 - Broad collection exposes deterministic diagnostics such as `quality_filter.dropped_samples`, `low_content` drops, and opt-in mission `coverage`
 - Mission `coverage` fills only explicit topic gaps; ranked-count gaps are report-only
+- Mission `judge` is schema-first and falls back to deterministic ranked candidates until an explicit judge runner exists
 - External projects should prefer `x-reach collect --json` and should not copy `.codex-plugin` or `x_reach/skills` by default
 
 

@@ -22,6 +22,7 @@ Do not assume this fork chooses investigation scope. The caller chooses scale, t
 ## Operating Rules For Codex
 
 - Do not activate this skill unless the user explicitly asks to use X Reach or names one of its bundled skills. For ordinary lightweight web lookups, use the model's native browsing/search instead.
+- Treat X Reach as topic-agnostic. Use caller-declared objectives, queries, coverage topics, judge intent, and exclude rules for theme fit; do not infer hard-coded domain rules from examples.
 - Use `x-reach collect --json` as the stable handoff. Preserve the returned `CollectionResult` JSON when another system will rank, summarize, dedupe, or publish it.
 - Collection-only or raw-evidence handoff is a valid final deliverable. Do not force a synthesis step when the caller wants posts, ledgers, or machine-readable artifacts.
 - When naming channels in prompts or commands, use the exact stable names from `x-reach channels --json`.
@@ -36,6 +37,7 @@ Do not assume this fork chooses investigation scope. The caller chooses scale, t
 - Use `--min-seen-in 2` only when a broader run benefits from keeping candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Broad discovery operations default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet`; use `quality_profile=recall` or explicit `--raw-mode full --item-text-mode full` only when fuller payloads are truly needed.
 - Use `x-reach schema collection-result --json` when downstream code needs a contract-testable schema.
+- Use `x-reach schema judge-result --json` only for opt-in mission judge handoffs; the current runtime writes fallback records and does not call a model.
 - Treat `engagement`, `media_references`, `identifiers`, `meta.item_shape`, and `error.category` as diagnostics only, not ranking or trust scores.
 - Treat `batch` and `scout` as explicit opt-in helpers. They are not the default route for everyday collection.
 - For large research tasks, only use bounded fan-out when the caller explicitly opts in; then use `plan candidates` for no-model dedupe and deep-read only selected URLs.
@@ -47,6 +49,7 @@ x-reach channels --json
 x-reach doctor --json
 x-reach doctor --json --probe
 x-reach schema collection-result --json
+x-reach schema judge-result --json
 x-reach collect --operation search --input "OpenAI" --limit 5 --json
 x-reach search "AI agent" --limit 5 --quality-profile precision --json
 x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json

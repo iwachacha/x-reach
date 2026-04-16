@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://x-reach.local/schemas/judge-result.schema.json",
+  "title": "X Reach JudgeResult",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "record_type",
+    "generated_at",
+    "run_id",
+    "status",
+    "decision",
+    "reasons",
+    "judge",
+    "candidate",
+    "fallback"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "record_type": {
+      "const": "judge_result"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "judged",
+        "unjudged",
+        "error"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "keep",
+        "drop",
+        "unsure",
+        "fallback_keep"
+      ]
+    },
+    "category": {
+      "enum": [
+        "primary_evidence",
+        "secondary_evidence",
+        "chatter",
+        "promotion",
+        "off_topic",
+        null
+      ]
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "judge": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "mode",
+        "criteria",
+        "labels"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "llm",
+            "vlm",
+            "external"
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "intent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "rank",
+        "id",
+        "url",
+        "title",
+        "author",
+        "text_preview"
+      ],
+      "properties": {
+        "rank": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_item_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "canonical_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_preview": {
+          "type": "string"
+        },
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quality_score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "quality_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "coverage_topics": {
+          "type": "array"
+        },
+        "media_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "media_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "used",
+        "policy",
+        "reason"
+      ],
+      "properties": {
+        "used": {
+          "type": "boolean"
+        },
+        "policy": {
+          "enum": [
+            "keep_ranked",
+            "mark_unjudged"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

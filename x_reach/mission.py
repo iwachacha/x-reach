@@ -35,9 +35,19 @@ _QUALITY_ALIASES = {
 }
 _RAW_MODES = {"full", "minimal", "none"}
 _ITEM_TEXT_MODES = {"full", "snippet", "none"}
+_JUDGE_MODES = {"llm", "vlm", "external"}
+_JUDGE_FALLBACK_POLICIES = {"keep_ranked", "mark_unjudged"}
+_DEFAULT_JUDGE_LABELS = [
+    "primary_evidence",
+    "secondary_evidence",
+    "chatter",
+    "promotion",
+    "off_topic",
+]
 _DEFAULT_TARGET_POSTS = 100
 _MISSION_DIR = ".x-reach/missions"
-_JSONL_OUTPUTS = {"raw.jsonl", "canonical.jsonl", "ranked.jsonl"}
+_JUDGE_OUTPUT = "judge.jsonl"
+_JSONL_OUTPUTS = {"raw.jsonl", "canonical.jsonl", "ranked.jsonl", _JUDGE_OUTPUT}
 _SUMMARY_OUTPUT = "summary.md"
 _MANIFEST_OUTPUT = "mission-result.json"
 
@@ -72,6 +82,7 @@ def build_mission_plan_payload(
         "objective": normalized["objective"],
         "quality_profile": normalized["quality_profile"],
         "target_posts": normalized["target_posts"],
+        "judge": normalized["judge"],
         "query_count": len(plan["queries"]),
         "normalized_spec": normalized,
         "batch_plan": plan,
@@ -179,6 +190,9 @@ def run_mission_spec(
             coverage_batch_payload=coverage_batch_payload,
         )
         _write_ranked_jsonl(paths["ranked_jsonl"], curated_payload["ranked_candidates"])
+        judge_payload, judge_records = _build_judge_payload(curated_payload, normalized_spec)
+        if judge_payload.get("enabled"):
+            _write_judge_jsonl(paths["judge_jsonl"], judge_records)
         summary_text = _render_summary_markdown(
             plan_payload=plan_payload,
             batch_payload=batch_payload,
@@ -186,6 +200,7 @@ def run_mission_spec(
             canonical_summary=canonical_summary,
             curated_payload=curated_payload,
             coverage_payload=coverage_payload,
+            judge_payload=judge_payload,
             batch_exit_code=batch_exit_code,
         )
         paths["summary_md"].write_text(summary_text, encoding="utf-8", newline="\n")
@@ -196,6 +211,7 @@ def run_mission_spec(
             canonical_summary=canonical_summary,
             curated_payload=curated_payload,
             coverage_payload=coverage_payload,
+            judge_payload=judge_payload,
             batch_exit_code=batch_exit_code,
             outputs=paths,
             resume=resume,
@@ -293,6 +309,7 @@ def _normalize_spec(
     exclude = _mapping(raw_spec.get("exclude"))
     diversity = _mapping(raw_spec.get("diversity"))
     coverage = _mapping(raw_spec.get("coverage"))
+    judge = _normalize_judge(raw_spec.get("judge"), target_posts=target_posts)
     retention = _mapping(raw_spec.get("retention"))
     time_range = _mapping(raw_spec.get("time_range"))
     outputs = _normalize_outputs(raw_spec.get("outputs"))
@@ -345,6 +362,7 @@ def _normalize_spec(
             "require_topic_spread": _bool_or_default(diversity.get("require_topic_spread"), False),
         },
         "coverage": _normalize_coverage(coverage, target_posts=target_posts),
+        "judge": judge,
         "retention": {
             "raw_mode": raw_mode,
             "raw_max_bytes": raw_max_bytes,
@@ -407,6 +425,71 @@ def _normalize_coverage(raw_coverage: dict[str, Any], *, target_posts: int) -> d
             default_min_posts=min_posts_per_topic,
         ),
     }
+
+
+def _normalize_judge(raw_judge: Any, *, target_posts: int) -> dict[str, Any]:
+    judge = _mapping(raw_judge)
+    enabled = _bool_or_default(judge.get("enabled"), False)
+    mode = str(judge.get("mode") or "llm").strip().casefold().replace("-", "_")
+    if mode not in _JUDGE_MODES:
+        raise MissionSpecError(f"judge.mode must be one of: {', '.join(sorted(_JUDGE_MODES))}")
+    fallback_policy = str(judge.get("fallback_policy") or "keep_ranked").strip().casefold().replace("-", "_")
+    if fallback_policy not in _JUDGE_FALLBACK_POLICIES:
+        choices = ", ".join(sorted(_JUDGE_FALLBACK_POLICIES))
+        raise MissionSpecError(f"judge.fallback_policy must be one of: {choices}")
+    candidate_limit = (
+        _optional_positive_int(judge.get("candidate_limit") or judge.get("limit"), "judge.candidate_limit")
+        or min(target_posts, 20)
+    )
+    labels = _normalize_text_list(judge.get("labels") or judge.get("categories"))
+    return {
+        "enabled": enabled,
+        "mode": mode,
+        "provider": _optional_text(judge.get("provider")),
+        "model": _optional_text(judge.get("model")),
+        "candidate_limit": candidate_limit,
+        "intent": _optional_text(judge.get("intent") or judge.get("task")),
+        "criteria": _normalize_judge_criteria(judge.get("criteria")),
+        "labels": labels or list(_DEFAULT_JUDGE_LABELS),
+        "fallback_policy": fallback_policy,
+        "result_schema": "judge-result",
+    }
+
+
+def _normalize_judge_criteria(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise MissionSpecError("judge.criteria must be a list")
+    criteria: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value, start=1):
+        if isinstance(item, str):
+            description = item.strip()
+            if not description:
+                continue
+            criterion_id = _slugify(description) or f"criterion-{index}"
+            required = True
+        elif isinstance(item, dict):
+            description = _optional_text(item.get("description") or item.get("prompt") or item.get("label"))
+            criterion_id = _optional_text(item.get("id") or item.get("name"))
+            if description is None:
+                raise MissionSpecError(f"judge criterion {index} requires description, prompt, or label")
+            criterion_id = criterion_id or _slugify(description) or f"criterion-{index}"
+            required = _bool_or_default(item.get("required"), True)
+        else:
+            raise MissionSpecError(f"judge criterion {index} must be a string or object")
+        if criterion_id in seen:
+            continue
+        criteria.append(
+            {
+                "id": criterion_id,
+                "description": description,
+                "required": required,
+            }
+        )
+        seen.add(criterion_id)
+    return criteria
 
 
 def _normalize_coverage_topics(raw_topics: Any, *, default_min_posts: int) -> list[dict[str, Any]]:
@@ -587,6 +670,127 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
         "filter_drop_counts": {key: filter_drop_counts[key] for key in sorted(filter_drop_counts)},
         "ranked_count": len(ranked),
         "ranked_candidates": ranked,
+    }
+
+
+def _build_judge_payload(
+    curated_payload: dict[str, Any],
+    spec: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    judge = spec.get("judge") if isinstance(spec.get("judge"), dict) else {}
+    enabled = bool(judge.get("enabled"))
+    ranked = curated_payload.get("ranked_candidates") or []
+    candidate_limit = int(judge.get("candidate_limit") or min(len(ranked), 20))
+    selected = [candidate for candidate in ranked[:candidate_limit] if isinstance(candidate, dict)]
+    fallback_policy = str(judge.get("fallback_policy") or "keep_ranked")
+    base_payload = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": utc_timestamp(),
+        "enabled": enabled,
+        "mode": judge.get("mode") or "llm",
+        "provider": judge.get("provider"),
+        "model": judge.get("model"),
+        "candidate_limit": candidate_limit,
+        "candidate_count": len(selected),
+        "intent": judge.get("intent"),
+        "criteria": judge.get("criteria") or [],
+        "labels": judge.get("labels") or list(_DEFAULT_JUDGE_LABELS),
+        "result_schema": judge.get("result_schema") or "judge-result",
+    }
+    if not enabled:
+        return {
+            **base_payload,
+            "status": "disabled",
+            "fallback": {
+                "used": False,
+                "policy": fallback_policy,
+                "reason": None,
+            },
+            "records_written": 0,
+        }, []
+
+    reason = "judge_runner_not_configured"
+    records = [
+        _build_judge_fallback_record(
+            candidate,
+            spec=spec,
+            judge=judge,
+            reason=reason,
+        )
+        for candidate in selected
+    ]
+    return {
+        **base_payload,
+        "status": "not_run",
+        "fallback": {
+            "used": True,
+            "policy": fallback_policy,
+            "reason": reason,
+        },
+        "records_written": len(records),
+    }, records
+
+
+def _build_judge_fallback_record(
+    candidate: dict[str, Any],
+    *,
+    spec: dict[str, Any],
+    judge: dict[str, Any],
+    reason: str,
+) -> dict[str, Any]:
+    fallback_policy = str(judge.get("fallback_policy") or "keep_ranked")
+    decision = "fallback_keep" if fallback_policy == "keep_ranked" else "unsure"
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "record_type": "judge_result",
+        "generated_at": utc_timestamp(),
+        "run_id": spec.get("run_id"),
+        "status": "unjudged",
+        "decision": decision,
+        "category": None,
+        "confidence": None,
+        "reasons": [reason],
+        "judge": {
+            "mode": judge.get("mode") or "llm",
+            "provider": judge.get("provider"),
+            "model": judge.get("model"),
+            "intent": judge.get("intent"),
+            "criteria": judge.get("criteria") or [],
+            "labels": judge.get("labels") or list(_DEFAULT_JUDGE_LABELS),
+        },
+        "candidate": _candidate_judge_evidence(candidate),
+        "fallback": {
+            "used": True,
+            "policy": fallback_policy,
+            "reason": reason,
+        },
+    }
+
+
+def _candidate_judge_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
+    media = candidate.get("media_references") if isinstance(candidate.get("media_references"), list) else []
+    media_types = sorted(
+        {
+            str(media_item.get("media_type") or media_item.get("type"))
+            for media_item in media
+            if isinstance(media_item, dict) and (media_item.get("media_type") or media_item.get("type"))
+        }
+    )
+    text = str(candidate.get("text") or candidate.get("title") or "")
+    return {
+        "rank": candidate.get("rank"),
+        "id": candidate.get("id"),
+        "source_item_id": candidate.get("source_item_id"),
+        "url": candidate.get("url"),
+        "canonical_url": candidate.get("canonical_url"),
+        "title": candidate.get("title"),
+        "text_preview": text[:500],
+        "author": candidate.get("author"),
+        "quality_score": candidate.get("quality_score"),
+        "quality_reasons": candidate.get("quality_reasons") or [],
+        "coverage_topics": candidate.get("coverage_topics") or [],
+        "media_count": len(media),
+        "media_types": media_types,
     }
 
 
@@ -1073,6 +1277,14 @@ def _write_ranked_jsonl(path: Path, ranked_candidates: Sequence[dict[str, Any]])
             handle.write("\n")
 
 
+def _write_judge_jsonl(path: Path, judge_records: Sequence[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        for record in judge_records:
+            handle.write(json.dumps(record, ensure_ascii=False))
+            handle.write("\n")
+
+
 def _build_result_payload(
     *,
     plan_payload: dict[str, Any],
@@ -1081,6 +1293,7 @@ def _build_result_payload(
     canonical_summary: dict[str, Any],
     curated_payload: dict[str, Any],
     coverage_payload: dict[str, Any],
+    judge_payload: dict[str, Any],
     batch_exit_code: int,
     outputs: dict[str, Path],
     resume: bool,
@@ -1122,11 +1335,16 @@ def _build_result_payload(
             "coverage_gap_queries": coverage_payload.get("gap_query_count", 0),
             "coverage_initial_gaps": (coverage_payload.get("initial") or {}).get("gap_count", 0),
             "coverage_final_gaps": (coverage_payload.get("final") or {}).get("gap_count", 0),
+            "judge_enabled": judge_payload.get("enabled", False),
+            "judge_status": judge_payload.get("status"),
+            "judge_fallback_used": (judge_payload.get("fallback") or {}).get("used", False),
+            "judge_records": judge_payload.get("records_written", 0),
         },
         "batch": batch_payload,
         "merge": merge_payload,
         "canonical": canonical_summary,
         "coverage": coverage_payload,
+        "judge": judge_payload,
         "curation": {
             key: value
             for key, value in curated_payload.items()
@@ -1137,6 +1355,7 @@ def _build_result_payload(
             "raw_jsonl": str(outputs["raw_jsonl"]),
             "canonical_jsonl": str(outputs["canonical_jsonl"]),
             "ranked_jsonl": str(outputs["ranked_jsonl"]),
+            "judge_jsonl": str(outputs["judge_jsonl"]),
             "summary_md": str(outputs["summary_md"]),
             "manifest": str(outputs["manifest"]),
             "batch_plan": str(outputs["batch_plan"]),
@@ -1155,6 +1374,7 @@ def _render_summary_markdown(
     canonical_summary: dict[str, Any],
     curated_payload: dict[str, Any],
     coverage_payload: dict[str, Any],
+    judge_payload: dict[str, Any],
     batch_exit_code: int,
 ) -> str:
     batch_summary = batch_payload.get("summary") or {}
@@ -1200,6 +1420,18 @@ def _render_summary_markdown(
             )
     else:
         lines.append("- disabled")
+    lines.extend(["", "## Judge", ""])
+    lines.extend(
+        [
+            f"- Status: {judge_payload.get('status') or 'disabled'}",
+            f"- Candidate limit: {judge_payload.get('candidate_limit', 0)}",
+            f"- Records written: {judge_payload.get('records_written', 0)}",
+            f"- Fallback used: {'yes' if (judge_payload.get('fallback') or {}).get('used') else 'no'}",
+        ]
+    )
+    fallback_reason = (judge_payload.get("fallback") or {}).get("reason")
+    if fallback_reason:
+        lines.append(f"- Fallback reason: {fallback_reason}")
     lines.extend(["", "## Top Candidates", ""])
     for candidate in (curated_payload.get("ranked_candidates") or [])[:10]:
         title = candidate.get("title") or candidate.get("id") or "(untitled)"
@@ -1218,6 +1450,7 @@ def _mission_paths(output_dir: Path) -> dict[str, Path]:
         "raw_jsonl": output_dir / "raw.jsonl",
         "canonical_jsonl": output_dir / "canonical.jsonl",
         "ranked_jsonl": output_dir / "ranked.jsonl",
+        "judge_jsonl": output_dir / _JUDGE_OUTPUT,
         "summary_md": output_dir / "summary.md",
         "manifest": output_dir / _MANIFEST_OUTPUT,
         "batch_plan": output_dir / "mission.batch.json",

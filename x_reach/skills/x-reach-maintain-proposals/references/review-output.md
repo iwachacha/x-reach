@@ -10,6 +10,7 @@ Use this shape when reporting proposal decisions.
 - `boundary`: smallest safe implementation slice, or `none`
 - `touchpoints`: files, commands, schemas, docs, skills, or tests likely to change
 - `verification`: `none` | `targeted` | `broader`
+- `topic_generality`: `preserved` | `caller_declared_only` | `overfit_risk`
 
 ## Bundle Rule
 
@@ -30,5 +31,6 @@ When at least one proposal is `adopt_now` or `adopt_primitives_only`, hand off o
 - the explicit patch boundary
 - the likely touchpoints
 - the expected verification level
+- the topic-generality constraint that must remain true during implementation
 
 Do not hand off rejected or deferred ideas as "nice to have" extras.

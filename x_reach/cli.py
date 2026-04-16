@@ -42,6 +42,7 @@ from x_reach.results import CollectionResult, apply_item_text_mode, apply_raw_mo
 from x_reach.schemas import (
     SCHEMA_VERSION,
     collection_result_schema,
+    judge_result_schema,
     mission_spec_schema,
     utc_timestamp,
 )
@@ -597,7 +598,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_schema = sub.add_parser("schema", help="Print packaged JSON Schemas for stable contracts")
     p_schema.add_argument(
         "name",
-        choices=["collection-result", "mission-spec"],
+        choices=["collection-result", "mission-spec", "judge-result"],
         help="Schema name to print",
     )
     p_schema.add_argument("--json", action="store_true", help="Print the JSON Schema payload")
@@ -1872,6 +1873,8 @@ def _cmd_schema(args) -> int:
         payload = collection_result_schema()
     elif args.name == "mission-spec":
         payload = mission_spec_schema()
+    elif args.name == "judge-result":
+        payload = judge_result_schema()
     else:
         print(f"Unknown schema: {args.name}", file=sys.stderr)
         return 2
