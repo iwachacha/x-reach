@@ -42,8 +42,10 @@ Good behavior:
 
 - explicitly mark this as a broad run
 - include compact discovery settings such as `--raw-mode none|minimal` and `--item-text-mode snippet|none`
-- prefer `x-reach collect --json --save-dir .x-reach/shards`
+- prefer `x-reach collect --spec` when a single mission can own queries, filters, diversity, coverage, and outputs
+- otherwise use `x-reach collect --json --save-dir .x-reach/shards`
 - include `x-reach ledger merge --input .x-reach/shards --output .x-reach/evidence.jsonl --json`
 - include `x-reach ledger summarize --input .x-reach/evidence.jsonl --json`
-- include `x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --json`
+- include `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`
+- review `quality_score`, `quality_reasons`, and reason counts as shortlist diagnostics, not final judgment
 

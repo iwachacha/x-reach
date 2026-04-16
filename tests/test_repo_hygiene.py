@@ -1,6 +1,7 @@
 ﻿# -*- coding: utf-8 -*-
 """Tests that lock in repository cleanup decisions."""
 
+import ast
 from pathlib import Path
 
 
@@ -84,6 +85,78 @@ def test_caller_control_policy_is_documented_consistently():
     assert "does not choose scope" in texts["agent_prompt"]
 
 
+def test_agent_reach_python_modules_are_compatibility_shims():
+    repo_root = _repo_root()
+    shim_root = repo_root / "agent_reach"
+    alias_modules = {
+        Path("__init__.py"),
+        Path("client.py"),
+        Path("core.py"),
+    }
+
+    for path in shim_root.rglob("*.py"):
+        if "__pycache__" in path.parts:
+            continue
+        relative = path.relative_to(shim_root)
+        text = path.read_text(encoding="utf-8-sig")
+        tree = ast.parse(text)
+        runtime_defs = (
+            ast.FunctionDef,
+            ast.AsyncFunctionDef,
+            ast.ClassDef,
+        )
+        assert not any(isinstance(node, runtime_defs) for node in ast.walk(tree)), relative
+
+        if relative in alias_modules:
+            assert "from x_reach." in text or "from x_reach " in text, relative
+            assert "__all__" in text, relative
+            continue
+
+        expected_target = _expected_x_reach_wrapper_target(relative)
+        assert "sys.modules[__name__] = import_module(" in text, relative
+        assert expected_target in text, relative
+
+
+def test_agent_reach_schema_file_mirrors_x_reach_schema_file():
+    repo_root = _repo_root()
+
+    assert (
+        repo_root / "agent_reach" / "schema_files" / "collection_result.schema.json"
+    ).read_text(encoding="utf-8") == (
+        repo_root / "x_reach" / "schema_files" / "collection_result.schema.json"
+    ).read_text(encoding="utf-8")
+
+
+def test_public_guidance_keeps_x_reach_as_primary_python_surface():
+    repo_root = _repo_root()
+    roots = [
+        repo_root / "README.md",
+        repo_root / "docs",
+        repo_root / "examples",
+        repo_root / "x_reach" / "skills",
+    ]
+    texts: dict[str, str] = {}
+    for root in roots:
+        if root.is_file():
+            texts[str(root.relative_to(repo_root))] = root.read_text(encoding="utf-8")
+            continue
+        for path in root.rglob("*"):
+            if path.suffix.lower() not in {".md", ".py", ".ps1", ".yaml", ".yml", ".json"}:
+                continue
+            texts[str(path.relative_to(repo_root))] = path.read_text(encoding="utf-8")
+
+    combined = "\n".join(texts.values())
+    assert "from x_reach import XReachClient" in combined
+
+    offenders = [
+        name
+        for name, text in texts.items()
+        if name != "docs/compatibility-shim.md"
+        and ("from agent_reach" in text or "import agent_reach" in text)
+    ]
+    assert offenders == []
+
+
 def test_skill_suite_files_exist():
     repo_root = _repo_root()
     suite_root = repo_root / "x_reach" / "skills"
@@ -101,4 +174,11 @@ def test_skill_suite_files_exist():
         skill_dir = suite_root / skill_name
         assert (skill_dir / "SKILL.md").exists()
         assert (skill_dir / "agents" / "openai.yaml").exists()
+
+
+def _expected_x_reach_wrapper_target(relative: Path) -> str:
+    parts = list(relative.with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(["x_reach", *parts])
 

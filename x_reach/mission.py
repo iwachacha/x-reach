@@ -13,6 +13,12 @@ from x_reach._version import __version__
 from x_reach.batch import BatchPlanError, run_batch_plan, validate_batch_plan
 from x_reach.candidates import CandidatePlanError, build_candidates_payload
 from x_reach.client import XReachClient
+from x_reach.evidence_scoring import (
+    quality_reason_counts as count_quality_reasons,
+)
+from x_reach.evidence_scoring import (
+    score_candidate,
+)
 from x_reach.high_signal import QUALITY_PROFILES
 from x_reach.ledger import default_run_id, iter_ledger_records, merge_ledger_inputs
 from x_reach.schemas import SCHEMA_VERSION, utc_timestamp
@@ -401,16 +407,22 @@ def _normalize_coverage(raw_coverage: dict[str, Any], *, target_posts: int) -> d
     enabled_value = raw_coverage.get("enabled")
     if enabled_value is None:
         enabled_value = raw_coverage.get("gap_fill")
+    enabled = _bool_or_default(enabled_value, False)
     max_rounds = _optional_positive_int(raw_coverage.get("max_rounds"), "coverage.max_rounds") or 1
     if max_rounds != 1:
         raise MissionSpecError("coverage.max_rounds currently supports only 1")
     min_posts_per_topic = (
         _optional_positive_int(raw_coverage.get("min_posts_per_topic"), "coverage.min_posts_per_topic") or 1
     )
+    max_queries = _optional_nonnegative_int(raw_coverage.get("max_queries"), "coverage.max_queries")
+    if max_queries is None:
+        max_queries = 4
+    if enabled and max_queries < 1:
+        raise MissionSpecError("coverage.max_queries must be greater than or equal to 1 when coverage is enabled")
     return {
-        "enabled": _bool_or_default(enabled_value, False),
+        "enabled": enabled,
         "max_rounds": max_rounds,
-        "max_queries": _optional_positive_int(raw_coverage.get("max_queries"), "coverage.max_queries") or 4,
+        "max_queries": max_queries,
         "min_ranked_posts": (
             _optional_positive_int(raw_coverage.get("min_ranked_posts"), "coverage.min_ranked_posts")
             or target_posts
@@ -652,10 +664,20 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
     )
     ranked = _rank_candidates(filtered)
     ranked, diversity_drops = _apply_diversity_constraints(ranked, spec)
-    ranked = ranked[: int(spec["target_posts"])]
+    _annotate_coverage_topics(ranked, spec)
+    ranked, topic_spread = _apply_topic_spread_constraints(
+        ranked,
+        spec,
+        target_count=int(spec["target_posts"]),
+    )
     for rank, candidate in enumerate(ranked, start=1):
         candidate["rank"] = rank
-    _annotate_coverage_topics(ranked, spec)
+    quality_reason_counts = count_quality_reasons(ranked)
+    diagnostics = _build_curation_diagnostics(
+        ranked,
+        topic_spread=topic_spread,
+        quality_reason_counts=quality_reason_counts,
+    )
     filter_drop_counts = dict(candidate_payload["summary"].get("filter_drop_counts") or {})
     for reason, count in keyword_drops.items():
         filter_drop_counts[reason] = filter_drop_counts.get(reason, 0) + count
@@ -668,6 +690,9 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
         "target_posts": spec["target_posts"],
         "candidate_summary": candidate_payload["summary"],
         "filter_drop_counts": {key: filter_drop_counts[key] for key in sorted(filter_drop_counts)},
+        "quality_reason_counts": quality_reason_counts,
+        "topic_spread": topic_spread,
+        "diagnostics": diagnostics,
         "ranked_count": len(ranked),
         "ranked_candidates": ranked,
     }
@@ -826,19 +851,25 @@ def _coverage_analysis(
     target_ranked_posts = int(coverage.get("min_ranked_posts") or spec.get("target_posts") or 0)
     target_gap = max(target_ranked_posts - ranked_count, 0)
     topic_gap_count = sum(1 for report in topic_reports if int(report.get("gap") or 0) > 0)
-    queryable_topic_gap_count = _mark_queryable_coverage_gaps(
+    gap_diagnostics = _mark_queryable_coverage_gaps(
         topic_reports,
         spec,
         existing_queries=existing_queries or [],
     )
+    queryable_topic_gap_count = int(gap_diagnostics.get("queryable_topic_gap_count") or 0)
     return {
         "enabled": bool(coverage.get("enabled")),
         "ranked_count": ranked_count,
         "target_ranked_posts": target_ranked_posts,
         "target_gap": target_gap,
+        "target_gap_report_only": target_gap > 0,
         "topic_gap_count": topic_gap_count,
+        "queryable_topic_gap_count": queryable_topic_gap_count,
+        "unqueryable_topic_gap_count": max(topic_gap_count - queryable_topic_gap_count, 0),
+        "max_queries": int(coverage.get("max_queries") or 0),
         "topic_reports": topic_reports,
         "gap_count": queryable_topic_gap_count,
+        "gap_diagnostics": gap_diagnostics,
     }
 
 
@@ -891,16 +922,27 @@ def _mark_queryable_coverage_gaps(
     spec: dict[str, Any],
     *,
     existing_queries: Sequence[dict[str, Any]],
-) -> int:
+) -> dict[str, Any]:
     coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
     remaining = int(coverage.get("max_queries") or 0)
+    max_queries = remaining
     existing_keys = _coverage_existing_query_keys(existing_queries)
     queryable_count = 0
+    planned_query_count = 0
+    blocked_reasons: dict[str, int] = {}
     for report in topic_reports:
-        if int(report.get("gap") or 0) <= 0 or remaining <= 0:
+        if int(report.get("gap") or 0) <= 0:
+            continue
+        if remaining <= 0:
+            reason = "query_budget_exhausted"
+            report["blocked_reason"] = reason
+            blocked_reasons[reason] = blocked_reasons.get(reason, 0) + 1
             continue
         topic = _coverage_topic_by_id(spec, report.get("topic_id"))
         if topic is None:
+            reason = "topic_not_declared"
+            report["blocked_reason"] = reason
+            blocked_reasons[reason] = blocked_reasons.get(reason, 0) + 1
             continue
         queries = _coverage_followup_queries(
             spec,
@@ -910,11 +952,22 @@ def _mark_queryable_coverage_gaps(
             max_count=remaining,
         )
         if not queries:
+            reason = "no_new_followup_query"
+            report["blocked_reason"] = reason
+            blocked_reasons[reason] = blocked_reasons.get(reason, 0) + 1
             continue
         report["queryable"] = True
+        report["planned_query_count"] = len(queries)
         queryable_count += 1
+        planned_query_count += len(queries)
         remaining -= len(queries)
-    return queryable_count
+    return {
+        "max_queries": max_queries,
+        "planned_query_count": planned_query_count,
+        "remaining_query_budget": max(remaining, 0),
+        "queryable_topic_gap_count": queryable_count,
+        "blocked_reasons": {key: blocked_reasons[key] for key in sorted(blocked_reasons)},
+    }
 
 
 def _coverage_followup_queries(
@@ -1001,6 +1054,10 @@ def _build_coverage_payload(
     coverage_batch_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
     planned_queries = (coverage_plan or {}).get("queries") or []
+    max_queries = int(initial.get("max_queries") or 0)
+    remaining_queries = max(max_queries - len(planned_queries), 0)
+    final_topic_gap_count = int(final.get("topic_gap_count") or 0)
+    target_gap = int(final.get("target_gap") or 0)
     return {
         "enabled": bool(initial.get("enabled")),
         "initial": initial,
@@ -1009,6 +1066,17 @@ def _build_coverage_payload(
         "gap_query_count": len(planned_queries),
         "executed": coverage_batch_payload is not None,
         "batch_summary": (coverage_batch_payload or {}).get("summary") or {},
+        "diagnostics": {
+            "max_queries": max_queries,
+            "used_queries": len(planned_queries),
+            "remaining_queries": remaining_queries,
+            "query_budget_exhausted": bool(
+                initial.get("enabled") and max_queries > 0 and remaining_queries == 0 and final_topic_gap_count > 0
+            ),
+            "gap_fill_disabled": not bool(initial.get("enabled")),
+            "target_gap_report_only": target_gap > 0,
+            "final_topic_gap_count": final_topic_gap_count,
+        },
     }
 
 
@@ -1121,7 +1189,7 @@ def _rank_candidates(candidates: Sequence[dict[str, Any]]) -> list[dict[str, Any
     ranked: list[dict[str, Any]] = []
     for candidate in candidates:
         candidate_copy = dict(candidate)
-        score, reasons = _candidate_score(candidate_copy)
+        score, reasons = score_candidate(candidate_copy)
         candidate_copy["quality_score"] = score
         candidate_copy["quality_reasons"] = reasons
         ranked.append(candidate_copy)
@@ -1134,63 +1202,6 @@ def _rank_candidates(candidates: Sequence[dict[str, Any]]) -> list[dict[str, Any
         )
     )
     return ranked
-
-
-def _candidate_score(candidate: dict[str, Any]) -> tuple[float, list[str]]:
-    score = 0.0
-    reasons: list[str] = []
-    seen_in_count = int(candidate.get("seen_in_count") or 0)
-    if seen_in_count > 1:
-        score += min(seen_in_count, 5) * 6.0
-        reasons.append("multi_seen")
-
-    raw_extras = candidate.get("extras")
-    extras = raw_extras if isinstance(raw_extras, dict) else {}
-    kind = str(extras.get("timeline_item_kind") or "").lower()
-    if kind == "original":
-        score += 8.0
-        reasons.append("original")
-    elif kind == "quote":
-        score += 3.0
-        reasons.append("quote")
-    elif kind == "reply":
-        score -= 4.0
-        reasons.append("reply")
-    elif kind == "retweet":
-        score -= 8.0
-        reasons.append("retweet")
-
-    engagement = candidate.get("engagement") if isinstance(candidate.get("engagement"), dict) else {}
-    engagement_score = 0.0
-    for field, weight in (
-        ("likes", 1.0),
-        ("retweets", 2.0),
-        ("reposts", 2.0),
-        ("quotes", 1.5),
-        ("replies", 1.0),
-        ("views", 0.2),
-    ):
-        value = _number_or_zero(engagement.get(field))
-        if value > 0:
-            engagement_score += math.log10(value + 1) * weight
-    if engagement_score:
-        score += engagement_score
-        reasons.append("engagement")
-
-    text = str(candidate.get("text") or candidate.get("title") or "")
-    if len(text) >= 80:
-        score += 4.0
-        reasons.append("substantial_text")
-    elif len(text) >= 35:
-        score += 2.0
-        reasons.append("some_text")
-    if candidate.get("media_references"):
-        score += 1.0
-        reasons.append("media")
-    if candidate.get("url"):
-        score += 1.0
-        reasons.append("has_url")
-    return round(score, 3), reasons
 
 
 def _apply_diversity_constraints(
@@ -1231,6 +1242,238 @@ def _apply_diversity_constraints(
         if url_key:
             url_counts[url_key] = url_counts.get(url_key, 0) + 1
     return kept, dropped
+
+
+def _apply_topic_spread_constraints(
+    candidates: Sequence[dict[str, Any]],
+    spec: dict[str, Any],
+    *,
+    target_count: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    original_selection = list(candidates[:target_count])
+    requested = bool((spec.get("diversity") or {}).get("require_topic_spread"))
+    topics = _coverage_topics(spec)
+    base_diagnostic = {
+        "requested": requested,
+        "target_posts": target_count,
+        "declared_topic_count": len(topics),
+        "available_topic_count": 0,
+        "selected_topic_count": 0,
+        "selected_topic_ids": [],
+        "unavailable_topic_ids": [str(topic.get("topic_id")) for topic in topics],
+        "unselected_available_topic_ids": [],
+        "promoted_count": 0,
+        "reordered": False,
+    }
+
+    if not requested:
+        return original_selection, {**base_diagnostic, "status": "not_requested"}
+    if target_count <= 0:
+        return [], {**base_diagnostic, "status": "skipped_no_target"}
+    if not topics:
+        return original_selection, {**base_diagnostic, "status": "skipped_no_topics"}
+    if not candidates:
+        return original_selection, {**base_diagnostic, "status": "skipped_no_candidates"}
+
+    topic_ids = [str(topic.get("topic_id")) for topic in topics]
+    available_topic_ids = _available_topic_ids(candidates, topic_ids)
+    if not available_topic_ids:
+        return original_selection, {
+            **base_diagnostic,
+            "status": "skipped_no_matches",
+        }
+
+    selected: list[dict[str, Any]] = []
+    selected_keys: set[str] = set()
+    selected_topic_ids: set[str] = set()
+
+    for topic_id in topic_ids:
+        if len(selected) >= target_count:
+            break
+        if topic_id in selected_topic_ids:
+            continue
+        candidate = _first_candidate_for_topic(candidates, topic_id, selected_keys)
+        if candidate is None:
+            continue
+        selected.append(candidate)
+        selected_keys.add(_candidate_identity_key(candidate))
+        selected_topic_ids.update(_candidate_topic_ids(candidate))
+
+    for candidate in candidates:
+        if len(selected) >= target_count:
+            break
+        key = _candidate_identity_key(candidate)
+        if key in selected_keys:
+            continue
+        selected.append(candidate)
+        selected_keys.add(key)
+        selected_topic_ids.update(_candidate_topic_ids(candidate))
+
+    selected = selected[:target_count]
+    selected_topic_ids = _available_topic_ids(selected, topic_ids)
+    original_keys = [_candidate_identity_key(candidate) for candidate in original_selection]
+    selected_keys_ordered = [_candidate_identity_key(candidate) for candidate in selected]
+    original_key_set = set(original_keys)
+    promoted_count = sum(1 for key in selected_keys_ordered if key not in original_key_set)
+    reordered = selected_keys_ordered != original_keys[: len(selected_keys_ordered)]
+    unselected_available_topic_ids = [
+        topic_id for topic_id in topic_ids if topic_id in available_topic_ids and topic_id not in selected_topic_ids
+    ]
+    unavailable_topic_ids = [topic_id for topic_id in topic_ids if topic_id not in available_topic_ids]
+    desired_topic_count = min(len(available_topic_ids), target_count)
+
+    if not reordered and len(selected_topic_ids) >= desired_topic_count:
+        status = "already_satisfied"
+    elif len(selected_topic_ids) >= desired_topic_count:
+        status = "applied"
+    else:
+        status = "applied_partial"
+
+    return selected, {
+        **base_diagnostic,
+        "status": status,
+        "available_topic_count": len(available_topic_ids),
+        "selected_topic_count": len(selected_topic_ids),
+        "selected_topic_ids": [topic_id for topic_id in topic_ids if topic_id in selected_topic_ids],
+        "unavailable_topic_ids": unavailable_topic_ids,
+        "unselected_available_topic_ids": unselected_available_topic_ids,
+        "promoted_count": promoted_count,
+        "reordered": reordered,
+    }
+
+
+def _coverage_topics(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
+    return [topic for topic in coverage.get("topics") or [] if isinstance(topic, dict)]
+
+
+def _first_candidate_for_topic(
+    candidates: Sequence[dict[str, Any]],
+    topic_id: str,
+    selected_keys: set[str],
+) -> dict[str, Any] | None:
+    for candidate in candidates:
+        key = _candidate_identity_key(candidate)
+        if key in selected_keys:
+            continue
+        if topic_id in _candidate_topic_ids(candidate):
+            return candidate
+    return None
+
+
+def _candidate_topic_ids(candidate: dict[str, Any]) -> set[str]:
+    raw_topics = candidate.get("coverage_topics")
+    if not isinstance(raw_topics, list):
+        return set()
+    return {
+        str(topic.get("topic_id"))
+        for topic in raw_topics
+        if isinstance(topic, dict) and topic.get("topic_id") is not None
+    }
+
+
+def _available_topic_ids(candidates: Sequence[dict[str, Any]], topic_ids: Sequence[str]) -> set[str]:
+    declared = set(topic_ids)
+    available: set[str] = set()
+    for candidate in candidates:
+        available.update(topic_id for topic_id in _candidate_topic_ids(candidate) if topic_id in declared)
+    return available
+
+
+def _candidate_identity_key(candidate: dict[str, Any]) -> str:
+    for key in ("id", "source_item_id", "canonical_url", "url"):
+        value = candidate.get(key)
+        if value is not None and str(value).strip():
+            return f"{key}:{value}"
+    return f"object:{id(candidate)}"
+
+
+def _build_curation_diagnostics(
+    candidates: Sequence[dict[str, Any]],
+    *,
+    topic_spread: dict[str, Any],
+    quality_reason_counts: dict[str, int],
+) -> dict[str, Any]:
+    return {
+        "quality_reason_counts": quality_reason_counts,
+        "topic_spread": topic_spread,
+        "concentration": {
+            "authors": _concentration_summary(candidates, _candidate_author_label),
+            "threads": _concentration_summary(
+                candidates,
+                lambda candidate: _candidate_identifier(candidate, "conversation_id"),
+            ),
+            "urls": _concentration_summary(
+                candidates,
+                lambda candidate: _text_key(candidate.get("canonical_url") or candidate.get("url")),
+            ),
+        },
+        "time_spread": _time_spread_summary(candidates),
+    }
+
+
+def _concentration_summary(
+    candidates: Sequence[dict[str, Any]],
+    key_fn: Callable[[dict[str, Any]], str | None],
+) -> dict[str, Any]:
+    counts: dict[str, int] = {}
+    missing = 0
+    for candidate in candidates:
+        key = key_fn(candidate)
+        if not key:
+            missing += 1
+            continue
+        counts[key] = counts.get(key, 0) + 1
+    top = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+    return {
+        "unique": len(counts),
+        "missing": missing,
+        "top": [{"key": key, "count": count} for key, count in top],
+    }
+
+
+def _candidate_author_label(candidate: dict[str, Any]) -> str | None:
+    return _text_key(
+        _candidate_identifier(candidate, "author_handle")
+        or candidate.get("author")
+        or _candidate_identifier(candidate, "author_name")
+    )
+
+
+def _time_spread_summary(candidates: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    timestamps = sorted(str(candidate.get("published_at")) for candidate in candidates if candidate.get("published_at"))
+    buckets: dict[str, int] = {}
+    for timestamp in timestamps:
+        bucket = timestamp[:10] if len(timestamp) >= 10 else timestamp
+        buckets[bucket] = buckets.get(bucket, 0) + 1
+    return {
+        "count": len(timestamps),
+        "earliest": timestamps[0] if timestamps else None,
+        "latest": timestamps[-1] if timestamps else None,
+        "date_counts": {key: buckets[key] for key in sorted(buckets)},
+    }
+
+
+def _query_yield(batch_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for query in batch_payload.get("queries") or []:
+        if not isinstance(query, dict):
+            continue
+        rows.append(
+            {
+                "query_id": query.get("query_id"),
+                "input": query.get("input"),
+                "channel": query.get("channel"),
+                "operation": query.get("operation"),
+                "source_role": query.get("source_role"),
+                "status": query.get("status"),
+                "ok": query.get("ok"),
+                "count": query.get("count", 0),
+                "url_count": len(query.get("urls") or []),
+                "error_code": query.get("error_code"),
+            }
+        )
+    return rows
 
 
 def _write_canonical_jsonl(raw_jsonl: Path, output_path: Path) -> dict[str, Any]:
@@ -1331,10 +1574,17 @@ def _build_result_payload(
             "filtered_candidates": candidate_summary.get("filtered_candidate_count", 0),
             "ranked_candidates": curated_payload.get("ranked_count", 0),
             "filter_drop_counts": curated_payload.get("filter_drop_counts", {}),
+            "quality_reason_counts": curated_payload.get("quality_reason_counts", {}),
+            "topic_spread_status": (curated_payload.get("topic_spread") or {}).get("status"),
             "coverage_enabled": coverage_payload.get("enabled", False),
             "coverage_gap_queries": coverage_payload.get("gap_query_count", 0),
             "coverage_initial_gaps": (coverage_payload.get("initial") or {}).get("gap_count", 0),
             "coverage_final_gaps": (coverage_payload.get("final") or {}).get("gap_count", 0),
+            "coverage_target_gap": (coverage_payload.get("final") or {}).get("target_gap", 0),
+            "coverage_query_budget_exhausted": (coverage_payload.get("diagnostics") or {}).get(
+                "query_budget_exhausted",
+                False,
+            ),
             "judge_enabled": judge_payload.get("enabled", False),
             "judge_status": judge_payload.get("status"),
             "judge_fallback_used": (judge_payload.get("fallback") or {}).get("used", False),
@@ -1345,6 +1595,10 @@ def _build_result_payload(
         "canonical": canonical_summary,
         "coverage": coverage_payload,
         "judge": judge_payload,
+        "diagnostics": {
+            "query_yield": _query_yield(batch_payload),
+            "curation": curated_payload.get("diagnostics", {}),
+        },
         "curation": {
             key: value
             for key, value in curated_payload.items()
@@ -1403,15 +1657,36 @@ def _render_summary_markdown(
         lines.extend(f"- {reason}: {count}" for reason, count in filter_drop_counts.items())
     else:
         lines.append("- none")
+    lines.extend(["", "## Quality Reasons", ""])
+    quality_reason_counts = curated_payload.get("quality_reason_counts") or {}
+    if quality_reason_counts:
+        lines.extend(f"- {reason}: {count}" for reason, count in quality_reason_counts.items())
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Topic Spread", ""])
+    topic_spread = curated_payload.get("topic_spread") or {}
+    lines.extend(
+        [
+            f"- Requested: {'yes' if topic_spread.get('requested') else 'no'}",
+            f"- Status: {topic_spread.get('status') or 'unknown'}",
+            f"- Declared topics: {topic_spread.get('declared_topic_count', 0)}",
+            f"- Available topics: {topic_spread.get('available_topic_count', 0)}",
+            f"- Selected topics: {topic_spread.get('selected_topic_count', 0)}",
+            f"- Promoted candidates: {topic_spread.get('promoted_count', 0)}",
+        ]
+    )
     lines.extend(["", "## Coverage", ""])
     if coverage_payload.get("enabled"):
         initial = coverage_payload.get("initial") or {}
         final = coverage_payload.get("final") or {}
+        coverage_diagnostics = coverage_payload.get("diagnostics") or {}
         lines.extend(
             [
                 f"- Initial gaps: {initial.get('gap_count', 0)}",
                 f"- Final gaps: {final.get('gap_count', 0)}",
                 f"- Gap queries: {coverage_payload.get('gap_query_count', 0)}",
+                f"- Target gap: {final.get('target_gap', 0)}",
+                f"- Query budget exhausted: {'yes' if coverage_diagnostics.get('query_budget_exhausted') else 'no'}",
             ]
         )
         for report in final.get("topic_reports") or []:
@@ -1587,17 +1862,6 @@ def _slugify(value: Any) -> str:
     text = str(value or "").strip().lower()
     text = re.sub(r"[^a-z0-9._-]+", "-", text)
     return text.strip("._-")[:80]
-
-
-def _number_or_zero(value: Any) -> float:
-    if isinstance(value, bool) or value is None:
-        return 0.0
-    if isinstance(value, (int, float)):
-        return float(value)
-    try:
-        return float(str(value).replace(",", ""))
-    except ValueError:
-        return 0.0
 
 
 def _text_key(value: Any) -> str | None:

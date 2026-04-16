@@ -12,6 +12,16 @@ def _skill_dir(name: str) -> Path:
     return _repo_root() / "x_reach" / "skills" / name
 
 
+def test_bundled_skill_frontmatter_is_validator_friendly():
+    for skill_dir in (_repo_root() / "x_reach" / "skills").iterdir():
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        data = skill_md.read_bytes()
+        assert not data.startswith(b"\xef\xbb\xbf"), skill_md
+        assert data.startswith(b"---"), skill_md
+
+
 def test_public_x_reach_skills_require_explicit_opt_in():
     base_skill = (_skill_dir("x-reach") / "SKILL.md").read_text(encoding="utf-8")
     base_metadata = (_skill_dir("x-reach") / "agents" / "openai.yaml").read_text(encoding="utf-8")
@@ -32,6 +42,9 @@ def test_orchestrate_references_cover_collection_start_rules():
     flow = (_skill_dir("x-reach-orchestrate") / "references" / "orchestration-flow.md").read_text(
         encoding="utf-8"
     )
+    mission_flow = (_skill_dir("x-reach-orchestrate") / "references" / "mission-spec-flow.md").read_text(
+        encoding="utf-8"
+    )
     routing = (_skill_dir("x-reach-orchestrate") / "references" / "routing-guides.md").read_text(
         encoding="utf-8"
     )
@@ -40,21 +53,33 @@ def test_orchestrate_references_cover_collection_start_rules():
     )
 
     assert "Start actual X Reach checks and collection in-session." in skill
+    assert "mission-spec-flow.md" in skill
     assert "run `x-reach channels --json`" in flow
     assert "run `x-reach doctor --json`" in flow
     assert "x-reach collect --json" in flow
+    assert "`x-reach collect --spec mission.json" in mission_flow
+    assert "`quality_score`" in mission_flow
+    assert "`coverage.enabled=false`" in mission_flow
+    assert "`max_queries=0`" in mission_flow
     assert "`twitter`" in routing
-    assert "plan candidates" in examples
+    assert "--by post" in routing
+    assert "quality_reasons" in examples
 
 
 def test_budgeted_research_skill_has_budget_examples():
     skill = (_skill_dir("x-reach-budgeted-research") / "SKILL.md").read_text(encoding="utf-8")
+    defaults = (_skill_dir("x-reach-budgeted-research") / "references" / "defaults.md").read_text(
+        encoding="utf-8"
+    )
     examples = (_skill_dir("x-reach-budgeted-research") / "references" / "examples.md").read_text(
         encoding="utf-8"
     )
 
     assert "bounded execution plan" in skill
     assert "Twitter/X" in examples
+    assert "--by post" in defaults
+    assert "quality_reasons" in defaults
+    assert "coverage.enabled=false" in defaults
 
 
 def test_skill_suite_supports_collection_first_handoffs():
@@ -73,6 +98,8 @@ def test_skill_suite_supports_collection_first_handoffs():
 
     assert "Collection-only or raw-evidence handoff" in base_skill
     assert "collect --spec" in base_skill
+    assert "quality_reasons" in base_skill
+    assert "--by post" in base_skill
     assert "do not synthesize unless the user asked for it" in base_metadata
     assert "Collection-only or evidence-pack handoff" in orchestrate_skill
     assert "collect --spec" in orchestrate_skill

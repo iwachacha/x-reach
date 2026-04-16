@@ -1,4 +1,4 @@
-﻿---
+---
 name: x-reach-budgeted-research
 description: Shape broad or provenance-heavy research asks into a bounded X Reach execution plan with explicit artifact, discovery, candidate, and deep-read budgets. Use only when the user explicitly asks to use X Reach or names this skill, and the task is broad enough that token or artifact size needs to be controlled before collection begins.
 ---

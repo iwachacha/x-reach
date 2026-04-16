@@ -27,7 +27,7 @@ Always return the plan in this exact order:
 - `発見フェーズ`: The initial discovery shape, including channels, number of discovery queries, and per-query limits.
 - `成果物サイズ予算`: The artifact-retention policy for discovery outputs, including `raw_mode`, `item_text_mode`, and snippet size expectations.
 - `証拠の残し方`: Whether to use `collect --spec` outputs, `--save`, or `--save-dir`, plus merge, summarize, validate, or query steps when they are needed.
-- `候補選別ゲート`: How the run shrinks collected items before deep reads, including whether `plan candidates` is used and the candidate limit.
+- `候補選別ゲート`: How the run shrinks collected items before deep reads, including whether `plan candidates` is used, the candidate limit, and how `quality_score` / `quality_reasons` are inspected without turning them into final judgment.
 - `深掘り予算`: The maximum number of URLs, posts, repos, or documents to deep-read in one round.
 - `最終まとめ境界`: What the final synthesis may summarize and what it must leave out to avoid summarizing every collected item.
 - `停止条件`: When to stop discovery or defer more collection.

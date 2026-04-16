@@ -5,7 +5,7 @@
 - discovery phase: start with 2-3 Twitter/X searches and keep each query at `--limit 5` to `--limit 8`
 - artifact sizing: use `--raw-mode none`, `--item-text-mode snippet`, and `--item-text-max-chars 240`
 - persistence: prefer `--save-dir .x-reach/shards`, then merge before downstream ledger work
-- candidates: use `plan candidates --by normalized_url --limit 20 --json`
+- candidates: use `plan candidates --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`, then review `quality_reasons` before any deep reads
 - deep reads: keep the shortlist small and explicit
 
 ## Example 2: Small Comparison

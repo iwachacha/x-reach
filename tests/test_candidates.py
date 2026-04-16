@@ -138,6 +138,59 @@ def test_candidates_limit_keeps_first_seen_order(tmp_path):
     assert [candidate["title"] for candidate in payload["candidates"]] == ["One", "Two"]
 
 
+def test_candidates_expose_quality_scores_without_reordering(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    thin = build_item(
+        item_id="thin",
+        kind="post",
+        title="OpenAI Codex launches:",
+        url="https://x.com/example/status/1",
+        text="OpenAI Codex launches:",
+        author="example",
+        published_at=None,
+        source="twitter",
+        extras={"timeline_item_kind": "quote"},
+        engagement={"likes": 500_000, "retweets": 20_000, "views": 2_000_000},
+    )
+    detailed = build_item(
+        item_id="detail",
+        kind="post",
+        title="OpenAI Codex rollout notes",
+        url="https://x.com/example/status/2",
+        text=(
+            "OpenAI Codex eval on 2026-04-10 reduced review time by 37% for "
+            "12 maintainers after the v2.1 rollout."
+        ),
+        author="example",
+        published_at=None,
+        source="twitter",
+        extras={"timeline_item_kind": "original"},
+        engagement={"likes": 3},
+    )
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[thin, detailed],
+        input_value="OpenAI Codex",
+        meta={"query_tokens": ["openai", "codex"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(path, by="post", limit=20)
+
+    assert [candidate["id"] for candidate in payload["candidates"]] == ["thin", "detail"]
+    by_id = {candidate["id"]: candidate for candidate in payload["candidates"]}
+    assert by_id["detail"]["quality_score"] > by_id["thin"]["quality_score"]
+    assert "engagement_capped" in by_id["thin"]["quality_reasons"]
+    assert "thin_quote" in by_id["thin"]["quality_reasons"]
+    assert "concrete_detail" in by_id["detail"]["quality_reasons"]
+    assert "strong_query_match" in by_id["detail"]["quality_reasons"]
+    assert payload["summary"]["quality_reason_counts"]["strong_query_match"] == 2
+
+    projected = build_candidates_payload(path, by="post", limit=20, fields="id,quality_score,quality_reasons")
+    assert sorted(projected["candidates"][0]) == ["id", "quality_reasons", "quality_score"]
+
+
 def test_candidates_invalid_jsonl_reports_error(tmp_path):
     path = tmp_path / "evidence.jsonl"
     path.write_text("{broken\n", encoding="utf-8")

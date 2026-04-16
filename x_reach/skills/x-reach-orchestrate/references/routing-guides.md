@@ -20,8 +20,10 @@ Choose routing hints that match the task. Do not hard-code unavailable channels;
 - Only describe evidence-ledger fan-out when the user explicitly opts into broad or provenance-heavy research.
 - Start with 2-4 small discovery queries.
 - Set an explicit artifact budget before running those queries.
+- Prefer a mission spec when coverage topics, topic spread, or resumable artifact layers matter.
 - Prefer `--raw-mode minimal|none` and `--item-text-mode snippet|none` for discovery artifacts.
 - Prefer `--save-dir .x-reach/shards` when the run needs multiple collection commands.
 - Merge shards before `ledger summarize`, `ledger query`, or `plan candidates`.
+- Use `plan candidates --by post --max-per-author 2 --prefer-originals --drop-noise --json` for X post review, and inspect `quality_reasons` rather than treating engagement as quality.
 - Keep the deep-read budget small, and summarize shortlisted sources only when the deliverable calls for synthesis.
 

@@ -1,4 +1,4 @@
-﻿---
+---
 name: x-reach-maintain-release
 description: Safely implement approved X Reach maintainer changes. Use when Codex should apply only already-approved proposal slices, keep public surfaces and packaged skills consistent, run the right validation, then commit, push, and reinstall the latest exact ref.
 ---

@@ -84,6 +84,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - `batch` and `scout` are explicit opt-in helpers. They are not the default route for everyday collection.
 - Inspect `x-reach channels --json` `operation_contracts` before choosing `since` or `until`.
 - `x-reach plan candidates` keeps its default `--limit 20`; raise it only when the caller explicitly wants a wider candidate review set.
+- `x-reach plan candidates --json` includes deterministic `quality_score` and `quality_reasons` for review, but it does not make the caller's final selection.
 - For broad multi-query discovery, `x-reach plan candidates --min-seen-in 2` is an optional way to keep candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Saved evidence stays quiet by default; add `--warn-missing-evidence-metadata` only when provenance completeness matters for CI or downstream workflows.
 - For large-scale research, use a two-stage flow: compact discovery first, then `plan candidates` with `--max-per-author 2 --prefer-originals --drop-noise` before any deeper reads.

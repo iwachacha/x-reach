@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
+from x_reach.evidence_scoring import quality_reason_counts, score_candidate
 from x_reach.high_signal import (
     analyze_item_quality,
     extract_query_tokens,
@@ -40,6 +41,8 @@ ALLOWED_CANDIDATE_FIELDS = {
     "query_id",
     "source_role",
     "seen_in_count",
+    "quality_score",
+    "quality_reasons",
     "extras",
 }
 
@@ -171,7 +174,9 @@ def build_candidates_payload(
         require_query_match=require_query_match,
         min_seen_in=min_seen_in,
     )
-    returned = filtered_candidates[:limit]
+    scored_candidates = _score_candidates(filtered_candidates)
+    returned = scored_candidates[:limit]
+    returned_quality_reason_counts = quality_reason_counts(returned)
     max_seen_in = max((int(candidate.get("seen_in_count") or 0) for candidate in candidates), default=0)
     output_candidates = [] if summary_only else [_filter_candidate(candidate, selected_fields) for candidate in returned]
     return {
@@ -201,6 +206,7 @@ def build_candidates_payload(
             "returned": len(returned),
             "filtered_candidate_count": len(filtered_candidates),
             "filter_drop_counts": filter_drop_counts,
+            "quality_reason_counts": returned_quality_reason_counts,
             "channel_counts": _count_summary_keys(channel_keys),
             "source_role_counts": _count_summary_keys(source_role_keys),
             "intent_counts": _count_summary_keys(intent_keys),
@@ -228,10 +234,14 @@ def render_candidates_text(payload: dict[str, Any]) -> str:
         lines.append(f"Channels: {_render_count_summary(summary['channel_counts'])}")
     if summary.get("source_role_counts"):
         lines.append(f"Source roles: {_render_count_summary(summary['source_role_counts'])}")
+    if summary.get("quality_reason_counts"):
+        lines.append(f"Quality reasons: {_render_count_summary(summary['quality_reason_counts'])}")
     for candidate in payload["candidates"]:
         title = candidate.get("title") or candidate.get("id") or "(untitled)"
         url = candidate.get("url") or ""
-        lines.append(f"  - {title} {url}".rstrip())
+        score = candidate.get("quality_score")
+        score_label = f" score={score}" if isinstance(score, (int, float)) else ""
+        lines.append(f"  - {title}{score_label} {url}".rstrip())
     return "\n".join(lines)
 
 
@@ -453,6 +463,17 @@ def _copy_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
         else:
             copy[key] = value
     return copy
+
+
+def _score_candidates(candidates: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    scored: list[dict[str, Any]] = []
+    for candidate in candidates:
+        candidate_copy = _copy_candidate(candidate)
+        score, reasons = score_candidate(candidate_copy)
+        candidate_copy["quality_score"] = score
+        candidate_copy["quality_reasons"] = reasons
+        scored.append(candidate_copy)
+    return scored
 
 
 def _normalize_fields(fields: Sequence[str] | str | None) -> tuple[str, ...] | None:

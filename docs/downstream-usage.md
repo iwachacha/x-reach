@@ -42,6 +42,7 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 - Large-scale collection is explicit opt-in.
 - Use `collect --spec` for broad, resumable, artifact-heavy X runs instead of ad hoc shell orchestration.
 - `plan candidates` keeps the default `--limit 20` unless the caller asks for more.
+- `plan candidates --json` exposes deterministic `quality_score`, `quality_reasons`, and aggregate reason counts so downstream review can audit utility signals without treating them as final judgment.
 - `--min-seen-in` is useful for broad or multilingual runs where you want candidates that resurfaced across multiple queries; keep it off for narrow probes.
 - Saved evidence does not warn by default; use `--warn-missing-evidence-metadata` when downstream provenance completeness matters.
 

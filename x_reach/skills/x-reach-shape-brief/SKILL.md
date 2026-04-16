@@ -1,4 +1,4 @@
-﻿---
+---
 name: x-reach-shape-brief
 description: Shape vague research or information-gathering requests into a fixed brief for downstream X Reach execution. Use only when the user explicitly asks to use X Reach or names this skill, and you need a structured brief before any X Reach collection begins.
 ---

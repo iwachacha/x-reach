@@ -1,4 +1,4 @@
-﻿---
+---
 name: x-reach-propose-improvements
 description: Generate policy-compatible improvement proposals for X Reach from external research, friction logs, or other AI-generated findings. Use when Codex should compress raw findings into a short shortlist before formal adopt/reject review; if the user already has a concrete proposal list and wants the decision now, use `x-reach-maintain-proposals`.
 ---

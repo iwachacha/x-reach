@@ -1,4 +1,4 @@
-﻿---
+---
 name: x-reach
 description: Windows-first Twitter/X research integration tooling for Codex. Use only when the user explicitly asks to use X Reach or one of its bundled skills, and the task is to inspect Twitter/X capability, verify readiness, export Codex integration settings, or run thin read-only collection over `twitter`.
 ---
@@ -35,13 +35,14 @@ Do not assume this fork chooses the investigation. The caller chooses scale, tim
 - Use `x-reach collect --json --save-dir .x-reach/shards` when per-command shards or parallel collection are easier than appending into one file.
 - Add `--warn-missing-evidence-metadata` only when provenance completeness matters for the caller or CI checks.
 - Merge sharded ledgers with `x-reach ledger merge --input .x-reach/shards --output .x-reach/evidence.jsonl --json` before `ledger summarize`, `ledger query`, or `plan candidates`.
-- Use `x-reach plan candidates --input .x-reach/evidence.jsonl --json` for lightweight URL or ID dedupe before selected follow-up reads.
+- Use `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --json` for lightweight X post dedupe before selected follow-up reads. Use `--by normalized_url` only when URL-level dedupe is the caller's actual review unit.
 - Keep `x-reach plan candidates` at the default `--limit 20` unless the caller explicitly wants a broader candidate set.
+- Treat `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` as deterministic evidence-utility diagnostics, not final truth, trust, or publication decisions.
 - Use `--min-seen-in 2` only when a broader run benefits from keeping candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Broad discovery operations default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet`; use `quality_profile=recall` or explicit `--raw-mode full --item-text-mode full` only when fuller payloads are truly needed.
 - Use `x-reach schema collection-result --json` when downstream code needs a contract-testable schema.
 - Use `x-reach schema judge-result --json` only for opt-in mission judge handoffs; the current runtime writes fallback records and does not call a model.
-- Treat `engagement`, `media_references`, `identifiers`, `meta.item_shape`, and `error.category` as diagnostics only, not ranking or trust scores.
+- Treat `engagement`, `media_references`, `identifiers`, `meta.item_shape`, and `error.category` as diagnostics only. `quality_score` may help review evidence utility, but downstream code or the caller still owns final ranking and selection.
 - Treat `batch` and `scout` as explicit opt-in helpers. They are not the default route for everyday collection.
 - For large research tasks, only use bounded fan-out when the caller explicitly opts in; then use `plan candidates` for no-model dedupe and deep-read only selected URLs.
 
@@ -88,7 +89,7 @@ x-reach export-integration --client codex --format json --profile runtime-minima
 5. Save raw `CollectionResult` envelopes with `--save .x-reach/evidence.jsonl` or `--save-dir .x-reach/shards` when the run needs an evidence trail.
 6. If the run produced shards, merge them before summary or candidate planning.
 7. Run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when CI or downstream automation needs health counts.
-8. Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` before deeper reads. Add `--min-seen-in 2` only when repeated cross-query resurfacing is useful.
+8. Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` before deeper reads. Inspect `quality_reasons` and `summary.quality_reason_counts`; add `--min-seen-in 2` only when repeated cross-query resurfacing is useful.
 9. Return partial results with clear readiness or collection failures instead of hiding them.
 
 ## Command Routing

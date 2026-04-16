@@ -33,7 +33,8 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
   },
   "diversity": {
     "max_posts_per_author": 3,
-    "max_posts_per_thread": 4
+    "max_posts_per_thread": 4,
+    "require_topic_spread": true
   },
   "coverage": {
     "enabled": true,
@@ -77,12 +78,27 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
 - `ranked.jsonl`: deduped, keyword-filtered, diversity-constrained candidates with `rank`, `quality_score`, `quality_reasons`, and matched `coverage_topics` when coverage topics are configured.
 - `judge.jsonl`: opt-in judge records for the top ranked candidates. The current runtime does not call a model; when `judge.enabled=true`, it writes `unjudged` fallback records so downstream tooling can test the contract without changing `ranked.jsonl`.
 - `summary.md`: human-readable job counts, filter drops, and top candidates.
-- `mission-result.json`: JSON-first manifest for downstream tools.
+- `mission-result.json`: JSON-first manifest for downstream tools, including additive `summary.quality_reason_counts`, `summary.topic_spread_status`, and `diagnostics` blocks.
 - `mission-state.json`: resumable status marker for handoff/debugging.
+
+## Mission Diagnostics
+
+Mission results include neutral diagnostics so callers can inspect the run without treating X Reach as a final analyst:
+
+- `diagnostics.query_yield`: one row per executed query with query id, input, operation, source role, status, counts, URL count, and error code.
+- `diagnostics.curation.quality_reason_counts`: aggregate counts for ranked-candidate `quality_reasons`, including deterministic scoring facets such as query match, concrete detail, capped engagement, post shape, media, and URL support.
+- `diagnostics.curation.topic_spread`: whether `diversity.require_topic_spread` was requested, applied, already satisfied, or skipped, plus selected topic ids, promoted count, and whether final order changed.
+- `diagnostics.curation.concentration`: author, thread, and URL concentration summaries for the final ranked set.
+- `diagnostics.curation.time_spread`: earliest/latest timestamps and date bucket counts when ranked candidates have timestamps.
+- `coverage.diagnostics`: gap-fill budget state, used and remaining query counts, whether query budget was exhausted, and whether ranked-count target gaps are report-only.
+
+`summary.md` mirrors the most important diagnostics with `Quality Reasons` and `Topic Spread` sections. These sections are meant for audit and handoff, not synthesis.
 
 ## Coverage Gap Fill
 
 Coverage gap fill is deterministic and opt-in. When `coverage.enabled` is true, x-reach inspects `ranked.jsonl` after the first batch. If a required topic has fewer than `min_posts`, it runs at most `coverage.max_queries` additional search queries and rebuilds the raw/canonical/ranked outputs.
+
+When `coverage.enabled=false`, `coverage.max_queries` may be omitted or set to `0` to make the no-gap-fill budget explicit. When coverage is enabled, `max_queries` must be at least `1`.
 
 Each topic can provide:
 
@@ -96,6 +112,21 @@ If `queries` is omitted, x-reach builds a conservative query from `objective + l
 Ranked candidates that match topic terms include `coverage_topics`, so downstream review can quickly see which required viewpoints each post covers.
 
 `min_ranked_posts` and `target_gap` are diagnostics only. They show that the run is short of the requested ranked count, but they do not generate follow-up queries by themselves. x-reach only fills gaps for explicit `topics` that can produce a new, non-duplicate query.
+
+Coverage reports include both topic gap and budget diagnostics. `topic_gap_count` is the number of declared topics below their requested minimum, while `queryable_topic_gap_count` is the subset that can still produce a follow-up query within the current query budget. When `coverage.max_queries` is exhausted and topic gaps remain, `coverage.diagnostics.query_budget_exhausted` is true.
+
+## Topic Spread
+
+`diversity.require_topic_spread=true` uses caller-declared `coverage.topics` as topic buckets. X Reach annotates candidates with matching `coverage_topics` before final truncation, then promotes or preserves available topic buckets in the final ranked set.
+
+Topic spread is deterministic and bounded:
+
+- it never invents topics;
+- it only uses terms supplied in `coverage.topics`;
+- it can reorder the final ranked set only to represent available declared topic buckets;
+- it reports `skipped_no_topics`, `skipped_no_matches`, `already_satisfied`, `applied`, or `applied_partial` in mission diagnostics.
+
+Topic spread is separate from coverage gap fill. If `coverage.enabled=false`, topic spread can still use declared topics that are already present in collected candidates, but it will not run additional gap-fill queries.
 
 ## Judge Contract
 
@@ -123,6 +154,9 @@ No LLM/VLM call is made by this release. If `judge.enabled=true`, x-reach writes
 - Batch execution with checkpoint/resume support.
 - Raw/canonical/curated output layers.
 - Deterministic keyword filtering, post dedupe, heuristic ranking, and author/thread/url diversity constraints.
+- Evidence-utility scoring facets for query match strength, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties.
+- Topic spread enforcement for available caller-declared coverage topics through `diversity.require_topic_spread`.
+- Mission diagnostics for query yield, quality reason counts, topic spread, author/thread/url concentration, time spread, and coverage query budgets.
 - Low-content quote filtering through `exclude.drop_low_content_posts`.
 - Quality filter dropped samples for debugging filter thresholds.
 - One-round deterministic coverage gap fill for explicit coverage topics. Ranked-count gaps remain report-only unless a missing topic can generate a follow-up query.
