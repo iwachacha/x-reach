@@ -22,3 +22,10 @@ def collection_result_schema() -> dict:
     text = files("x_reach.schema_files").joinpath("collection_result.schema.json").read_text(encoding="utf-8")
     return json.loads(text)
 
+
+def mission_spec_schema() -> dict:
+    """Return the packaged JSON Schema for mission specs."""
+
+    text = files("x_reach.schema_files").joinpath("mission_spec.schema.json").read_text(encoding="utf-8")
+    return json.loads(text)
+

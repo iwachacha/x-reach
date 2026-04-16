@@ -32,6 +32,7 @@ def test_docs_folder_only_contains_supported_docs():
         "codex-integration.md",
         "downstream-usage.md",
         "install.md",
+        "mission-spec.md",
         "python-sdk.md",
         "troubleshooting.md",
     }

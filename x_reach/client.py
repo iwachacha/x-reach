@@ -252,6 +252,45 @@ class XReachClient:
             min_seen_in=min_seen_in,
         )
 
+    def mission_plan(
+        self,
+        spec_path: str | Path,
+        *,
+        output_dir: str | Path | None = None,
+        run_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Build the deterministic plan for a mission spec without collecting."""
+
+        from x_reach.mission import build_mission_plan_payload
+
+        return build_mission_plan_payload(spec_path, output_dir=output_dir, run_id=run_id)
+
+    def collect_spec(
+        self,
+        spec_path: str | Path,
+        *,
+        output_dir: str | Path | None = None,
+        run_id: str | None = None,
+        resume: bool = False,
+        dry_run: bool = False,
+        concurrency: int = 1,
+        checkpoint_every: int = 25,
+    ) -> dict[str, Any]:
+        """Run a mission spec through the raw, canonical, and curated layers."""
+
+        from x_reach.mission import run_mission_spec
+
+        return run_mission_spec(
+            spec_path,
+            output_dir=output_dir,
+            run_id=run_id,
+            resume=resume,
+            dry_run=dry_run,
+            concurrency=concurrency,
+            checkpoint_every=checkpoint_every,
+            client_factory=lambda: self,
+        )
+
     def ledger_merge(self, input_path: str | Path, output_path: str | Path) -> dict[str, Any]:
         """Merge one ledger file or a shard directory into one JSONL file."""
 

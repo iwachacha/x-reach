@@ -8,7 +8,9 @@ X Reach is the X/Twitter-only split of the Windows-first Agent Reach fork. It ke
 - `x-reach doctor --json`
 - `x-reach doctor --json --probe`
 - `x-reach collect --operation <op> --input <value> --json`
+- `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`
 - `x-reach schema collection-result --json`
+- `x-reach schema mission-spec --json`
 - `x-reach plan candidates --input .x-reach/evidence.jsonl --json`
 - `x-reach ledger merge|validate|summarize|query|append`
 - `x-reach export-integration --client codex --format json`
@@ -56,6 +58,9 @@ x-reach search "AI agent" --limit 5 --quality-profile precision --json
 x-reach hashtag "OpenAI" --limit 5 --json
 x-reach collect --operation search --input "OpenAI" --limit 5 --json
 x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json
+x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-research --dry-run --json
+x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-research --json
+x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-research --resume --json
 x-reach collect --operation user --input "openai" --json
 x-reach posts "openai" --limit 20 --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --json
@@ -76,6 +81,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - For broad multi-query discovery, `x-reach plan candidates --min-seen-in 2` is an optional way to keep candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Saved evidence stays quiet by default; add `--warn-missing-evidence-metadata` only when provenance completeness matters for CI or downstream workflows.
 - For large-scale research, use a two-stage flow: compact discovery first, then `plan candidates` with `--max-per-author 2 --prefer-originals --drop-noise` before any deeper reads.
+- For declarative large-scale X collection, use `collect --spec`: it runs a mission plan, writes raw/canonical/ranked artifacts, and leaves a manifest for resumable handoff.
 
 ## Docs
 
@@ -83,6 +89,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - Downstream usage: [docs/downstream-usage.md](docs/downstream-usage.md)
 - Codex integration: [docs/codex-integration.md](docs/codex-integration.md)
 - Python SDK: [docs/python-sdk.md](docs/python-sdk.md)
+- Mission spec runtime: [docs/mission-spec.md](docs/mission-spec.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 
 

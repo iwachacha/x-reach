@@ -71,6 +71,12 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 > `quality_profile`、broad op の compact default shaping、deterministic noise filtering、ledger/candidates の large-scale 向け診断を実装しました。
 > `pytest` 149 件と live の `doctor / search / posts / batch -> merge -> summarize -> plan candidates` まで成功しています。
 
+> [!IMPORTANT]
+> **Phase 2-D 完了**:
+> `x-reach collect --spec mission.json` を mission-driven runtime として追加しました。
+> spec から batch plan を固定し、`raw.jsonl` / `canonical.jsonl` / `ranked.jsonl` / `summary.md` / `mission-result.json` を出力します。
+> Agent は戦略・レビューに寄せ、x-reach が deterministic executor になる方針を採用しました。
+
 ---
 
 ## Proposed Changes
@@ -190,11 +196,25 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 - `plan candidates` に `--max-per-author`、`--prefer-originals`、`--drop-noise`、`--require-query-match` を追加した。
 - `scout` に discovery / deep-read 推奨設定を返す `recommended_collection_settings` を追加した。
 
+#### 2-D. Mission Spec Runtime（完了 ✅）
+- 採用案: レビューの最優先案である `x-reach collect --spec mission.json` を実装対象にした。既存の `batch` / `ledger` / `candidates` / `quality_profile` を再利用し、薄い CLI 呼び出しではなく宣言的 spec を deterministic に実行する。
+- `x_reach/mission.py` を追加し、spec 正規化、language/time range 展開、batch plan 生成、checkpoint/resume 付き実行、raw/canonical/curated artifact 生成を担当させた。
+- `collect --spec` は `--dry-run`、`--output-dir`、`--resume`、`--concurrency`、`--checkpoint-every` を持つ。`--operation/--input` とは排他にした。
+- 出力は `raw/` shard、`raw.jsonl`、`canonical.jsonl`、`ranked.jsonl`、`summary.md`、`mission-result.json`、`mission-state.json`。handoff/debug 用に batch plan と normalized spec も保存する。
+- ranking は deterministic heuristic として `seen_in_count`、original/quote/reply/retweet、engagement、本文量、URL/media 有無を使う。LLM judge はまだ入れていない。
+- diversity は author/thread/url cap を mission 側で適用し、`plan candidates` 側の post dedupe / title duplicate / query match と併用する。
+- `x-reach schema mission-spec --json` と SDK の `XReachClient.mission_plan()` / `XReachClient.collect_spec()` を追加した。
+- 残課題: coverage gap fill、LLM/VLM judge、stance/subtopic classification は未実装。次フェーズでは `ranked.jsonl` の sample inspection から不足観点を検出して追加 query を生成する流れを検討する。
+
 ---
 
 ## Open Questions
 
-次の候補は、`agent_reach` 表記が残る docs / skills / tests の整理と、互換レイヤーの維持方針の明文化です。
+次の候補は以下です。
+
+- mission runtime の次段として coverage gap fill を入れるか。現状は spec の query 群を deterministic に実行し、ranked output を返すところまで。
+- LLM judge / VLM judge を入れる場合、`ranked.jsonl` の上位候補だけに限定し、yes/no ではなく理由付き判定を残す方針がよい。
+- `agent_reach` 表記が残る docs / skills / tests の整理と、互換レイヤーの維持方針の明文化。
 
 ---
 
@@ -205,6 +225,7 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 | 2026-04-15 | `hashtag`、検索フィルタ、CLI ショートカット、`posts --originals-only` を追加 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach hashtag "OpenAI" --limit 3 --json`、`uv run x-reach posts "openai" --limit 5 --originals-only --json` |
 | 2026-04-15 | runtime 本体を `x_reach/` に移動し、`agent_reach/` を shim 化 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach search "OpenAI" --limit 3 --json`、`uv run x-reach posts "openai" --limit 5 --originals-only --json` |
 | 2026-04-15 | `quality_profile`、broad op の compact default、deterministic noise filtering、ledger/candidates の大規模調査向け診断を追加 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach search "OpenAI" --limit 5 --json`、`uv run x-reach search "AI agent" --limit 5 --quality-profile precision --json`、`uv run x-reach posts "openai" --limit 5 --json`、`uv run x-reach batch --plan PLAN.json --save-dir SHARDS --json`、`uv run x-reach ledger merge --input SHARDS --output evidence.jsonl --json`、`uv run x-reach ledger summarize --input evidence.jsonl --json`、`uv run x-reach plan candidates --input evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --json` |
+| 2026-04-16 | `collect --spec` mission runtime、mission spec schema、raw/canonical/ranked artifact 出力、SDK helper を追加 | `uv run pytest tests/ -q --tb=short`、`uv run pytest tests/test_mission.py tests/test_cli.py tests/test_client.py -q --tb=short`、`uv run --extra dev ruff check x_reach\mission.py x_reach\batch.py x_reach\cli.py x_reach\client.py x_reach\schemas.py agent_reach\mission.py tests\test_mission.py`、`uv run x-reach schema mission-spec --json` |
 
 ## Verification Plan
 
@@ -221,6 +242,10 @@ uv run x-reach collect --operation search --input "OpenAI" --limit 3 --json  # c
 uv run x-reach search "OpenAI" --limit 3 --json  # ショートカットテスト
 uv run x-reach hashtag "OpenAI" --limit 3 --json
 uv run x-reach posts "openai" --limit 5 --originals-only --json
+uv run x-reach schema mission-spec --json
+uv run x-reach collect --spec mission.json --output-dir .x-reach/missions/test --dry-run --json
+uv run x-reach collect --spec mission.json --output-dir .x-reach/missions/test --json
+uv run x-reach collect --spec mission.json --output-dir .x-reach/missions/test --resume --json
 
 # 既存互換性確認
 uv run x-reach collect --channel twitter --operation user --input "openai" --json

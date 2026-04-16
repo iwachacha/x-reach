@@ -8,6 +8,7 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 - Downstream usage: https://github.com/iwachacha/x-reach/blob/main/docs/downstream-usage.md
 - Codex integration: https://github.com/iwachacha/x-reach/blob/main/docs/codex-integration.md
 - Python SDK: https://github.com/iwachacha/x-reach/blob/main/docs/python-sdk.md
+- Mission spec runtime: https://github.com/iwachacha/x-reach/blob/main/docs/mission-spec.md
 - Troubleshooting: https://github.com/iwachacha/x-reach/blob/main/docs/troubleshooting.md
 - Repository README: https://github.com/iwachacha/x-reach/blob/main/README.md
 
@@ -17,7 +18,9 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 - `x-reach doctor --json`
 - `x-reach doctor --json --probe`
 - `x-reach collect --operation <op> --input <value> --json`
+- `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`
 - `x-reach schema collection-result --json`
+- `x-reach schema mission-spec --json`
 - `x-reach plan candidates --input .x-reach/evidence.jsonl --json`
 - `x-reach ledger validate --input .x-reach/evidence.jsonl --json`
 - `x-reach ledger summarize --input .x-reach/evidence.jsonl --json`

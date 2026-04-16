@@ -37,8 +37,14 @@ from x_reach.ledger import (
     summarize_ledger_input,
     validate_ledger_input,
 )
+from x_reach.mission import MissionSpecError, render_mission_text, run_mission_spec
 from x_reach.results import CollectionResult, apply_item_text_mode, apply_raw_mode
-from x_reach.schemas import SCHEMA_VERSION, collection_result_schema, utc_timestamp
+from x_reach.schemas import (
+    SCHEMA_VERSION,
+    collection_result_schema,
+    mission_spec_schema,
+    utc_timestamp,
+)
 from x_reach.scout import (
     BUDGETS,
     PRESETS,
@@ -190,6 +196,12 @@ def _shortcut_collect_namespace(args, *, operation: str, input_value: str) -> ar
         channel="twitter",
         operation=operation,
         input=input_value,
+        spec=None,
+        output_dir=None,
+        resume=False,
+        dry_run=False,
+        concurrency=1,
+        checkpoint_every=25,
         limit=getattr(args, "limit", None),
         since=getattr(args, "since", None),
         until=getattr(args, "until", None),
@@ -307,11 +319,40 @@ def _build_parser() -> argparse.ArgumentParser:
         default="twitter",
         help="Stable channel name. Defaults to twitter.",
     )
-    p_collect.add_argument("--operation", required=True, help="Supported operation for the channel")
+    p_collect.add_argument("--operation", help="Supported operation for the channel")
     p_collect.add_argument(
         "--input",
-        required=True,
         help="Input value such as a search query, profile handle, or tweet URL",
+    )
+    p_collect.add_argument(
+        "--spec",
+        help="Mission spec JSON for deterministic multi-query collection",
+    )
+    p_collect.add_argument(
+        "--output-dir",
+        help="Mission output directory used with --spec",
+    )
+    p_collect.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume a mission spec by skipping already saved query results",
+    )
+    p_collect.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and render the mission plan without collecting. Only supported with --spec",
+    )
+    p_collect.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="Mission query concurrency used with --spec",
+    )
+    p_collect.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=25,
+        help="Mission checkpoint interval used with --spec",
     )
     p_collect.add_argument("--limit", type=int, help="Optional item limit for returned tweets or replies")
     p_collect.add_argument("--since", help="Optional lower time boundary for operations that support it")
@@ -556,7 +597,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_schema = sub.add_parser("schema", help="Print packaged JSON Schemas for stable contracts")
     p_schema.add_argument(
         "name",
-        choices=["collection-result"],
+        choices=["collection-result", "mission-spec"],
         help="Schema name to print",
     )
     p_schema.add_argument("--json", action="store_true", help="Print the JSON Schema payload")
@@ -1178,6 +1219,14 @@ def _render_collect_text(payload: CollectionResult, max_text_chars: int | None =
 
 
 def _cmd_collect(args) -> int:
+    if getattr(args, "spec", None):
+        return _cmd_collect_spec(args)
+    if not args.operation or not args.input:
+        print("collect requires --operation and --input unless --spec is used", file=sys.stderr)
+        return 2
+    if getattr(args, "dry_run", False) or getattr(args, "output_dir", None) or getattr(args, "resume", False):
+        print("dry-run, output-dir, and resume are only supported with --spec", file=sys.stderr)
+        return 2
     if args.max_text_chars is not None and args.max_text_chars < 1:
         print("max-text-chars must be greater than or equal to 1", file=sys.stderr)
         return 2
@@ -1306,6 +1355,36 @@ def _cmd_collect(args) -> int:
     if error and error["code"] in {"unknown_channel", "unsupported_operation", "invalid_input", "unsupported_option"}:
         return 2
     return 1
+
+
+def _cmd_collect_spec(args) -> int:
+    if args.operation or args.input:
+        print("collect --spec cannot be combined with --operation or --input", file=sys.stderr)
+        return 2
+    if args.save or args.save_dir:
+        print("collect --spec writes its own mission artifacts; use --output-dir instead of --save/--save-dir", file=sys.stderr)
+        return 2
+    if any(value is not None for value in (args.intent, args.query_id, args.source_role)):
+        print("collect --spec derives evidence metadata from the mission spec", file=sys.stderr)
+        return 2
+    try:
+        payload = run_mission_spec(
+            args.spec,
+            output_dir=args.output_dir,
+            run_id=args.run_id,
+            resume=args.resume,
+            dry_run=args.dry_run,
+            concurrency=args.concurrency,
+            checkpoint_every=args.checkpoint_every,
+        )
+    except MissionSpecError as exc:
+        print(f"Could not run mission spec: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        _print_json(payload)
+    else:
+        print(render_mission_text(payload))
+    return 0 if payload.get("ok", True) else 1
 
 
 def _warn_missing_evidence_metadata(
@@ -1789,10 +1868,13 @@ def _cmd_channels(args) -> int:
 
 
 def _cmd_schema(args) -> int:
-    if args.name != "collection-result":
+    if args.name == "collection-result":
+        payload = collection_result_schema()
+    elif args.name == "mission-spec":
+        payload = mission_spec_schema()
+    else:
         print(f"Unknown schema: {args.name}", file=sys.stderr)
         return 2
-    payload = collection_result_schema()
     if args.json:
         _print_json(payload)
     else:

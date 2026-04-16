@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from x_reach import __version__
 from x_reach.client import AgentReachClient
@@ -64,6 +64,7 @@ def run_batch_plan(
     resume: bool = False,
     checkpoint_every: int = 100,
     quality: str | None = None,
+    client_factory: Callable[[], AgentReachClient] | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Run a JSON research plan and append results to a ledger."""
 
@@ -89,6 +90,7 @@ def run_batch_plan(
     checkpoints: list[dict[str, Any]] = []
     written_targets: set[str] = set()
     started_at = utc_timestamp()
+    make_client = client_factory or AgentReachClient
 
     def execute(index: int, query: dict[str, Any]) -> dict[str, Any]:
         resume_query = {
@@ -111,7 +113,7 @@ def run_batch_plan(
                 "count": 0,
             }
 
-        client = AgentReachClient()
+        client = make_client()
         kwargs: dict[str, Any] = {}
         if query.get("limit") is not None:
             kwargs["limit"] = int(query["limit"])
@@ -128,6 +130,10 @@ def run_batch_plan(
             "min_retweets",
             "min_views",
             "originals_only",
+            "raw_mode",
+            "raw_max_bytes",
+            "item_text_mode",
+            "item_text_max_chars",
         ):
             if query.get(option_name) is not None:
                 kwargs[option_name] = query[option_name]
@@ -158,6 +164,10 @@ def run_batch_plan(
             "min_views": query.get("min_views"),
             "originals_only": query.get("originals_only"),
             "quality_profile": requested_quality if is_broad_operation(query["operation"]) else None,
+            "raw_mode": query.get("raw_mode"),
+            "raw_max_bytes": query.get("raw_max_bytes"),
+            "item_text_mode": query.get("item_text_mode"),
+            "item_text_max_chars": query.get("item_text_max_chars"),
             "status": "ok" if payload.get("ok") else "error",
             "ok": bool(payload.get("ok")),
             "count": len(payload.get("items") or []),
@@ -432,6 +442,10 @@ def _query_key(
         str(query.get("min_views")) if query.get("min_views") is not None else None,
         str(query.get("originals_only")) if query.get("originals_only") is not None else None,
         str(query.get("quality_profile")) if query.get("quality_profile") is not None else None,
+        str(query.get("raw_mode")) if query.get("raw_mode") is not None else None,
+        str(query.get("raw_max_bytes")) if query.get("raw_max_bytes") is not None else None,
+        str(query.get("item_text_mode")) if query.get("item_text_mode") is not None else None,
+        str(query.get("item_text_max_chars")) if query.get("item_text_max_chars") is not None else None,
     )
 
 
@@ -468,6 +482,10 @@ def _completed_query_keys(
             "min_views": meta.get("min_views"),
             "originals_only": meta.get("originals_only"),
             "quality_profile": meta.get("quality_profile"),
+            "raw_mode": meta.get("raw_mode"),
+            "raw_max_bytes": meta.get("raw_max_bytes"),
+            "item_text_mode": meta.get("item_text_mode"),
+            "item_text_max_chars": meta.get("item_text_max_chars"),
         }
         if query["channel"] and query["operation"] and query["input"]:
             completed.add(_query_key(query))

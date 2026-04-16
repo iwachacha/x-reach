@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://x-reach.local/schemas/mission-spec.schema.json",
+  "title": "X Reach MissionSpec",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "queries"
+  ],
+  "properties": {
+    "objective": {
+      "type": "string"
+    },
+    "queries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "input": {
+                "type": "string",
+                "minLength": 1
+              },
+              "query": {
+                "type": "string",
+                "minLength": 1
+              },
+              "query_id": {
+                "type": "string"
+              },
+              "source_role": {
+                "type": "string"
+              },
+              "intent": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "lang": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "time_range": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "since": {
+          "type": "string"
+        },
+        "until": {
+          "type": "string"
+        }
+      }
+    },
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "target_posts": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "quality_profile": {
+      "enum": [
+        "precision",
+        "balanced",
+        "recall",
+        "research_high_precision",
+        "high_precision",
+        "research_balanced",
+        "broad_recall"
+      ]
+    },
+    "exclude": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "drop_retweets": {
+          "type": "boolean"
+        },
+        "drop_replies": {
+          "type": "boolean"
+        },
+        "drop_links": {
+          "type": "boolean"
+        },
+        "drop_low_content_posts": {
+          "type": "boolean"
+        },
+        "max_same_author_posts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min_likes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_retweets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_views": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "diversity": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "max_posts_per_thread": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_posts_per_author": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_posts_per_url": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min_seen_in": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "require_topic_spread": {
+          "type": "boolean"
+        }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "raw_mode": {
+          "enum": [
+            "full",
+            "minimal",
+            "none"
+          ]
+        },
+        "raw_max_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "item_text_mode": {
+          "enum": [
+            "full",
+            "snippet",
+            "none"
+          ]
+        },
+        "item_text_max_chars": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "require_query_match": {
+      "type": "boolean"
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "raw.jsonl",
+          "canonical.jsonl",
+          "ranked.jsonl",
+          "summary.md",
+          "mission-result.json"
+        ]
+      }
+    }
+  }
+}
