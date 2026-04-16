@@ -79,6 +79,8 @@ If `queries` is omitted, x-reach builds a conservative query from `objective + l
 
 Ranked candidates that match topic terms include `coverage_topics`, so downstream review can quickly see which required viewpoints each post covers.
 
+`min_ranked_posts` and `target_gap` are diagnostics only. They show that the run is short of the requested ranked count, but they do not generate follow-up queries by themselves. x-reach only fills gaps for explicit `topics` that can produce a new, non-duplicate query.
+
 ## Implemented In This Pass
 
 - Mission spec normalization and validation.
@@ -88,7 +90,7 @@ Ranked candidates that match topic terms include `coverage_topics`, so downstrea
 - Deterministic keyword filtering, post dedupe, heuristic ranking, and author/thread/url diversity constraints.
 - Low-content quote filtering through `exclude.drop_low_content_posts`.
 - Quality filter dropped samples for debugging filter thresholds.
-- One-round deterministic coverage gap fill for explicit coverage topics.
+- One-round deterministic coverage gap fill for explicit coverage topics. Ranked-count gaps remain report-only unless a missing topic can generate a follow-up query.
 - `x-reach schema mission-spec --json`.
 - SDK helpers: `XReachClient.mission_plan()` and `XReachClient.collect_spec()`.
 

@@ -137,7 +137,11 @@ def run_mission_spec(
         merge_payload = merge_ledger_inputs(raw_dir, paths["raw_jsonl"])
         canonical_summary = _write_canonical_jsonl(paths["raw_jsonl"], paths["canonical_jsonl"])
         curated_payload = _build_curated_payload(paths["raw_jsonl"], normalized_spec)
-        coverage_initial = _coverage_analysis(curated_payload, normalized_spec)
+        coverage_initial = _coverage_analysis(
+            curated_payload,
+            normalized_spec,
+            existing_queries=batch_plan["queries"],
+        )
         coverage_plan: dict[str, Any] | None = None
         coverage_batch_payload: dict[str, Any] | None = None
         coverage_exit_code = 0
@@ -166,7 +170,11 @@ def run_mission_spec(
         batch_exit_code = max(batch_exit_code, coverage_exit_code)
         coverage_payload = _build_coverage_payload(
             initial=coverage_initial,
-            final=_coverage_analysis(curated_payload, normalized_spec),
+            final=_coverage_analysis(
+                curated_payload,
+                normalized_spec,
+                existing_queries=[*batch_plan["queries"], *((coverage_plan or {}).get("queries") or [])],
+            ),
             coverage_plan=coverage_plan,
             coverage_batch_payload=coverage_batch_payload,
         )
@@ -582,7 +590,12 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
     }
 
 
-def _coverage_analysis(curated_payload: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
+def _coverage_analysis(
+    curated_payload: dict[str, Any],
+    spec: dict[str, Any],
+    *,
+    existing_queries: Sequence[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
     ranked = curated_payload.get("ranked_candidates") or []
     ranked_count = len(ranked)
@@ -602,19 +615,26 @@ def _coverage_analysis(curated_payload: dict[str, Any], spec: dict[str, Any]) ->
                 "count": len(matches),
                 "min_posts": min_posts,
                 "gap": max(min_posts - len(matches), 0),
+                "queryable": False,
                 "sample_ids": [str(candidate.get("id") or "") for candidate in matches[:3]],
             }
         )
     target_ranked_posts = int(coverage.get("min_ranked_posts") or spec.get("target_posts") or 0)
     target_gap = max(target_ranked_posts - ranked_count, 0)
     topic_gap_count = sum(1 for report in topic_reports if int(report.get("gap") or 0) > 0)
+    queryable_topic_gap_count = _mark_queryable_coverage_gaps(
+        topic_reports,
+        spec,
+        existing_queries=existing_queries or [],
+    )
     return {
         "enabled": bool(coverage.get("enabled")),
         "ranked_count": ranked_count,
         "target_ranked_posts": target_ranked_posts,
         "target_gap": target_gap,
+        "topic_gap_count": topic_gap_count,
         "topic_reports": topic_reports,
-        "gap_count": topic_gap_count + (1 if target_gap else 0),
+        "gap_count": queryable_topic_gap_count,
     }
 
 
@@ -626,17 +646,8 @@ def _build_coverage_gap_plan(
 ) -> dict[str, Any]:
     coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
     max_queries = int(coverage.get("max_queries") or 0)
-    existing_keys = {
-        (
-            str(query.get("input") or "").strip().casefold(),
-            str(query.get("lang") or "").strip().casefold(),
-        )
-        for query in existing_queries
-    }
+    existing_keys = _coverage_existing_query_keys(existing_queries)
     generated: list[dict[str, Any]] = []
-    languages = spec.get("languages") or [None]
-    if not languages:
-        languages = [None]
 
     for report in coverage_analysis.get("topic_reports") or []:
         if int(report.get("gap") or 0) <= 0:
@@ -644,33 +655,15 @@ def _build_coverage_gap_plan(
         topic = _coverage_topic_by_id(spec, report.get("topic_id"))
         if topic is None:
             continue
-        source_queries = topic.get("queries") or [_default_coverage_query(spec, topic)]
-        for source_query in source_queries:
-            for lang in languages:
-                if len(generated) >= max_queries:
-                    break
-                query_text = str(source_query or "").strip()
-                if not query_text:
-                    continue
-                lang_text = str(lang or "").strip()
-                key = (query_text.casefold(), lang_text.casefold())
-                if key in existing_keys:
-                    continue
-                existing_keys.add(key)
-                topic_slug = _slugify(topic.get("label") or report.get("label") or "topic")
-                lang_suffix = f"-{_slugify(lang_text)}" if lang_text else ""
-                generated.append(
-                    {
-                        "query_id": f"gap{len(generated) + 1:02d}-{topic_slug}{lang_suffix}",
-                        "input": query_text,
-                        "lang": lang_text or None,
-                        "limit": topic.get("probe_limit") or coverage.get("probe_limit"),
-                        "intent": f"{_mission_intent(spec)}:coverage:{topic_slug}",
-                        "source_role": "coverage_gap_fill",
-                    }
-                )
-            if len(generated) >= max_queries:
-                break
+        generated.extend(
+            _coverage_followup_queries(
+                spec,
+                topic,
+                existing_keys=existing_keys,
+                start_index=len(generated) + 1,
+                max_count=max_queries - len(generated),
+            )
+        )
         if len(generated) >= max_queries:
             break
 
@@ -687,6 +680,96 @@ def _build_coverage_gap_plan(
         ],
     }
     return plan
+
+
+def _mark_queryable_coverage_gaps(
+    topic_reports: Sequence[dict[str, Any]],
+    spec: dict[str, Any],
+    *,
+    existing_queries: Sequence[dict[str, Any]],
+) -> int:
+    coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
+    remaining = int(coverage.get("max_queries") or 0)
+    existing_keys = _coverage_existing_query_keys(existing_queries)
+    queryable_count = 0
+    for report in topic_reports:
+        if int(report.get("gap") or 0) <= 0 or remaining <= 0:
+            continue
+        topic = _coverage_topic_by_id(spec, report.get("topic_id"))
+        if topic is None:
+            continue
+        queries = _coverage_followup_queries(
+            spec,
+            topic,
+            existing_keys=existing_keys,
+            start_index=1,
+            max_count=remaining,
+        )
+        if not queries:
+            continue
+        report["queryable"] = True
+        queryable_count += 1
+        remaining -= len(queries)
+    return queryable_count
+
+
+def _coverage_followup_queries(
+    spec: dict[str, Any],
+    topic: dict[str, Any],
+    *,
+    existing_keys: set[tuple[str, str]],
+    start_index: int,
+    max_count: int,
+) -> list[dict[str, Any]]:
+    if max_count <= 0:
+        return []
+    coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
+    generated: list[dict[str, Any]] = []
+    source_queries = topic.get("queries") or [_default_coverage_query(spec, topic)]
+    for source_query in source_queries:
+        for lang in _coverage_languages(spec):
+            if len(generated) >= max_count:
+                break
+            query_text = str(source_query or "").strip()
+            if not query_text:
+                continue
+            lang_text = str(lang or "").strip()
+            key = (query_text.casefold(), lang_text.casefold())
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            topic_slug = _slugify(topic.get("label") or "topic")
+            lang_suffix = f"-{_slugify(lang_text)}" if lang_text else ""
+            generated.append(
+                {
+                    "query_id": f"gap{start_index + len(generated):02d}-{topic_slug}{lang_suffix}",
+                    "input": query_text,
+                    "lang": lang_text or None,
+                    "limit": topic.get("probe_limit") or coverage.get("probe_limit"),
+                    "intent": f"{_mission_intent(spec)}:coverage:{topic_slug}",
+                    "source_role": "coverage_gap_fill",
+                }
+            )
+        if len(generated) >= max_count:
+            break
+    return generated
+
+
+def _coverage_existing_query_keys(queries: Sequence[dict[str, Any]]) -> set[tuple[str, str]]:
+    return {
+        (
+            str(query.get("input") or "").strip().casefold(),
+            str(query.get("lang") or "").strip().casefold(),
+        )
+        for query in queries
+    }
+
+
+def _coverage_languages(spec: dict[str, Any]) -> list[str | None]:
+    languages = spec.get("languages") or [None]
+    if not languages:
+        return [None]
+    return list(languages)
 
 
 def _empty_coverage_batch_plan(spec: dict[str, Any]) -> dict[str, Any]:

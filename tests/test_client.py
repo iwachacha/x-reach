@@ -5,8 +5,7 @@ import json
 
 from agent_reach.config import Config
 from agent_reach.ledger import build_ledger_record
-from agent_reach.results import build_result
-from agent_reach.results import build_item
+from agent_reach.results import build_item, build_result
 from x_reach import XReach, XReachClient
 
 

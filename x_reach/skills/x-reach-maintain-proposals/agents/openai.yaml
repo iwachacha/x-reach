@@ -1,5 +1,4 @@
-﻿interface:
+interface:
   display_name: "X Reach Maintain Proposals"
-  short_description: "Review a concrete proposal list"
-  default_prompt: "Use $x-reach-maintain-proposals to review this concrete x-reach proposal list against the fork's thin-interface policy and decide adopt_now, reject, or defer before any edits."
-
+  short_description: "Gate x-reach improvement proposals"
+  default_prompt: "Use $x-reach-maintain-proposals to review this concrete x-reach proposal list as an adoption gate for X-specific value, safety, deterministic-before-LLM design, and adopt_now/adopt_primitives_only/defer/reject decisions before any edits."

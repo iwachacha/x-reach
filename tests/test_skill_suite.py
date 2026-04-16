@@ -92,3 +92,24 @@ def test_maintainer_release_skill_has_shipping_guardrails():
     assert "Must-Stay-True Rules" in boundaries
     assert "x-reach.git" in flow
 
+
+def test_maintain_proposals_skill_is_adoption_gate():
+    skill = (_skill_dir("x-reach-maintain-proposals") / "SKILL.md").read_text(encoding="utf-8")
+    policy = (_skill_dir("x-reach-maintain-proposals") / "references" / "policy-tests.md").read_text(
+        encoding="utf-8"
+    )
+    review = (_skill_dir("x-reach-maintain-proposals") / "references" / "review-output.md").read_text(
+        encoding="utf-8"
+    )
+    metadata = (_skill_dir("x-reach-maintain-proposals") / "agents" / "openai.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "adoption gate" in skill
+    assert "X-specific value" in skill
+    assert "deterministic before LLM" in skill
+    assert "adopt_primitives_only" in skill
+    assert "opaque LLM" in policy
+    assert "deterministic-before-LLM" in review
+    assert "adoption gate" in metadata
+

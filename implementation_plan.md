@@ -224,7 +224,8 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 
 #### 2-F. Coverage Gap Fill（完了 ✅）
 - 採用案: レビューの `Coverage gap fill` は、LLM や自律探索ではなく、mission spec で明示された `coverage.topics` を deterministic に検査する形で採用した。
-- `coverage.enabled=true` の時だけ有効化し、初回 `ranked_candidates` に topic terms が不足している場合、最大 `coverage.max_queries` 件の追加 search を1ラウンド実行する。
+- `coverage.enabled=true` の時だけ有効化し、初回 `ranked_candidates` に topic terms が不足していて、かつ新しい follow-up query を生成できる場合のみ、最大 `coverage.max_queries` 件の追加 search を1ラウンド実行する。
+- `min_ranked_posts` / `target_gap` は件数不足の診断として残すが、それ単体では追加 search を走らせない。自動拡張は明示 topic gap に限定する。
 - topic ごとに `label` / `terms` / `queries` / `min_posts` / `probe_limit` を指定できる。`queries` がない場合は `objective + label` から控えめに生成する。
 - 追加 batch は `source_role=coverage_gap_fill` として raw ledger に追記し、`raw.jsonl` / `canonical.jsonl` / `ranked.jsonl` / `summary.md` / `mission-result.json` を再生成する。
 - coverage topic に一致した ranked 候補には `coverage_topics` を付与し、後続レビューでどの観点を満たしているか確認しやすくした。
@@ -252,7 +253,7 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 | 2026-04-15 | `quality_profile`、broad op の compact default、deterministic noise filtering、ledger/candidates の大規模調査向け診断を追加 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach search "OpenAI" --limit 5 --json`、`uv run x-reach search "AI agent" --limit 5 --quality-profile precision --json`、`uv run x-reach posts "openai" --limit 5 --json`、`uv run x-reach batch --plan PLAN.json --save-dir SHARDS --json`、`uv run x-reach ledger merge --input SHARDS --output evidence.jsonl --json`、`uv run x-reach ledger summarize --input evidence.jsonl --json`、`uv run x-reach plan candidates --input evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --json` |
 | 2026-04-16 | `collect --spec` mission runtime、mission spec schema、raw/canonical/ranked artifact 出力、SDK helper を追加 | `uv run pytest tests/ -q --tb=short`、`uv run pytest tests/test_mission.py tests/test_cli.py tests/test_client.py -q --tb=short`、`uv run --extra dev ruff check x_reach\mission.py x_reach\batch.py x_reach\cli.py x_reach\client.py x_reach\schemas.py agent_reach\mission.py tests\test_mission.py`、`uv run x-reach schema mission-spec --json` |
 | 2026-04-16 | live probe 結果から drop sample 診断と `low_content` 候補フィルタを追加 | `uv run x-reach doctor --json --probe`、`uv run x-reach channels --json`、`uv run x-reach search "OpenAI" --limit 5 --quality-profile balanced --json`、`uv run pytest tests/test_candidates.py tests/test_collect_adapters.py tests/test_mission.py -q --tb=short` |
-| 2026-04-16 | mission runtime に opt-in coverage gap fill を追加 | `uv run pytest tests/test_mission.py -q --tb=short`、`uv run pytest tests/ -q --tb=short`、`uv run --extra dev ruff check x_reach\mission.py tests\test_mission.py`、`uv run x-reach schema mission-spec --json` |
+| 2026-04-16 | mission runtime に opt-in coverage gap fill を追加し、target gap を report-only に固定 | `uv run pytest tests/test_mission.py -q --tb=short`、`uv run pytest tests/ -q --tb=short`、`uv run --extra dev ruff check x_reach\mission.py tests\test_mission.py`、`uv run x-reach schema mission-spec --json` |
 
 ## Verification Plan
 

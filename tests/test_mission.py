@@ -191,8 +191,10 @@ def test_mission_run_executes_coverage_gap_fill_for_missing_topic(tmp_path):
     assert payload["summary"]["queries_total"] == 2
     assert payload["summary"]["ranked_candidates"] == 2
     assert payload["summary"]["coverage_gap_queries"] == 1
-    assert payload["summary"]["coverage_initial_gaps"] == 2
+    assert payload["summary"]["coverage_initial_gaps"] == 1
     assert payload["summary"]["coverage_final_gaps"] == 0
+    assert payload["coverage"]["initial"]["target_gap"] == 1
+    assert payload["coverage"]["initial"]["topic_gap_count"] == 1
     assert payload["coverage"]["executed"] is True
     assert payload["coverage"]["gap_queries"][0]["source_role"] == "coverage_gap_fill"
     assert (output_dir / "mission.coverage.batch.json").exists()
@@ -202,6 +204,59 @@ def test_mission_run_executes_coverage_gap_fill_for_missing_topic(tmp_path):
     ]
     pricing_post = next(item for item in ranked if item["id"] == "2")
     assert pricing_post["coverage_topics"] == [{"topic_id": "pricing", "label": "pricing"}]
+
+
+def test_mission_coverage_target_gap_is_report_only(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    output_dir = tmp_path / "mission-output"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "OpenAI rollout feedback",
+            "queries": ["OpenAI rollout"],
+            "target_posts": 3,
+            "quality_profile": "balanced",
+            "coverage": {"enabled": True, "min_ranked_posts": 3, "max_queries": 2},
+            "retention": {"raw_mode": "full", "item_text_mode": "full"},
+        },
+    )
+    calls = []
+
+    class _FakeClient:
+        def collect(self, channel, operation, value, **kwargs):
+            calls.append({"channel": channel, "operation": operation, "value": value, "kwargs": kwargs})
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=[
+                    _post(
+                        "1",
+                        "alice",
+                        "OpenAI rollout feedback with concrete implementation notes",
+                        likes=25,
+                    )
+                ],
+                raw={"value": value, "kwargs": kwargs},
+                meta={"input": value, "count": 1, "query_tokens": ["openai", "rollout"]},
+                error=None,
+            )
+
+    payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-target-gap",
+        client_factory=_FakeClient,
+    )
+
+    assert [call["value"] for call in calls] == ["OpenAI rollout"]
+    assert payload["summary"]["coverage_gap_queries"] == 0
+    assert payload["summary"]["coverage_initial_gaps"] == 0
+    assert payload["summary"]["coverage_final_gaps"] == 0
+    assert payload["coverage"]["initial"]["target_gap"] == 2
+    assert payload["coverage"]["initial"]["topic_gap_count"] == 0
+    assert payload["coverage"]["executed"] is False
+    assert not (output_dir / "mission.coverage.batch.json").exists()
 
 
 def test_collect_spec_dry_run_cli(tmp_path, capsys):

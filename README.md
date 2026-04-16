@@ -81,7 +81,10 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - For broad multi-query discovery, `x-reach plan candidates --min-seen-in 2` is an optional way to keep candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Saved evidence stays quiet by default; add `--warn-missing-evidence-metadata` only when provenance completeness matters for CI or downstream workflows.
 - For large-scale research, use a two-stage flow: compact discovery first, then `plan candidates` with `--max-per-author 2 --prefer-originals --drop-noise` before any deeper reads.
+- Quality filtering exposes `quality_filter.dropped_samples` diagnostics so filter thresholds can be audited from a small sample of dropped posts.
+- `plan candidates --drop-noise` and mission `exclude.drop_low_content_posts` remove obvious low-content quote posts before ranking.
 - For declarative large-scale X collection, use `collect --spec`: it runs a mission plan, writes raw/canonical/ranked artifacts, and leaves a manifest for resumable handoff.
+- Mission `coverage` is opt-in and fills only explicit topic gaps; ranked-count gaps are reported but do not trigger automatic query expansion.
 
 ## Docs
 

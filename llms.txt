@@ -32,8 +32,10 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 ## Scope
 
 - Supported channel: `twitter`
-- Purpose: channel registry, readiness diagnostics, thin read-only collection helper
-- X Reach does not choose request scale, collection routes, ranking, summarization, or posting
+- Purpose: X/Twitter collection, readiness diagnostics, evidence ledgers, candidate curation, and mission-spec artifact generation
+- X Reach does not choose request scale, summarization, or posting
+- Broad collection exposes deterministic diagnostics such as `quality_filter.dropped_samples`, `low_content` drops, and opt-in mission `coverage`
+- Mission `coverage` fills only explicit topic gaps; ranked-count gaps are report-only
 - External projects should prefer `x-reach collect --json` and should not copy `.codex-plugin` or `x_reach/skills` by default
 
 

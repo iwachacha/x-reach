@@ -1,67 +1,71 @@
-﻿# Policy Tests
+# Policy Tests
 
 Use these checks before adopting any X Reach proposal.
 
 ## Fast Accept Signals
 
-- The change exposes an existing capability more clearly without taking caller-owned decisions away.
-- The change adds neutral metadata, diagnostics, schema clarity, or ledger ergonomics.
-- The change adds an explicit opt-in helper for packaging, maintenance, or bounded collection.
-- The change removes repeated maintainer friction without inventing new workflow policy.
+- The change has direct X-specific value for collecting, filtering, ranking, diagnosing, or handing off posts.
+- The change makes existing collection behavior easier to inspect through neutral metadata, diagnostics, schemas, or artifacts.
+- The change is explicit opt-in, bounded, resumable, and observable.
+- The change removes repeated maintainer friction without inventing hidden workflow policy.
+- The change implements deterministic filters, query shaping, or ledger ergonomics before relying on LLM/VLM judgment.
 
 ## Fast Reject Signals
 
-- The feature chooses source mix, routes, ranking, summarization, or posting policy for the caller.
-- The feature silently deep-reads, fans out, auto-escalates, or auto-retries in a way that changes collection policy.
-- The feature adds normalized importance, trust, impact, or recommendation scores instead of preserving raw signals.
-- The feature hides real channel differences behind fake required operations or empty adapters.
-- The feature creates a second orchestration path where `collect`, `batch`, `plan candidates`, or `ledger` already cover the need.
+- The feature silently chooses scope, expands queries, deep-reads, retries, summarizes, posts, or routes on behalf of the caller.
+- The feature adds hidden fan-out, unbounded loops, opaque LLM decisions, or silent default changes.
+- The feature normalizes impact, trust, recommendation, or importance in a way that hides raw signals.
+- The feature duplicates `collect`, `collect --spec`, `batch`, `plan candidates`, `ledger`, or existing skills without reducing user friction.
+- The feature requires broad cross-project behavior but lacks tests, docs, diagnostics, and handoff artifacts.
 
 ## Split-When-Possible Rule
 
 If a proposal contains both:
 
-- a thin primitive
-- and a policy layer
+- a useful primitive
+- and a risky policy or automation layer
 
-keep only the thin primitive. Reject or defer the policy layer.
+return `adopt_primitives_only`. Keep the primitive and reject or defer the policy layer.
 
 Examples:
 
-- Keep neutral extraction diagnostics, reject content-quality scoring.
-- Keep bulk input parsing if it is explicit and bounded, reject hidden fan-out defaults.
-- Keep raw source metrics, reject cross-channel impact normalization.
+- Keep dropped-post diagnostics, reject opaque quality scoring.
+- Keep opt-in coverage topics, reject automatic open-ended query expansion.
+- Keep deterministic low-content filtering, defer LLM semantic judgment until candidates are narrowed.
 
 ## Overlap Checks
 
 Before adopting, search whether the repo already provides the idea through:
 
 - `x-reach collect --json`
+- `x-reach collect --spec`
 - `x-reach doctor --json`
 - `x-reach channels --json`
 - `x-reach batch`
 - `x-reach plan candidates`
 - `x-reach ledger *`
 - `x-reach schema collection-result --json`
+- `x-reach schema mission-spec --json`
 - `x-reach export-integration --client codex --format json`
 - bundled skills under `x_reach/skills`
 
 If a close surface already exists, prefer extending that surface instead of creating a parallel command or mode.
 
-## Cross-Cutting Changes
+## LLM/VLM Gate
 
-Treat these as defer-by-default unless the value is unusually clear and the implementation stays bounded and observable:
+LLM or VLM proposals are defer-by-default unless all of these are true:
 
-- transparent retries or backoff
-- global interface normalization across channels
-- new automatic multi-step workflows
-- packaging or install changes that affect every downstream user
+- deterministic narrowing already exists
+- model work is opt-in and bounded to a small candidate set
+- output includes reasons, confidence, and enough raw evidence for audit
+- failures degrade to the deterministic result
+- provider/model selection can be changed without rewriting the workflow
 
 ## Decision Bias
 
 When the tradeoff is ambiguous, bias toward:
 
-- `reject` if the proposal broadens ownership
-- `defer` if the idea may be useful but needs sharper boundaries
-- `adopt_now` only when the patch can stay thin, explicit, and local
-
+- `adopt_now` only when the patch is local, explicit, observable, and clearly improves X post collection
+- `adopt_primitives_only` when the useful primitive can ship without the risky policy layer
+- `defer` when evidence is promising but boundaries, cost, or model behavior need more proof
+- `reject` when the proposal hides policy, duplicates existing surfaces, or weakens caller control
