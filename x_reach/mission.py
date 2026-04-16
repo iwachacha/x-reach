@@ -137,6 +137,39 @@ def run_mission_spec(
         merge_payload = merge_ledger_inputs(raw_dir, paths["raw_jsonl"])
         canonical_summary = _write_canonical_jsonl(paths["raw_jsonl"], paths["canonical_jsonl"])
         curated_payload = _build_curated_payload(paths["raw_jsonl"], normalized_spec)
+        coverage_initial = _coverage_analysis(curated_payload, normalized_spec)
+        coverage_plan: dict[str, Any] | None = None
+        coverage_batch_payload: dict[str, Any] | None = None
+        coverage_exit_code = 0
+        if coverage_initial.get("enabled") and coverage_initial.get("gap_count"):
+            coverage_plan = _build_coverage_gap_plan(
+                normalized_spec,
+                coverage_initial,
+                existing_queries=batch_plan["queries"],
+            )
+            if coverage_plan["queries"]:
+                _write_json(paths["coverage_batch_plan"], coverage_plan)
+                validate_batch_plan(paths["coverage_batch_plan"])
+                coverage_batch_payload, coverage_exit_code = run_batch_plan(
+                    paths["coverage_batch_plan"],
+                    save_dir=raw_dir,
+                    shard_by="channel-operation",
+                    concurrency=concurrency,
+                    resume=resume,
+                    checkpoint_every=checkpoint_every,
+                    client_factory=client_factory,
+                )
+                merge_payload = merge_ledger_inputs(raw_dir, paths["raw_jsonl"])
+                canonical_summary = _write_canonical_jsonl(paths["raw_jsonl"], paths["canonical_jsonl"])
+                curated_payload = _build_curated_payload(paths["raw_jsonl"], normalized_spec)
+        batch_payload = _combine_batch_payloads(batch_payload, coverage_batch_payload)
+        batch_exit_code = max(batch_exit_code, coverage_exit_code)
+        coverage_payload = _build_coverage_payload(
+            initial=coverage_initial,
+            final=_coverage_analysis(curated_payload, normalized_spec),
+            coverage_plan=coverage_plan,
+            coverage_batch_payload=coverage_batch_payload,
+        )
         _write_ranked_jsonl(paths["ranked_jsonl"], curated_payload["ranked_candidates"])
         summary_text = _render_summary_markdown(
             plan_payload=plan_payload,
@@ -144,6 +177,7 @@ def run_mission_spec(
             merge_payload=merge_payload,
             canonical_summary=canonical_summary,
             curated_payload=curated_payload,
+            coverage_payload=coverage_payload,
             batch_exit_code=batch_exit_code,
         )
         paths["summary_md"].write_text(summary_text, encoding="utf-8", newline="\n")
@@ -153,6 +187,7 @@ def run_mission_spec(
             merge_payload=merge_payload,
             canonical_summary=canonical_summary,
             curated_payload=curated_payload,
+            coverage_payload=coverage_payload,
             batch_exit_code=batch_exit_code,
             outputs=paths,
             resume=resume,
@@ -216,6 +251,7 @@ def render_mission_text(payload: dict[str, Any]) -> str:
             f"OK: {'yes' if payload.get('ok') else 'no'}",
             f"Queries: {summary.get('queries_total', 0)} total, {summary.get('queries_ok', 0)} ok, {summary.get('queries_errors', 0)} errors, {summary.get('queries_skipped', 0)} skipped",
             f"Items: {summary.get('items_seen', 0)} seen, {summary.get('canonical_items', 0)} canonical, {summary.get('ranked_candidates', 0)} ranked",
+            f"Coverage: {summary.get('coverage_gap_queries', 0)} gap queries, {summary.get('coverage_final_gaps', 0)} final gaps",
             f"Raw ledger: {outputs.get('raw_jsonl', '')}",
             f"Ranked posts: {outputs.get('ranked_jsonl', '')}",
             f"Summary: {outputs.get('summary_md', '')}",
@@ -248,6 +284,7 @@ def _normalize_spec(
     quality_profile = _normalize_quality_profile(raw_spec.get("quality_profile"))
     exclude = _mapping(raw_spec.get("exclude"))
     diversity = _mapping(raw_spec.get("diversity"))
+    coverage = _mapping(raw_spec.get("coverage"))
     retention = _mapping(raw_spec.get("retention"))
     time_range = _mapping(raw_spec.get("time_range"))
     outputs = _normalize_outputs(raw_spec.get("outputs"))
@@ -299,6 +336,7 @@ def _normalize_spec(
             "min_seen_in": _optional_positive_int(diversity.get("min_seen_in"), "min_seen_in"),
             "require_topic_spread": _bool_or_default(diversity.get("require_topic_spread"), False),
         },
+        "coverage": _normalize_coverage(coverage, target_posts=target_posts),
         "retention": {
             "raw_mode": raw_mode,
             "raw_max_bytes": raw_max_bytes,
@@ -331,6 +369,86 @@ def _normalize_queries(raw_queries: Any) -> list[dict[str, Any]]:
         query.pop("query", None)
         queries.append(query)
     return queries
+
+
+def _normalize_coverage(raw_coverage: dict[str, Any], *, target_posts: int) -> dict[str, Any]:
+    enabled_value = raw_coverage.get("enabled")
+    if enabled_value is None:
+        enabled_value = raw_coverage.get("gap_fill")
+    max_rounds = _optional_positive_int(raw_coverage.get("max_rounds"), "coverage.max_rounds") or 1
+    if max_rounds != 1:
+        raise MissionSpecError("coverage.max_rounds currently supports only 1")
+    min_posts_per_topic = (
+        _optional_positive_int(raw_coverage.get("min_posts_per_topic"), "coverage.min_posts_per_topic") or 1
+    )
+    return {
+        "enabled": _bool_or_default(enabled_value, False),
+        "max_rounds": max_rounds,
+        "max_queries": _optional_positive_int(raw_coverage.get("max_queries"), "coverage.max_queries") or 4,
+        "min_ranked_posts": (
+            _optional_positive_int(raw_coverage.get("min_ranked_posts"), "coverage.min_ranked_posts")
+            or target_posts
+        ),
+        "min_posts_per_topic": min_posts_per_topic,
+        "probe_limit": (
+            _optional_positive_int(raw_coverage.get("probe_limit"), "coverage.probe_limit")
+            or min(max(math.ceil(target_posts / 2), 5), 25)
+        ),
+        "topics": _normalize_coverage_topics(
+            raw_coverage.get("topics") or raw_coverage.get("required_topics"),
+            default_min_posts=min_posts_per_topic,
+        ),
+    }
+
+
+def _normalize_coverage_topics(raw_topics: Any, *, default_min_posts: int) -> list[dict[str, Any]]:
+    if raw_topics is None:
+        return []
+    if not isinstance(raw_topics, list):
+        raise MissionSpecError("coverage.topics must be a list")
+    topics: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, raw_topic in enumerate(raw_topics, start=1):
+        if isinstance(raw_topic, str):
+            label = raw_topic.strip()
+            if not label:
+                continue
+            topic = {
+                "label": label,
+                "terms": [label],
+                "queries": [],
+                "min_posts": default_min_posts,
+                "probe_limit": None,
+            }
+        elif isinstance(raw_topic, dict):
+            label = _optional_text(raw_topic.get("label") or raw_topic.get("name") or raw_topic.get("topic"))
+            terms = _normalize_text_list(raw_topic.get("terms") or raw_topic.get("keywords") or raw_topic.get("any"))
+            queries = _normalize_text_list(raw_topic.get("queries"))
+            if label is None and terms:
+                label = terms[0]
+            if label is None and queries:
+                label = queries[0]
+            if label is None:
+                raise MissionSpecError(f"coverage topic {index} requires label, terms, or queries")
+            if not terms:
+                terms = [label]
+            topic = {
+                "label": label,
+                "terms": terms,
+                "queries": queries,
+                "min_posts": _optional_positive_int(raw_topic.get("min_posts"), f"coverage topic {index} min_posts")
+                or default_min_posts,
+                "probe_limit": _optional_positive_int(raw_topic.get("probe_limit"), f"coverage topic {index} probe_limit"),
+            }
+        else:
+            raise MissionSpecError(f"coverage topic {index} must be a string or object")
+        key = _slugify(topic["label"]) or str(index)
+        if key in seen:
+            continue
+        topic["topic_id"] = key
+        topics.append(topic)
+        seen.add(key)
+    return topics
 
 
 def _build_batch_plan(spec: dict[str, Any]) -> dict[str, Any]:
@@ -446,6 +564,7 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
     ranked = ranked[: int(spec["target_posts"])]
     for rank, candidate in enumerate(ranked, start=1):
         candidate["rank"] = rank
+    _annotate_coverage_topics(ranked, spec)
     filter_drop_counts = dict(candidate_payload["summary"].get("filter_drop_counts") or {})
     for reason, count in keyword_drops.items():
         filter_drop_counts[reason] = filter_drop_counts.get(reason, 0) + count
@@ -461,6 +580,233 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
         "ranked_count": len(ranked),
         "ranked_candidates": ranked,
     }
+
+
+def _coverage_analysis(curated_payload: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
+    coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
+    ranked = curated_payload.get("ranked_candidates") or []
+    ranked_count = len(ranked)
+    topic_reports: list[dict[str, Any]] = []
+    for topic in coverage.get("topics") or []:
+        matches = [
+            candidate
+            for candidate in ranked
+            if _candidate_matches_coverage_topic(candidate, topic.get("terms") or [])
+        ]
+        min_posts = int(topic.get("min_posts") or coverage.get("min_posts_per_topic") or 1)
+        topic_reports.append(
+            {
+                "topic_id": topic.get("topic_id"),
+                "label": topic.get("label"),
+                "terms": topic.get("terms") or [],
+                "count": len(matches),
+                "min_posts": min_posts,
+                "gap": max(min_posts - len(matches), 0),
+                "sample_ids": [str(candidate.get("id") or "") for candidate in matches[:3]],
+            }
+        )
+    target_ranked_posts = int(coverage.get("min_ranked_posts") or spec.get("target_posts") or 0)
+    target_gap = max(target_ranked_posts - ranked_count, 0)
+    topic_gap_count = sum(1 for report in topic_reports if int(report.get("gap") or 0) > 0)
+    return {
+        "enabled": bool(coverage.get("enabled")),
+        "ranked_count": ranked_count,
+        "target_ranked_posts": target_ranked_posts,
+        "target_gap": target_gap,
+        "topic_reports": topic_reports,
+        "gap_count": topic_gap_count + (1 if target_gap else 0),
+    }
+
+
+def _build_coverage_gap_plan(
+    spec: dict[str, Any],
+    coverage_analysis: dict[str, Any],
+    *,
+    existing_queries: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
+    max_queries = int(coverage.get("max_queries") or 0)
+    existing_keys = {
+        (
+            str(query.get("input") or "").strip().casefold(),
+            str(query.get("lang") or "").strip().casefold(),
+        )
+        for query in existing_queries
+    }
+    generated: list[dict[str, Any]] = []
+    languages = spec.get("languages") or [None]
+    if not languages:
+        languages = [None]
+
+    for report in coverage_analysis.get("topic_reports") or []:
+        if int(report.get("gap") or 0) <= 0:
+            continue
+        topic = _coverage_topic_by_id(spec, report.get("topic_id"))
+        if topic is None:
+            continue
+        source_queries = topic.get("queries") or [_default_coverage_query(spec, topic)]
+        for source_query in source_queries:
+            for lang in languages:
+                if len(generated) >= max_queries:
+                    break
+                query_text = str(source_query or "").strip()
+                if not query_text:
+                    continue
+                lang_text = str(lang or "").strip()
+                key = (query_text.casefold(), lang_text.casefold())
+                if key in existing_keys:
+                    continue
+                existing_keys.add(key)
+                topic_slug = _slugify(topic.get("label") or report.get("label") or "topic")
+                lang_suffix = f"-{_slugify(lang_text)}" if lang_text else ""
+                generated.append(
+                    {
+                        "query_id": f"gap{len(generated) + 1:02d}-{topic_slug}{lang_suffix}",
+                        "input": query_text,
+                        "lang": lang_text or None,
+                        "limit": topic.get("probe_limit") or coverage.get("probe_limit"),
+                        "intent": f"{_mission_intent(spec)}:coverage:{topic_slug}",
+                        "source_role": "coverage_gap_fill",
+                    }
+                )
+            if len(generated) >= max_queries:
+                break
+        if len(generated) >= max_queries:
+            break
+
+    gap_spec = {**spec, "queries": generated}
+    plan = _build_batch_plan(gap_spec) if generated else _empty_coverage_batch_plan(spec)
+    plan["coverage"] = {
+        "reason": "coverage_gap_fill",
+        "initial_gap_count": coverage_analysis.get("gap_count", 0),
+        "target_gap": coverage_analysis.get("target_gap", 0),
+        "topic_gaps": [
+            report
+            for report in coverage_analysis.get("topic_reports") or []
+            if int(report.get("gap") or 0) > 0
+        ],
+    }
+    return plan
+
+
+def _empty_coverage_batch_plan(spec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": utc_timestamp(),
+        "run_id": spec["run_id"],
+        "objective": spec.get("objective"),
+        "quality_profile": spec["quality_profile"],
+        "failure_policy": spec["failure_policy"],
+        "metadata": {
+            "intent": _mission_intent(spec),
+            "source_role": "coverage_gap_fill",
+            "query_id_prefix": f"{_slugify(spec.get('objective') or 'mission')}-gap",
+        },
+        "queries": [],
+    }
+
+
+def _build_coverage_payload(
+    *,
+    initial: dict[str, Any],
+    final: dict[str, Any],
+    coverage_plan: dict[str, Any] | None,
+    coverage_batch_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    planned_queries = (coverage_plan or {}).get("queries") or []
+    return {
+        "enabled": bool(initial.get("enabled")),
+        "initial": initial,
+        "final": final,
+        "gap_queries": planned_queries,
+        "gap_query_count": len(planned_queries),
+        "executed": coverage_batch_payload is not None,
+        "batch_summary": (coverage_batch_payload or {}).get("summary") or {},
+    }
+
+
+def _combine_batch_payloads(primary: dict[str, Any], secondary: dict[str, Any] | None) -> dict[str, Any]:
+    if secondary is None:
+        return primary
+    combined = dict(primary)
+    queries = [*(primary.get("queries") or []), *(secondary.get("queries") or [])]
+    combined["queries"] = queries
+    combined["summary"] = _batch_summary_from_queries(queries)
+    combined["save_targets"] = sorted(set(primary.get("save_targets") or []) | set(secondary.get("save_targets") or []))
+    combined["coverage_batch"] = secondary
+    return combined
+
+
+def _batch_summary_from_queries(queries: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    urls: list[str] = []
+    source_roles: dict[str, int] = {}
+    for query in queries:
+        role = query.get("source_role")
+        if role:
+            source_roles[str(role)] = source_roles.get(str(role), 0) + 1
+        urls.extend(str(url) for url in query.get("urls") or [] if url)
+    unique_urls = set(urls)
+    return {
+        "total": len(queries),
+        "ok": sum(1 for query in queries if query.get("status") == "ok"),
+        "errors": sum(1 for query in queries if query.get("status") == "error"),
+        "skipped": sum(1 for query in queries if query.get("status") == "skipped"),
+        "items": sum(int(query.get("count") or 0) for query in queries),
+        "unique_urls": len(unique_urls),
+        "duplicate_urls": len(urls) - len(unique_urls),
+        "source_roles": source_roles,
+    }
+
+
+def _coverage_topic_by_id(spec: dict[str, Any], topic_id: Any) -> dict[str, Any] | None:
+    coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
+    for topic in coverage.get("topics") or []:
+        if topic.get("topic_id") == topic_id:
+            return topic
+    return None
+
+
+def _default_coverage_query(spec: dict[str, Any], topic: dict[str, Any]) -> str:
+    base = str(spec.get("objective") or "").strip()
+    if not base and spec.get("queries"):
+        base = str(spec["queries"][0].get("input") or "").strip()
+    label = str(topic.get("label") or "").strip()
+    if base and label and label.casefold() not in base.casefold():
+        return f"{base} {label}"
+    return base or label
+
+
+def _candidate_matches_coverage_topic(candidate: dict[str, Any], terms: Sequence[str]) -> bool:
+    normalized_terms = [str(term).casefold() for term in terms if str(term).strip()]
+    if not normalized_terms:
+        return False
+    haystack = " ".join(
+        str(value or "")
+        for value in (
+            candidate.get("title"),
+            candidate.get("text"),
+            candidate.get("author"),
+        )
+    ).casefold()
+    return any(term in haystack for term in normalized_terms)
+
+
+def _annotate_coverage_topics(candidates: Sequence[dict[str, Any]], spec: dict[str, Any]) -> None:
+    coverage = spec.get("coverage") if isinstance(spec.get("coverage"), dict) else {}
+    topics = coverage.get("topics") or []
+    if not topics:
+        return
+    for candidate in candidates:
+        matches = [
+            {
+                "topic_id": topic.get("topic_id"),
+                "label": topic.get("label"),
+            }
+            for topic in topics
+            if _candidate_matches_coverage_topic(candidate, topic.get("terms") or [])
+        ]
+        if matches:
+            candidate["coverage_topics"] = matches
 
 
 def _drop_excluded_keywords(
@@ -651,6 +997,7 @@ def _build_result_payload(
     merge_payload: dict[str, Any],
     canonical_summary: dict[str, Any],
     curated_payload: dict[str, Any],
+    coverage_payload: dict[str, Any],
     batch_exit_code: int,
     outputs: dict[str, Path],
     resume: bool,
@@ -688,10 +1035,15 @@ def _build_result_payload(
             "filtered_candidates": candidate_summary.get("filtered_candidate_count", 0),
             "ranked_candidates": curated_payload.get("ranked_count", 0),
             "filter_drop_counts": curated_payload.get("filter_drop_counts", {}),
+            "coverage_enabled": coverage_payload.get("enabled", False),
+            "coverage_gap_queries": coverage_payload.get("gap_query_count", 0),
+            "coverage_initial_gaps": (coverage_payload.get("initial") or {}).get("gap_count", 0),
+            "coverage_final_gaps": (coverage_payload.get("final") or {}).get("gap_count", 0),
         },
         "batch": batch_payload,
         "merge": merge_payload,
         "canonical": canonical_summary,
+        "coverage": coverage_payload,
         "curation": {
             key: value
             for key, value in curated_payload.items()
@@ -705,6 +1057,7 @@ def _build_result_payload(
             "summary_md": str(outputs["summary_md"]),
             "manifest": str(outputs["manifest"]),
             "batch_plan": str(outputs["batch_plan"]),
+            "coverage_batch_plan": str(outputs["coverage_batch_plan"]),
             "normalized_spec": str(outputs["normalized_spec"]),
             "state": str(outputs["state"]),
         },
@@ -718,6 +1071,7 @@ def _render_summary_markdown(
     merge_payload: dict[str, Any],
     canonical_summary: dict[str, Any],
     curated_payload: dict[str, Any],
+    coverage_payload: dict[str, Any],
     batch_exit_code: int,
 ) -> str:
     batch_summary = batch_payload.get("summary") or {}
@@ -746,6 +1100,23 @@ def _render_summary_markdown(
         lines.extend(f"- {reason}: {count}" for reason, count in filter_drop_counts.items())
     else:
         lines.append("- none")
+    lines.extend(["", "## Coverage", ""])
+    if coverage_payload.get("enabled"):
+        initial = coverage_payload.get("initial") or {}
+        final = coverage_payload.get("final") or {}
+        lines.extend(
+            [
+                f"- Initial gaps: {initial.get('gap_count', 0)}",
+                f"- Final gaps: {final.get('gap_count', 0)}",
+                f"- Gap queries: {coverage_payload.get('gap_query_count', 0)}",
+            ]
+        )
+        for report in final.get("topic_reports") or []:
+            lines.append(
+                f"- Topic `{report.get('label')}`: {report.get('count', 0)}/{report.get('min_posts', 0)}"
+            )
+    else:
+        lines.append("- disabled")
     lines.extend(["", "## Top Candidates", ""])
     for candidate in (curated_payload.get("ranked_candidates") or [])[:10]:
         title = candidate.get("title") or candidate.get("id") or "(untitled)"
@@ -767,6 +1138,7 @@ def _mission_paths(output_dir: Path) -> dict[str, Path]:
         "summary_md": output_dir / "summary.md",
         "manifest": output_dir / _MANIFEST_OUTPUT,
         "batch_plan": output_dir / "mission.batch.json",
+        "coverage_batch_plan": output_dir / "mission.coverage.batch.json",
         "normalized_spec": output_dir / "mission.normalized.json",
         "state": output_dir / "mission-state.json",
     }

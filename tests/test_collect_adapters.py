@@ -297,6 +297,10 @@ def test_twitter_adapter_search_balanced_filters_noise_but_backfills_on_topic_re
     assert payload["meta"]["query_tokens"] == ["openai"]
     assert payload["meta"]["filter_drop_counts"] == {"promo_phrase": 1, "retweet": 1}
     assert payload["meta"]["diagnostics"]["quality_filter"]["fallback_used"] == 1
+    dropped_samples = payload["meta"]["diagnostics"]["quality_filter"]["dropped_samples"]
+    assert [sample["id"] for sample in dropped_samples] == ["1", "2"]
+    assert dropped_samples[0]["reasons"] == ["retweet"]
+    assert dropped_samples[1]["reasons"] == ["promo_phrase"]
 
 
 def test_twitter_adapter_user_success(config, monkeypatch):

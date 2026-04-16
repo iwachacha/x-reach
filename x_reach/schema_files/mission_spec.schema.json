@@ -151,6 +151,94 @@
         }
       }
     },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "gap_fill": {
+          "type": "boolean"
+        },
+        "max_rounds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "max_queries": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min_ranked_posts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min_posts_per_topic": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "probe_limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "topic": {
+                    "type": "string"
+                  },
+                  "terms": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "keywords": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "queries": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "min_posts": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "probe_limit": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "required_topics": {
+          "type": "array"
+        }
+      }
+    },
     "retention": {
       "type": "object",
       "additionalProperties": true,

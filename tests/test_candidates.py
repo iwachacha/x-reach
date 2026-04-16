@@ -510,6 +510,51 @@ def test_candidates_can_drop_noise_require_query_match_and_cap_authors(tmp_path)
     }
 
 
+def test_candidates_can_drop_low_content_quote_posts(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    records = [
+        build_ledger_record(
+            _result(
+                channel="twitter",
+                operation="search",
+                items=[
+                    build_item(
+                        item_id="thin-quote",
+                        kind="post",
+                        title="Build macOS apps with our Codex plugin:",
+                        url="https://x.com/alice/status/1",
+                        text="Build macOS apps with our Codex plugin:",
+                        author="alice",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "quote"},
+                    ),
+                    build_item(
+                        item_id="useful-1",
+                        kind="post",
+                        title="Codex plugin notes",
+                        url="https://x.com/bob/status/2",
+                        text="OpenAI Codex plugin helps developers build macOS apps with clear setup notes",
+                        author="bob",
+                        published_at=None,
+                        source="twitter",
+                        extras={"timeline_item_kind": "original"},
+                    ),
+                ],
+                input_value="Codex plugin",
+                meta={"query_tokens": ["codex", "plugin"]},
+            ),
+            run_id="run-1",
+        )
+    ]
+    _write_jsonl(path, records)
+
+    payload = build_candidates_payload(path, by="post", limit=20, drop_noise=True)
+
+    assert [candidate["id"] for candidate in payload["candidates"]] == ["useful-1"]
+    assert payload["summary"]["filter_drop_counts"] == {"low_content": 1}
+
+
 def test_candidates_can_require_multiple_sightings(tmp_path):
     path = tmp_path / "evidence.jsonl"
     repeated_url = "https://x.com/alice/status/1"

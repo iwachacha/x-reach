@@ -77,6 +77,16 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 > spec から batch plan を固定し、`raw.jsonl` / `canonical.jsonl` / `ranked.jsonl` / `summary.md` / `mission-result.json` を出力します。
 > Agent は戦略・レビューに寄せ、x-reach が deterministic executor になる方針を採用しました。
 
+> [!IMPORTANT]
+> **Phase 2-E 完了**:
+> レビュー案を参考にしつつ live probe で不足を再確認し、LLM ではなく deterministic な候補品質改善を追加しました。
+> `quality_profile` の drop 集計に dropped sample を持たせ、候補化では薄い引用投稿を `low_content` として落とせるようにしました。
+
+> [!IMPORTANT]
+> **Phase 2-F 完了**:
+> mission runtime に opt-in の coverage gap fill を追加しました。
+> `coverage.enabled=true` の場合、初回 ranked 候補を deterministic topic terms で検査し、不足 topic に対して明示クエリまたは `objective + label` の追加 search を1ラウンドだけ実行します。
+
 ---
 
 ## Proposed Changes
@@ -204,7 +214,22 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 - ranking は deterministic heuristic として `seen_in_count`、original/quote/reply/retweet、engagement、本文量、URL/media 有無を使う。LLM judge はまだ入れていない。
 - diversity は author/thread/url cap を mission 側で適用し、`plan candidates` 側の post dedupe / title duplicate / query match と併用する。
 - `x-reach schema mission-spec --json` と SDK の `XReachClient.mission_plan()` / `XReachClient.collect_spec()` を追加した。
-- 残課題: coverage gap fill、LLM/VLM judge、stance/subtopic classification は未実装。次フェーズでは `ranked.jsonl` の sample inspection から不足観点を検出して追加 query を生成する流れを検討する。
+- 残課題: LLM/VLM judge、stance/subtopic classification は未実装。coverage gap fill は Phase 2-F で opt-in の deterministic 実装に昇格した。
+
+#### 2-E. 実調査フィードバックによる品質改善（完了 ✅）
+- 2026-04-16 の live probe で `doctor --probe` / `channels` は正常、`search "OpenAI" --limit 5 --quality-profile balanced` では `structural_noise` の drop 集計と、単体では根拠として薄い引用投稿が確認された。
+- 採用案: LLM judge 追加より先に、決定的に解ける品質改善を優先した。`quality_filter.dropped_samples` に最大5件の `id` / `author` / `text_preview` / `reasons` を残し、運用時に drop 理由を検証できるようにした。
+- 採用案: `plan candidates --drop-noise` と mission の `exclude.drop_low_content_posts` で、短すぎる本文や「短い quote + コロン終端」の引用投稿を `low_content` として落とす。X投稿収集では候補品質に直結し、汎用性の毀損は小さい。
+- 非採用/保留: LLM はまだ入れない。投入する場合も `ranked.jsonl` の上位候補など deterministic に絞った後の最終判定に限定し、provider/model は実装時点の低コストなクラウドモデルを公式情報で確認して選ぶ。
+
+#### 2-F. Coverage Gap Fill（完了 ✅）
+- 採用案: レビューの `Coverage gap fill` は、LLM や自律探索ではなく、mission spec で明示された `coverage.topics` を deterministic に検査する形で採用した。
+- `coverage.enabled=true` の時だけ有効化し、初回 `ranked_candidates` に topic terms が不足している場合、最大 `coverage.max_queries` 件の追加 search を1ラウンド実行する。
+- topic ごとに `label` / `terms` / `queries` / `min_posts` / `probe_limit` を指定できる。`queries` がない場合は `objective + label` から控えめに生成する。
+- 追加 batch は `source_role=coverage_gap_fill` として raw ledger に追記し、`raw.jsonl` / `canonical.jsonl` / `ranked.jsonl` / `summary.md` / `mission-result.json` を再生成する。
+- coverage topic に一致した ranked 候補には `coverage_topics` を付与し、後続レビューでどの観点を満たしているか確認しやすくした。
+- manifest には `coverage.initial` / `coverage.final` / `coverage.gap_queries` / `coverage.batch_summary` を残すため、どの不足がどこまで埋まったかを次作業者が確認できる。
+- 非採用/保留: 複数ラウンドの active refinement、LLM による意味的 topic 判定、画像/VLM coverage はまだ入れない。現段階ではコストと挙動予測性を優先した。
 
 ---
 
@@ -212,8 +237,8 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 
 次の候補は以下です。
 
-- mission runtime の次段として coverage gap fill を入れるか。現状は spec の query 群を deterministic に実行し、ranked output を返すところまで。
-- LLM judge / VLM judge を入れる場合、`ranked.jsonl` の上位候補だけに限定し、yes/no ではなく理由付き判定を残す方針がよい。
+- coverage gap fill の次段として、topic terms だけでは拾えない意味的な不足を上位候補サンプルから検出するか。
+- LLM judge / VLM judge を入れる場合、`ranked.jsonl` の上位候補だけに限定し、yes/no ではなく理由付き判定を残す方針がよい。モデル名は固定せず、作業時点で低コスト・十分なクラウドモデルを公式情報で確認して選ぶ。
 - `agent_reach` 表記が残る docs / skills / tests の整理と、互換レイヤーの維持方針の明文化。
 
 ---
@@ -226,6 +251,8 @@ Agent-Reach由来の汎用的な「マルチチャネル調査フレームワー
 | 2026-04-15 | runtime 本体を `x_reach/` に移動し、`agent_reach/` を shim 化 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach search "OpenAI" --limit 3 --json`、`uv run x-reach posts "openai" --limit 5 --originals-only --json` |
 | 2026-04-15 | `quality_profile`、broad op の compact default、deterministic noise filtering、ledger/candidates の大規模調査向け診断を追加 | `uv run pytest tests/ -q --tb=short`、`uv run x-reach doctor --json --probe`、`uv run x-reach search "OpenAI" --limit 5 --json`、`uv run x-reach search "AI agent" --limit 5 --quality-profile precision --json`、`uv run x-reach posts "openai" --limit 5 --json`、`uv run x-reach batch --plan PLAN.json --save-dir SHARDS --json`、`uv run x-reach ledger merge --input SHARDS --output evidence.jsonl --json`、`uv run x-reach ledger summarize --input evidence.jsonl --json`、`uv run x-reach plan candidates --input evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --json` |
 | 2026-04-16 | `collect --spec` mission runtime、mission spec schema、raw/canonical/ranked artifact 出力、SDK helper を追加 | `uv run pytest tests/ -q --tb=short`、`uv run pytest tests/test_mission.py tests/test_cli.py tests/test_client.py -q --tb=short`、`uv run --extra dev ruff check x_reach\mission.py x_reach\batch.py x_reach\cli.py x_reach\client.py x_reach\schemas.py agent_reach\mission.py tests\test_mission.py`、`uv run x-reach schema mission-spec --json` |
+| 2026-04-16 | live probe 結果から drop sample 診断と `low_content` 候補フィルタを追加 | `uv run x-reach doctor --json --probe`、`uv run x-reach channels --json`、`uv run x-reach search "OpenAI" --limit 5 --quality-profile balanced --json`、`uv run pytest tests/test_candidates.py tests/test_collect_adapters.py tests/test_mission.py -q --tb=short` |
+| 2026-04-16 | mission runtime に opt-in coverage gap fill を追加 | `uv run pytest tests/test_mission.py -q --tb=short`、`uv run pytest tests/ -q --tb=short`、`uv run --extra dev ruff check x_reach\mission.py tests\test_mission.py`、`uv run x-reach schema mission-spec --json` |
 
 ## Verification Plan
 

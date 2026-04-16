@@ -518,6 +518,7 @@ def _post_filter_candidates(
                 require_query_match=require_query_match,
                 drop_retweets=drop_noise,
                 drop_replies=drop_noise,
+                drop_low_content=drop_noise,
             )
             reasons = []
             for reason in analysis["drop_reasons"]:

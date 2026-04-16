@@ -119,6 +119,91 @@ def test_mission_run_writes_raw_canonical_ranked_and_summary(tmp_path):
     assert calls[0]["kwargs"]["item_text_mode"] == "full"
 
 
+def test_mission_run_executes_coverage_gap_fill_for_missing_topic(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    output_dir = tmp_path / "mission-output"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "OpenAI rollout feedback",
+            "queries": ["OpenAI rollout"],
+            "target_posts": 2,
+            "quality_profile": "balanced",
+            "coverage": {
+                "enabled": True,
+                "max_queries": 1,
+                "probe_limit": 1,
+                "topics": [
+                    {
+                        "label": "pricing",
+                        "terms": ["pricing"],
+                        "queries": ["OpenAI rollout pricing complaints"],
+                        "min_posts": 1,
+                    }
+                ],
+            },
+            "retention": {"raw_mode": "full", "item_text_mode": "full"},
+        },
+    )
+    calls = []
+
+    class _FakeClient:
+        def collect(self, channel, operation, value, **kwargs):
+            calls.append({"channel": channel, "operation": operation, "value": value, "kwargs": kwargs})
+            if value == "OpenAI rollout pricing complaints":
+                items = [
+                    _post(
+                        "2",
+                        "bob",
+                        "OpenAI rollout pricing complaints from teams adopting the product",
+                        likes=50,
+                    )
+                ]
+            else:
+                items = [
+                    _post(
+                        "1",
+                        "alice",
+                        "OpenAI rollout feedback with concrete implementation notes",
+                        likes=25,
+                    )
+                ]
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=items,
+                raw={"value": value, "kwargs": kwargs},
+                meta={"input": value, "count": len(items), "query_tokens": ["openai", "rollout"]},
+                error=None,
+            )
+
+    payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-coverage",
+        client_factory=_FakeClient,
+    )
+
+    assert [call["value"] for call in calls] == ["OpenAI rollout", "OpenAI rollout pricing complaints"]
+    assert calls[1]["kwargs"]["limit"] == 1
+    assert calls[1]["kwargs"]["quality_profile"] == "balanced"
+    assert payload["summary"]["queries_total"] == 2
+    assert payload["summary"]["ranked_candidates"] == 2
+    assert payload["summary"]["coverage_gap_queries"] == 1
+    assert payload["summary"]["coverage_initial_gaps"] == 2
+    assert payload["summary"]["coverage_final_gaps"] == 0
+    assert payload["coverage"]["executed"] is True
+    assert payload["coverage"]["gap_queries"][0]["source_role"] == "coverage_gap_fill"
+    assert (output_dir / "mission.coverage.batch.json").exists()
+    ranked = [
+        json.loads(line)
+        for line in (output_dir / "ranked.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    pricing_post = next(item for item in ranked if item["id"] == "2")
+    assert pricing_post["coverage_topics"] == [{"topic_id": "pricing", "label": "pricing"}]
+
+
 def test_collect_spec_dry_run_cli(tmp_path, capsys):
     spec_path = tmp_path / "mission.json"
     _write_spec(spec_path, {"queries": ["OpenAI"], "target_posts": 1})

@@ -292,6 +292,7 @@ def _apply_quality_profile_filter(
     kept: list[dict[str, Any]] = []
     fallback: list[dict[str, Any]] = []
     dropped = Counter()
+    dropped_samples: list[dict[str, Any]] = []
 
     for tweet in data:
         analysis = analyze_item_quality(
@@ -315,24 +316,48 @@ def _apply_quality_profile_filter(
             continue
         for reason in reasons:
             dropped[reason] += 1
+        _append_quality_drop_sample(dropped_samples, tweet, reasons)
 
     used_fallback = max(requested_limit - len(kept), 0)
     if used_fallback:
         kept.extend(fallback[:used_fallback])
     for _tweet in fallback[used_fallback:]:
         dropped["engagement_gate"] += 1
+        _append_quality_drop_sample(dropped_samples, _tweet, ["engagement_gate"])
 
     filter_drop_counts = {key: dropped[key] for key in sorted(dropped)}
-    diagnostics = {
-        "quality_filter": {
-            "quality_profile": quality_profile,
-            "items_before_quality_filter": len(data),
-            "items_after_quality_filter": len(kept[:requested_limit]),
-            "fallback_candidates": len(fallback),
-            "fallback_used": min(used_fallback, len(fallback)),
-        }
+    quality_diagnostics = {
+        "quality_profile": quality_profile,
+        "items_before_quality_filter": len(data),
+        "items_after_quality_filter": len(kept[:requested_limit]),
+        "fallback_candidates": len(fallback),
+        "fallback_used": min(used_fallback, len(fallback)),
     }
+    if dropped_samples:
+        quality_diagnostics["dropped_samples"] = dropped_samples
+    diagnostics = {"quality_filter": quality_diagnostics}
     return kept[:requested_limit], diagnostics, filter_drop_counts, list(filter_drop_counts)
+
+
+def _append_quality_drop_sample(
+    samples: list[dict[str, Any]],
+    tweet: dict[str, Any],
+    reasons: Sequence[str],
+    *,
+    limit: int = 5,
+) -> None:
+    if len(samples) >= limit:
+        return
+    author = tweet.get("author") if isinstance(tweet.get("author"), dict) else {}
+    text = " ".join(str(tweet.get("text") or "").split())
+    samples.append(
+        {
+            "id": str(tweet.get("id") or ""),
+            "author": author.get("screenName"),
+            "text_preview": text[:160],
+            "reasons": list(reasons),
+        }
+    )
 
 
 def _build_search_args(

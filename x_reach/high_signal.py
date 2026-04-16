@@ -197,6 +197,7 @@ def analyze_item_quality(
     require_query_match: bool = False,
     drop_retweets: bool = False,
     drop_replies: bool = False,
+    drop_low_content: bool = False,
 ) -> dict[str, Any]:
     matched_tokens = _matched_query_tokens(searchable_parts or (text,), query_tokens or ())
     noise_counts = structural_noise_counts(text, urls=urls)
@@ -213,6 +214,9 @@ def analyze_item_quality(
         reasons.append("structural_noise")
     if has_promo_phrase(text):
         reasons.append("promo_phrase")
+    low_content = has_low_content(text, item_kind=normalized_kind)
+    if drop_low_content and low_content:
+        reasons.append("low_content")
 
     engagement_pass = passes_engagement_gate(engagement, quality_profile)
     if quality_profile in _QUALITY_ENGAGEMENT_THRESHOLDS and not engagement_pass:
@@ -225,6 +229,7 @@ def analyze_item_quality(
         "structural_noise_counts": noise_counts,
         "structural_noise": has_structural_noise(noise_counts),
         "promo_phrase": has_promo_phrase(text),
+        "low_content": low_content,
         "engagement_pass": engagement_pass,
         "drop_reasons": reasons,
     }
@@ -268,6 +273,20 @@ def has_structural_noise(counts: dict[str, int]) -> bool:
 def has_promo_phrase(text: str | None) -> bool:
     haystack = str(text or "").casefold()
     return any(phrase in haystack for phrase in _PROMO_PHRASES)
+
+
+def has_low_content(text: str | None, *, item_kind: str | None = None) -> bool:
+    """Return True when text is too thin to stand alone as research evidence."""
+
+    normalized = " ".join(str(text or "").split())
+    if not normalized:
+        return True
+    words = normalized.split()
+    if len(normalized) <= 12:
+        return True
+    if item_kind == "quote" and len(words) <= 8 and normalized.endswith(":"):
+        return True
+    return False
 
 
 def maybe_urls(value: Any) -> list[str]:
