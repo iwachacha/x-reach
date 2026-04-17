@@ -32,6 +32,7 @@ x-reach export-integration --client codex --format json --profile runtime-minima
 - X Reach does not choose final scope, synthesis, publishing, or final selection.
 - X Reach is topic-agnostic. Use caller-declared objectives, queries, coverage topics, judge intent, and exclude rules instead of assuming one domain's noise rules apply globally.
 - When query tokens are too weak, use caller-declared mission `topic_fit` rules or `plan candidates --topic-fit topic-fit.json` for deterministic fit diagnostics. Do not treat those diagnostics as final truth or importance.
+- For account timelines, `posts` / `user_posts` can use explicit metric filters and caller-declared `topic_fit`; do not use it as a hidden search fallback or author deep-read step.
 - Collection-only or raw-evidence handoff is a valid endpoint; do not synthesize unless the user asked for it.
 - Use `collect --json` for narrow requests and `collect --spec` for broad, resumable, artifact-heavy runs.
 - When a broad run uses `--concurrency > 1`, include explicit pacing such as `--query-delay 1 --throttle-cooldown 30` and inspect throttle-sensitive diagnostics before continuing.

@@ -51,6 +51,45 @@ def test_mission_plan_normalizes_review_style_spec(tmp_path):
     assert payload["judge"]["fallback_policy"] == "keep_ranked"
 
 
+def test_mission_plan_can_emit_explicit_user_posts_query_with_filters(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "account timeline codex evidence",
+            "queries": [
+                {
+                    "operation": "user_posts",
+                    "input": "openai",
+                    "limit": 5,
+                    "originals_only": True,
+                    "min_likes": 10,
+                }
+            ],
+            "time_range": {"since": "2026-03-01", "until": "2026-04-15"},
+            "languages": ["ja"],
+            "target_posts": 5,
+            "exclude": {"min_views": 1000},
+            "topic_fit": {"required_any_terms": ["codex"]},
+        },
+    )
+
+    payload = build_mission_plan_payload(spec_path, output_dir=tmp_path / "out", run_id="run-test")
+    query = payload["batch_plan"]["queries"][0]
+
+    assert query["operation"] == "user_posts"
+    assert query["input"] == "openai"
+    assert query["source_role"] == "mission_user_posts"
+    assert query["originals_only"] is True
+    assert query["min_likes"] == 10
+    assert query["min_views"] == 1000
+    assert query["topic_fit"]["required_any_terms"] == ["codex"]
+    assert "since" not in query
+    assert "until" not in query
+    assert "lang" not in query
+    assert "exclude" not in query
+
+
 def test_mission_plan_normalizes_pacing_into_batch_plan(tmp_path):
     spec_path = tmp_path / "mission.json"
     _write_spec(

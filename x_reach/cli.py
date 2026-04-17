@@ -189,9 +189,19 @@ def _add_search_filter_args(parser: argparse.ArgumentParser) -> None:
         choices=["retweets", "replies", "links"],
         help="Exclude a content type. Repeat to exclude multiple.",
     )
-    parser.add_argument("--min-likes", type=int, help="Minimum likes threshold for search")
-    parser.add_argument("--min-retweets", type=int, help="Minimum retweets threshold for search")
-    parser.add_argument("--min-views", type=int, help="Minimum views threshold applied after search")
+    parser.add_argument("--min-likes", type=int, help="Minimum likes threshold for supported operations")
+    parser.add_argument("--min-retweets", type=int, help="Minimum retweets threshold for supported operations")
+    parser.add_argument("--min-views", type=int, help="Minimum views threshold applied after collection")
+
+
+def _add_user_posts_filter_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--min-likes", type=int, help="Minimum likes threshold applied after timeline lookup")
+    parser.add_argument("--min-retweets", type=int, help="Minimum retweets threshold applied after timeline lookup")
+    parser.add_argument("--min-views", type=int, help="Minimum views threshold applied after timeline lookup")
+    parser.add_argument(
+        "--topic-fit",
+        help="JSON file containing caller-declared topic-fit rules for deterministic timeline filtering",
+    )
 
 
 def _shortcut_collect_namespace(args, *, operation: str, input_value: str) -> argparse.Namespace:
@@ -218,6 +228,7 @@ def _shortcut_collect_namespace(args, *, operation: str, input_value: str) -> ar
         min_retweets=getattr(args, "min_retweets", None),
         min_views=getattr(args, "min_views", None),
         originals_only=getattr(args, "originals_only", False),
+        topic_fit=getattr(args, "topic_fit", None),
         quality_profile=getattr(args, "quality_profile", None),
         json=getattr(args, "json", False),
         max_text_chars=getattr(args, "max_text_chars", None),
@@ -404,9 +415,13 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["retweets", "replies", "links"],
         help="Exclude a content type. Repeat to exclude multiple.",
     )
-    p_collect.add_argument("--min-likes", type=int, help="Minimum likes threshold for search")
-    p_collect.add_argument("--min-retweets", type=int, help="Minimum retweets threshold for search")
-    p_collect.add_argument("--min-views", type=int, help="Minimum views threshold applied after search")
+    p_collect.add_argument("--min-likes", type=int, help="Minimum likes threshold for supported operations")
+    p_collect.add_argument("--min-retweets", type=int, help="Minimum retweets threshold for supported operations")
+    p_collect.add_argument("--min-views", type=int, help="Minimum views threshold applied after collection")
+    p_collect.add_argument(
+        "--topic-fit",
+        help="JSON file containing caller-declared topic-fit rules for supported operations",
+    )
     p_collect.add_argument(
         "--originals-only",
         action="store_true",
@@ -499,6 +514,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only keep authored posts by filtering out retweets client-side",
     )
+    _add_user_posts_filter_args(p_posts)
     _add_quality_profile_arg(p_posts)
     _add_collect_render_args(p_posts)
     _add_collect_persistence_args(p_posts)
@@ -1343,6 +1359,12 @@ def _cmd_collect(args) -> int:
         collect_kwargs["min_views"] = args.min_views
     if getattr(args, "originals_only", False):
         collect_kwargs["originals_only"] = True
+    if getattr(args, "topic_fit", None) is not None:
+        try:
+            collect_kwargs["topic_fit"] = _load_topic_fit_arg(args.topic_fit)
+        except CandidatePlanError as exc:
+            print(f"Could not collect: {exc}", file=sys.stderr)
+            return 2
     if getattr(args, "quality_profile", None) is not None:
         collect_kwargs["quality_profile"] = args.quality_profile
     if args.raw_mode is not None:
@@ -1431,6 +1453,9 @@ def _cmd_collect(args) -> int:
 def _cmd_collect_spec(args) -> int:
     if args.operation or args.input:
         print("collect --spec cannot be combined with --operation or --input", file=sys.stderr)
+        return 2
+    if getattr(args, "topic_fit", None):
+        print("collect --spec reads topic_fit from the mission spec; --topic-fit is only supported with --operation", file=sys.stderr)
         return 2
     if args.save or args.save_dir:
         print("collect --spec writes its own mission artifacts; use --output-dir instead of --save/--save-dir", file=sys.stderr)

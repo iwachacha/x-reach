@@ -31,6 +31,13 @@ client = XReachClient()
 
 twitter_posts = client.twitter.user_posts("openai", limit=5)
 original_posts = client.twitter.user_posts("openai", limit=5, originals_only=True)
+filtered_timeline = client.twitter.user_posts(
+    "openai",
+    limit=20,
+    min_likes=10,
+    min_views=1000,
+    topic_fit={"required_any_terms": ["codex"]},
+)
 hashtag_posts = client.twitter.hashtag("OpenAI", limit=5)
 windowed_search = client.collect(
     "twitter",

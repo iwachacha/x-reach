@@ -89,6 +89,30 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
 
 `research_high_precision` maps to the existing `precision` profile. `balanced` and `broad_recall` are also accepted.
 
+## Query Operations
+
+Mission queries default to `operation=search`. A query object may explicitly set `operation=user_posts` when the caller wants posts from a known account timeline rather than search results:
+
+```json
+{
+  "queries": [
+    {
+      "operation": "user_posts",
+      "input": "openai",
+      "limit": 20,
+      "originals_only": true,
+      "min_likes": 10,
+      "min_views": 1000
+    }
+  ],
+  "topic_fit": {
+    "required_any_terms": ["codex"]
+  }
+}
+```
+
+For `user_posts`, X Reach applies metric filters and active mission `topic_fit` rules client-side after timeline lookup. It does not apply search-only options such as `search_type`, `lang`, `since`, `until`, `has`, or `exclude`, and it does not add hidden author expansion.
+
 ## Output Layers
 
 - `raw/`: sharded ledger files from each query execution.
@@ -205,6 +229,7 @@ No LLM/VLM call is made by this release. If `judge.enabled=true`, x-reach writes
 - Raw/canonical/curated output layers.
 - Deterministic keyword filtering, post dedupe, heuristic ranking, and author/thread/url diversity constraints.
 - Caller-declared `topic_fit` rules for deterministic required/preferred/excluded/phrase/synonym matching, mission filtering, candidate scoring diagnostics, and `plan candidates --topic-fit`.
+- Explicit `user_posts` mission query objects with client-side metric filters and mission `topic_fit` filtering.
 - Evidence-utility scoring facets for query match strength, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties.
 - Topic spread enforcement for available caller-declared coverage topics through `diversity.require_topic_spread`.
 - Mission diagnostics for query yield, quality reason counts, topic spread, author/thread/url concentration, time spread, and coverage query budgets.

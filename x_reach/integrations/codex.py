@@ -269,6 +269,7 @@ def _request_scale_policy() -> dict[str, Any]:
             "`plan candidates` keeps its default `--limit 20`; raise it only when the caller explicitly wants a wider review set.",
             "`plan candidates --sort-by quality_score` is opt-in utility ordering; default candidate plans stay first-seen for compatibility.",
             "Use mission `topic_fit` or `plan candidates --topic-fit PATH.json` only with caller-declared rules; treat topic-fit output as deterministic diagnostics, not final judgment.",
+            "`user_posts` can apply caller-declared metric filters and `topic_fit` to known account timelines; do not treat it as a hidden search fallback or author expansion step.",
             "Large-scale research is explicit opt-in and should be requested by the caller or host workflow.",
         ],
         "single_collect": {
@@ -442,7 +443,7 @@ def export_codex_integration(profile: str = "full") -> dict[str, Any]:
             "quickstart": [
                 "from x_reach import XReachClient",
                 "client = XReachClient()",
-                'client.twitter.user_posts("openai", limit=5)',
+                'client.twitter.user_posts("openai", limit=5, min_likes=10, topic_fit={"required_any_terms": ["codex"]})',
                 'client.collect("twitter", "search", "OpenAI", limit=5, since="2026-01-01", until="2026-12-31")',
             ],
             "notes": [

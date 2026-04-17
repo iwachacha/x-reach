@@ -168,6 +168,7 @@ def batch_option_values(query: dict[str, Any]) -> dict[str, Any]:
         "min_retweets",
         "min_views",
         "originals_only",
+        "topic_fit",
         "quality_profile",
     ):
         if key in query:

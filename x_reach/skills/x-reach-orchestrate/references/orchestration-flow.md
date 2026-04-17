@@ -29,6 +29,7 @@
 - run `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`; add `--sort-by quality_score` only when utility-sorted review helps and `--topic-fit PATH.json` only with caller-declared fit rules
 - inspect `quality_score`, `quality_reasons`, `topic_fit`, and summary reason counts as utility diagnostics before any selected deep reads
 - use `x-reach batch --plan PLAN.json --validate-only --json` before any saved batch execution
+- use `posts` / `user_posts` metric filters and `topic_fit` only for caller-declared account timeline collection; do not substitute them for search fallback or hidden author expansion
 
 ## Collection-Start Guardrails
 

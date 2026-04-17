@@ -666,14 +666,17 @@ def _build_batch_plan(spec: dict[str, Any]) -> dict[str, Any]:
     for index, query in enumerate(expanded_queries, start=1):
         limit = _optional_positive_int(query.get("limit"), "limit") or per_query_limit
         query_id = str(query.get("query_id") or f"q{index:02d}")
+        operation = str(query.get("operation") or "search")
+        if operation not in {"search", "user_posts"}:
+            raise MissionSpecError("mission query operation must be search or user_posts")
         plan_query: dict[str, Any] = {
             "query_id": query_id,
             "channel": "twitter",
-            "operation": "search",
+            "operation": operation,
             "input": query["input"],
             "limit": limit,
             "intent": query.get("intent") or _mission_intent(spec),
-            "source_role": query.get("source_role") or "mission_broad_recall",
+            "source_role": query.get("source_role") or _mission_source_role(operation),
             "quality_profile": spec["quality_profile"],
             "raw_mode": spec["retention"]["raw_mode"],
             "item_text_mode": spec["retention"]["item_text_mode"],
@@ -681,18 +684,23 @@ def _build_batch_plan(spec: dict[str, Any]) -> dict[str, Any]:
         for name in ("raw_max_bytes", "item_text_max_chars"):
             if spec["retention"].get(name) is not None:
                 plan_query[name] = spec["retention"][name]
-        for name in ("since", "until"):
-            value = query.get(name) if query.get(name) is not None else spec["time_range"].get(name)
-            if value is not None:
-                plan_query[name] = value
-        if query.get("lang") is not None:
-            plan_query["lang"] = query["lang"]
-        if exclude_flags:
-            plan_query["exclude"] = exclude_flags
+        if operation == "search":
+            for name in ("since", "until"):
+                value = query.get(name) if query.get(name) is not None else spec["time_range"].get(name)
+                if value is not None:
+                    plan_query[name] = value
+            if query.get("lang") is not None:
+                plan_query["lang"] = query["lang"]
+            if exclude_flags:
+                plan_query["exclude"] = exclude_flags
+        elif query.get("originals_only") is not None:
+            plan_query["originals_only"] = bool(query["originals_only"])
         for name in ("min_likes", "min_retweets", "min_views"):
             value = query.get(name) if query.get(name) is not None else spec["exclude"].get(name)
             if value is not None:
                 plan_query[name] = value
+        if operation == "user_posts" and topic_fit_rules_enabled(spec.get("topic_fit")):
+            plan_query["topic_fit"] = spec["topic_fit"]
         plan_queries.append(plan_query)
 
     return {
@@ -717,6 +725,9 @@ def _expanded_query_specs(spec: dict[str, Any]) -> list[dict[str, Any]]:
     expanded: list[dict[str, Any]] = []
     for raw_query in spec["queries"]:
         query = dict(raw_query)
+        if str(query.get("operation") or "search") != "search":
+            expanded.append(query)
+            continue
         query_lang = query.get("lang")
         if query_lang:
             expanded.append(query)
@@ -733,6 +744,12 @@ def _expanded_query_specs(spec: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         expanded.append(query)
     return expanded
+
+
+def _mission_source_role(operation: str) -> str:
+    if operation == "user_posts":
+        return "mission_user_posts"
+    return "mission_broad_recall"
 
 
 def _search_exclude_flags(exclude: dict[str, Any]) -> list[str]:

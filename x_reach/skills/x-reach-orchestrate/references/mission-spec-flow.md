@@ -19,6 +19,7 @@ Use this reference only when the ask is broad, resumable, provenance-heavy, cove
 - Use `diversity.max_posts_per_author` and `max_posts_per_thread` for broad reaction collection so one account or thread does not dominate.
 - Use `diversity.require_topic_spread=true` only with caller-declared coverage topics.
 - Use `topic_fit` only when the caller supplies deterministic required/preferred/excluded/phrase/synonym rules; do not invent domain synonyms or defaults.
+- Mission queries default to `search`; set query `operation=user_posts` only when the caller explicitly wants a known account timeline. In that mode, use metric filters and mission `topic_fit` only as client-side timeline filters, not as search-tab fallback or hidden author deep reads.
 - For concurrent broad runs, include `pacing.query_delay_seconds` or pass `--query-delay`; keep it small, inspect diagnostics, and avoid retrying into repeated 409/429/conflict errors.
 
 ## Coverage Rules

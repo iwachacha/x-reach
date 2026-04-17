@@ -422,6 +422,178 @@ def test_twitter_adapter_user_posts_can_filter_retweets(config, monkeypatch):
     assert payload["meta"]["diagnostics"]["client_side_filters"]["originals_only"] is True
 
 
+def test_twitter_adapter_user_posts_applies_metric_filters(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    monkeypatch.setattr(
+        adapter,
+        "run_command",
+        lambda command, timeout=120, env=None: _cp(
+            stdout=json.dumps(
+                {
+                    "ok": True,
+                    "data": [
+                        {
+                            "id": "1",
+                            "text": "low likes",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                            "metrics": {"likes": 9, "retweets": 10, "views": 1000},
+                        },
+                        {
+                            "id": "2",
+                            "text": "low retweets and views",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                            "metrics": {"likes": 50, "retweets": 2, "views": 50},
+                        },
+                        {
+                            "id": "3",
+                            "text": "enough engagement",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                            "metrics": {"likes": 50, "retweets": 10, "views": 1000},
+                        },
+                    ],
+                }
+            )
+        ),
+    )
+
+    payload = adapter.user_posts(
+        "OpenAI",
+        limit=5,
+        quality_profile="recall",
+        min_likes=10,
+        min_retweets=5,
+        min_views=100,
+    )
+
+    assert payload["ok"] is True
+    assert [item["id"] for item in payload["items"]] == ["3"]
+    assert payload["meta"]["filter_drop_counts"] == {
+        "min_likes": 1,
+        "min_retweets": 1,
+        "min_views": 1,
+    }
+    diagnostics = payload["meta"]["diagnostics"]
+    assert diagnostics["client_side_filters"]["min_likes"] == 10
+    assert diagnostics["client_side_filters"]["items_after_metric_filters"] == 1
+    assert diagnostics["metric_filters"]["dropped_samples"][0]["reasons"] == ["min_likes"]
+
+
+def test_twitter_adapter_user_posts_topic_fit_required_rules(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    monkeypatch.setattr(
+        adapter,
+        "run_command",
+        lambda command, timeout=120, env=None: _cp(
+            stdout=json.dumps(
+                {
+                    "ok": True,
+                    "data": [
+                        {
+                            "id": "1",
+                            "text": "Codex coding agent update from OpenAI",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                        },
+                        {
+                            "id": "2",
+                            "text": "Codex mention without the required organization",
+                            "author": {"screenName": "someone", "name": "Someone"},
+                        },
+                        {
+                            "id": "3",
+                            "text": "Unrelated launch notes",
+                            "author": {"screenName": "someone", "name": "Someone"},
+                        },
+                    ],
+                }
+            )
+        ),
+    )
+
+    payload = adapter.user_posts(
+        "OpenAI",
+        limit=5,
+        quality_profile="recall",
+        topic_fit={
+            "required_any_terms": ["codex"],
+            "required_all_terms": ["openai"],
+            "synonym_groups": [["codex", "coding agent"]],
+        },
+    )
+
+    assert [item["id"] for item in payload["items"]] == ["1"]
+    assert payload["meta"]["filter_drop_counts"] == {
+        "topic_fit_missing_required_any": 1,
+        "topic_fit_missing_required_all": 2,
+    }
+    assert payload["meta"]["topic_fit_reason_counts"]["topic_fit_required_any"] == 1
+    assert payload["meta"]["topic_fit_reason_counts"]["topic_fit_synonym_group"] == 1
+    assert payload["items"][0]["extras"]["topic_fit"]["matched_terms"]["required_any_terms"] == ["codex"]
+    assert payload["meta"]["diagnostics"]["topic_fit"]["missing_required_counts"] == {
+        "required_all_terms": 2,
+        "required_any_terms": 1,
+    }
+
+
+def test_twitter_adapter_user_posts_topic_fit_excluded_and_negative_rules(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    monkeypatch.setattr(
+        adapter,
+        "run_command",
+        lambda command, timeout=120, env=None: _cp(
+            stdout=json.dumps(
+                {
+                    "ok": True,
+                    "data": [
+                        {
+                            "id": "1",
+                            "text": "Codex airdrop giveaway",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                        },
+                        {
+                            "id": "2",
+                            "text": "This is not about Codex",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                        },
+                        {
+                            "id": "3",
+                            "text": "Codex developer workflow details",
+                            "author": {"screenName": "OpenAI", "name": "OpenAI"},
+                            "quotedTweet": {"author": {"screenName": "OpenAIDevs", "name": "OpenAI Developers"}},
+                            "urls": [{"expandedUrl": "https://openai.com/codex"}],
+                        },
+                    ],
+                }
+            )
+        ),
+    )
+
+    payload = adapter.user_posts(
+        "OpenAI",
+        limit=5,
+        quality_profile="recall",
+        topic_fit={
+            "required_any_terms": ["codex"],
+            "preferred_terms": ["developer workflow"],
+            "excluded_terms": ["airdrop"],
+            "negative_phrases": ["not about codex"],
+        },
+    )
+
+    assert [item["id"] for item in payload["items"]] == ["3"]
+    assert payload["meta"]["filter_drop_counts"] == {
+        "topic_fit_excluded_term": 1,
+        "topic_fit_negative_phrase": 1,
+    }
+    assert payload["meta"]["topic_fit_reason_counts"]["topic_fit_preferred"] == 1
+    assert payload["meta"]["diagnostics"]["topic_fit"]["drop_counts"] == {
+        "topic_fit_excluded_term": 1,
+        "topic_fit_negative_phrase": 1,
+    }
+
+
 def test_twitter_adapter_hashtag_success(config, monkeypatch):
     adapter = TwitterAdapter(config=config)
     monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")

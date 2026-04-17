@@ -19,6 +19,7 @@ x-reach doctor --json
 x-reach doctor --json --probe
 x-reach collect --operation search --input "OpenAI" --limit 5 --json
 x-reach collect --operation user --input "openai" --json
+x-reach posts "openai" --limit 20 --min-likes 10 --topic-fit topic-fit.json --json
 ```
 
 Use the exact stable channel name from `x-reach channels --json`: `twitter`.
@@ -48,6 +49,7 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 - `plan candidates --json` exposes deterministic `quality_score`, `quality_reasons`, and aggregate reason counts so downstream review can audit utility signals without treating them as final judgment.
 - `plan candidates --sort-by quality_score` is opt-in evidence-utility ordering; default output stays first-seen for compatibility.
 - `plan candidates --topic-fit topic-fit.json` applies caller-owned deterministic fit rules and returns `topic_fit` diagnostics, including compact match/drop reasons. Use it when query tokens are too weak, but keep final selection in the host workflow.
+- `posts` / `collect --operation user_posts` can apply caller-owned metric filters and `topic_fit` rules to account timelines. Use this when the caller explicitly wants timeline evidence; it is still not a search-tab fallback or author deep-read expansion.
 - `--min-seen-in` is useful for broad or multilingual runs where you want candidates that resurfaced across multiple queries; keep it off for narrow probes.
 - Saved evidence does not warn by default; use `--warn-missing-evidence-metadata` when downstream provenance completeness matters.
 

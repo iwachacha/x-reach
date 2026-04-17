@@ -166,15 +166,28 @@ def test_collect_passes_formalized_search_filters(tmp_path, monkeypatch):
     assert payload["raw"]["min_views"] == 100
 
 
-def test_collect_passes_user_posts_originals_only(tmp_path, monkeypatch):
+def test_collect_passes_user_posts_filters_and_topic_fit(tmp_path, monkeypatch):
     config = Config(config_path=tmp_path / "config.yaml")
     monkeypatch.setattr("x_reach.client.get_adapter", lambda channel, config=None: _StubAdapter(config=config))
     client = XReachClient(config=config)
 
-    payload = client.twitter.user_posts("OpenAI", limit=5, originals_only=True, raw_mode="full")
+    payload = client.twitter.user_posts(
+        "OpenAI",
+        limit=5,
+        originals_only=True,
+        min_likes=10,
+        min_retweets=5,
+        min_views=100,
+        topic_fit={"required_any_terms": ["codex"]},
+        raw_mode="full",
+    )
 
     assert payload["ok"] is True
     assert payload["raw"]["originals_only"] is True
+    assert payload["raw"]["min_likes"] == 10
+    assert payload["raw"]["min_retweets"] == 5
+    assert payload["raw"]["min_views"] == 100
+    assert payload["raw"]["topic_fit"] == {"required_any_terms": ["codex"]}
 
 
 def test_collect_defaults_broad_operations_to_compact_shapes(tmp_path, monkeypatch):

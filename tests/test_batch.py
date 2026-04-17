@@ -114,6 +114,94 @@ def test_batch_rejects_invalid_pacing(tmp_path):
         validate_batch_plan(plan_path, query_delay_seconds=-1)
 
 
+def test_batch_user_posts_allows_metric_filters_and_topic_fit(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "queries": [
+                    {
+                        "channel": "twitter",
+                        "operation": "user_posts",
+                        "input": "OpenAI",
+                        "limit": 2,
+                        "min_likes": 10,
+                        "min_retweets": 5,
+                        "min_views": 1000,
+                        "topic_fit": {"required_any_terms": ["codex"]},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = validate_batch_plan(plan_path)
+
+    assert payload["valid"] is True
+    assert payload["summary"]["operation_counts"] == {"user_posts": 1}
+
+
+def test_batch_user_posts_still_rejects_search_only_options(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "queries": [
+                    {
+                        "channel": "twitter",
+                        "operation": "user_posts",
+                        "input": "OpenAI",
+                        "search_type": "latest",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(BatchPlanError, match="search_type is not supported"):
+        validate_batch_plan(plan_path)
+
+
+def test_batch_execution_passes_user_posts_topic_fit(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    save_path = tmp_path / "ledger.jsonl"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "queries": [
+                    {
+                        "channel": "twitter",
+                        "operation": "user_posts",
+                        "input": "OpenAI",
+                        "limit": 2,
+                        "topic_fit": {"required_any_terms": ["codex"]},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    class _FakeClient:
+        def collect(self, channel, operation, value, **kwargs):
+            calls.append({"channel": channel, "operation": operation, "value": value, "kwargs": kwargs})
+            return _ok_result(channel, operation, value, kwargs)
+
+    payload, exit_code = run_batch_plan(
+        plan_path,
+        save_path=save_path,
+        client_factory=_FakeClient,
+    )
+
+    assert exit_code == 0
+    assert payload["summary"]["ok"] == 1
+    assert calls[0]["kwargs"]["topic_fit"] == {"required_any_terms": ["codex"]}
+
+
 def test_batch_query_delay_records_planned_waits_with_concurrency(tmp_path):
     plan_path = tmp_path / "plan.json"
     save_path = tmp_path / "ledger.jsonl"

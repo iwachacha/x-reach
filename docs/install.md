@@ -83,6 +83,7 @@ x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 
 x-reach collect --operation user --input "openai" --json
 x-reach posts "openai" --limit 20 --originals-only --json
 x-reach collect --operation user_posts --input "openai" --limit 20 --json
+x-reach posts "openai" --limit 20 --min-likes 10 --topic-fit topic-fit.json --json
 x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
 x-reach collect --operation search --input "OpenAI" --limit 5 --since 2026-01-01 --until 2026-12-31 --json
 ```

@@ -28,6 +28,13 @@ from x_reach.results import (
     normalize_engagement,
     parse_timestamp,
 )
+from x_reach.topic_fit import (
+    evaluate_topic_fit,
+    normalize_topic_fit_rules,
+    topic_fit_quality_reasons,
+    topic_fit_result_summary,
+    topic_fit_rules_enabled,
+)
 
 from .base import BaseAdapter
 
@@ -223,6 +230,57 @@ def _apply_min_views(data: list[dict[str, Any]], min_views: int | None) -> tuple
     }
 
 
+def _apply_metric_filters(
+    data: list[dict[str, Any]],
+    *,
+    min_likes: int | None = None,
+    min_retweets: int | None = None,
+    min_views: int | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, int], list[str]]:
+    thresholds = [
+        ("min_likes", "likes", min_likes),
+        ("min_retweets", "retweets", min_retweets),
+        ("min_views", "views", min_views),
+    ]
+    active = [(reason, field, int(value)) for reason, field, value in thresholds if value is not None]
+    if not active:
+        return data, {}, {}, []
+
+    kept: list[dict[str, Any]] = []
+    dropped = Counter()
+    dropped_samples: list[dict[str, Any]] = []
+    for tweet in data:
+        reasons = [
+            reason
+            for reason, field, threshold in active
+            if (_tweet_metric(tweet, field) or 0) < threshold
+        ]
+        if not reasons:
+            kept.append(tweet)
+            continue
+        for reason in reasons:
+            dropped[reason] += 1
+        _append_quality_drop_sample(dropped_samples, tweet, reasons)
+
+    filter_drop_counts = {key: dropped[key] for key in sorted(dropped)}
+    metric_filter: dict[str, Any] = {
+        "items_before_metric_filters": len(data),
+        "items_after_metric_filters": len(kept),
+        "filter_drop_counts": filter_drop_counts,
+    }
+    if dropped_samples:
+        metric_filter["dropped_samples"] = dropped_samples
+    diagnostics = {
+        "client_side_filters": {
+            **{reason: threshold for reason, _field, threshold in active},
+            "items_before_metric_filters": len(data),
+            "items_after_metric_filters": len(kept),
+        },
+        "metric_filters": metric_filter,
+    }
+    return kept, diagnostics, filter_drop_counts, list(filter_drop_counts)
+
+
 def _apply_originals_only(
     data: list[dict[str, Any]],
     originals_only: bool,
@@ -275,6 +333,39 @@ def _tweet_searchable_parts(tweet: dict[str, Any]) -> list[str | None]:
         quoted_author.get("name") if isinstance(quoted_author, dict) else None,
         " ".join(_tweet_url_values(tweet)) or None,
     ]
+
+
+def _apply_topic_fit_filter(
+    data: list[dict[str, Any]],
+    *,
+    topic_fit: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, int], list[str], dict[int, dict[str, Any]]]:
+    if not topic_fit_rules_enabled(topic_fit):
+        return data, {}, {}, [], {}
+
+    kept: list[dict[str, Any]] = []
+    kept_results: dict[int, dict[str, Any]] = {}
+    evaluated_results: list[dict[str, Any]] = []
+    dropped = Counter()
+    dropped_samples: list[dict[str, Any]] = []
+    for tweet in data:
+        result = evaluate_topic_fit(_tweet_searchable_parts(tweet), topic_fit)
+        evaluated_results.append(result)
+        if result.get("matched"):
+            kept.append(tweet)
+            kept_results[id(tweet)] = result
+            continue
+        reasons = [str(reason) for reason in result.get("drop_reasons") or []]
+        for reason in reasons:
+            dropped[reason] += 1
+        _append_quality_drop_sample(dropped_samples, tweet, reasons)
+
+    filter_drop_counts = {key: dropped[key] for key in sorted(dropped)}
+    summary = topic_fit_result_summary(topic_fit, evaluated_results)
+    if dropped_samples:
+        summary["dropped_samples"] = dropped_samples
+    diagnostics = {"topic_fit": summary}
+    return kept, diagnostics, filter_drop_counts, list(filter_drop_counts), kept_results
 
 
 def _apply_quality_profile_filter(
@@ -359,6 +450,32 @@ def _append_quality_drop_sample(
             "reasons": list(reasons),
         }
     )
+
+
+def _merge_diagnostics(*diagnostics: dict[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for diagnostic in diagnostics:
+        for key, value in diagnostic.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = {**merged[key], **value}
+            else:
+                merged[key] = value
+    return merged
+
+
+def _merge_filter_drop_counts(*counts: dict[str, int]) -> dict[str, int]:
+    merged = Counter()
+    for count_map in counts:
+        merged.update(count_map)
+    return {key: merged[key] for key in sorted(merged)}
+
+
+def _topic_fit_reason_counts(results: Sequence[dict[str, Any]]) -> dict[str, int]:
+    counts = Counter()
+    for result in results:
+        for reason in topic_fit_quality_reasons(result):
+            counts[reason] += 1
+    return {key: counts[key] for key in sorted(counts)}
 
 
 def _build_search_args(
@@ -800,10 +917,28 @@ class TwitterAdapter(BaseAdapter):
         screen_name: str,
         limit: int = 10,
         originals_only: bool | None = None,
+        min_likes: int | None = None,
+        min_retweets: int | None = None,
+        min_views: int | None = None,
+        topic_fit: dict[str, Any] | None = None,
         quality_profile: str | None = None,
     ) -> CollectionResult:
         started_at = time.perf_counter()
         normalized = _normalize_screen_name(screen_name)
+        try:
+            normalized_topic_fit = normalize_topic_fit_rules(topic_fit)
+        except ValueError as exc:
+            return self.error_result(
+                "user_posts",
+                code="invalid_input",
+                message=str(exc),
+                meta=self.make_meta(
+                    value=normalized,
+                    limit=limit,
+                    started_at=started_at,
+                    topic_fit=topic_fit,
+                ),
+            )
         effective_quality_profile = normalize_quality_profile("user_posts", quality_profile)
         requested_limit = max(int(limit), 1)
         fetch_limit = resolve_fetch_limit(requested_limit, effective_quality_profile)
@@ -823,6 +958,10 @@ class TwitterAdapter(BaseAdapter):
             limit=requested_limit,
             started_at=started_at,
             extra_meta={
+                "min_likes": min_likes,
+                "min_retweets": min_retweets,
+                "min_views": min_views,
+                "topic_fit": normalized_topic_fit if topic_fit is not None else None,
                 "quality_profile": effective_quality_profile,
                 "fetch_limit": fetch_limit,
                 **({"applied_defaults": applied_defaults} if applied_defaults else {}),
@@ -842,21 +981,45 @@ class TwitterAdapter(BaseAdapter):
                 meta=self.make_meta(value=normalized, limit=requested_limit, started_at=started_at),
             )
         data, client_filter_diagnostics = _apply_originals_only(data, effective_originals_only)
-        data, quality_diagnostics, filter_drop_counts, filter_drop_reasons = _apply_quality_profile_filter(
+        data, metric_diagnostics, metric_drop_counts, _metric_drop_reasons = _apply_metric_filters(
+            data,
+            min_likes=min_likes,
+            min_retweets=min_retweets,
+            min_views=min_views,
+        )
+        (
+            data,
+            topic_fit_diagnostics,
+            topic_fit_drop_counts,
+            _topic_fit_drop_reasons,
+            topic_fit_results,
+        ) = _apply_topic_fit_filter(data, topic_fit=normalized_topic_fit)
+        data, quality_diagnostics, filter_drop_counts, _filter_drop_reasons = _apply_quality_profile_filter(
             data,
             requested_limit=requested_limit,
             quality_profile=effective_quality_profile,
             drop_retweets=effective_originals_only,
         )
-        items = [
-            _tweet_item(
+        merged_filter_drop_counts = _merge_filter_drop_counts(
+            metric_drop_counts,
+            topic_fit_drop_counts,
+            filter_drop_counts,
+        )
+        items: list[NormalizedItem] = []
+        returned_topic_fit_results: list[dict[str, Any]] = []
+        for idx, tweet in enumerate(data):
+            item = _tweet_item(
                 tweet,
                 idx,
                 self.channel,
                 timeline_owner_handle=normalized,
             )
-            for idx, tweet in enumerate(data)
-        ]
+            topic_fit_result = topic_fit_results.get(id(tweet))
+            if topic_fit_result is not None:
+                item["extras"]["topic_fit"] = topic_fit_result
+                returned_topic_fit_results.append(topic_fit_result)
+            items.append(item)
+        returned_topic_fit_reason_counts = _topic_fit_reason_counts(returned_topic_fit_results)
         return self.ok_result(
             "user_posts",
             items=items,
@@ -866,15 +1029,26 @@ class TwitterAdapter(BaseAdapter):
                 limit=requested_limit,
                 started_at=started_at,
                 originals_only=effective_originals_only or None,
+                min_likes=min_likes,
+                min_retweets=min_retweets,
+                min_views=min_views,
+                topic_fit=normalized_topic_fit if topic_fit is not None else None,
                 quality_profile=effective_quality_profile,
                 fetch_limit=fetch_limit,
                 **({"applied_defaults": applied_defaults} if applied_defaults else {}),
-                **({"filter_drop_counts": filter_drop_counts} if filter_drop_counts else {}),
-                **({"filter_drop_reasons": filter_drop_reasons} if filter_drop_reasons else {}),
-                diagnostics={
-                    **client_filter_diagnostics,
-                    **quality_diagnostics,
-                },
+                **({"filter_drop_counts": merged_filter_drop_counts} if merged_filter_drop_counts else {}),
+                **({"filter_drop_reasons": list(merged_filter_drop_counts)} if merged_filter_drop_counts else {}),
+                **(
+                    {"topic_fit_reason_counts": returned_topic_fit_reason_counts}
+                    if returned_topic_fit_reason_counts
+                    else {}
+                ),
+                diagnostics=_merge_diagnostics(
+                    client_filter_diagnostics,
+                    metric_diagnostics,
+                    topic_fit_diagnostics,
+                    quality_diagnostics,
+                ),
                 **_tweet_item_shape(engagement_complete=False, media_complete=False),
             ),
         )

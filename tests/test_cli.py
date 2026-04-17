@@ -209,6 +209,60 @@ class TestCLI:
         assert captured["operation"] == "user_posts"
         assert captured["kwargs"]["originals_only"] is True
 
+    def test_collect_passes_user_posts_filters_and_topic_fit(self, tmp_path, capsys, monkeypatch):
+        captured = {}
+        topic_fit_path = tmp_path / "topic-fit.json"
+        topic_fit_path.write_text(
+            json.dumps({"topic_fit": {"required_any_terms": ["codex"]}}),
+            encoding="utf-8",
+        )
+
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                captured["channel"] = channel
+                captured["operation"] = operation
+                captured["kwargs"] = kwargs
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+
+        assert (
+            main(
+                [
+                    "collect",
+                    "--operation",
+                    "user_posts",
+                    "--input",
+                    "OpenAI",
+                    "--min-likes",
+                    "10",
+                    "--min-retweets",
+                    "5",
+                    "--min-views",
+                    "1000",
+                    "--topic-fit",
+                    str(topic_fit_path),
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        assert captured["channel"] == "twitter"
+        assert captured["operation"] == "user_posts"
+        assert captured["kwargs"]["min_likes"] == 10
+        assert captured["kwargs"]["min_retweets"] == 5
+        assert captured["kwargs"]["min_views"] == 1000
+        assert captured["kwargs"]["topic_fit"] == {"required_any_terms": ["codex"]}
+
     def test_search_shortcut_routes_to_collect(self, capsys, monkeypatch):
         captured = {}
 
@@ -313,6 +367,65 @@ class TestCLI:
         assert captured["value"] == "OpenAI"
         assert captured["kwargs"]["limit"] == 5
         assert captured["kwargs"]["originals_only"] is True
+
+    def test_posts_shortcut_passes_metric_filters_and_topic_fit(self, tmp_path, capsys, monkeypatch):
+        captured = {}
+        topic_fit_path = tmp_path / "topic-fit.json"
+        topic_fit_path.write_text(json.dumps({"required_any_terms": ["codex"]}), encoding="utf-8")
+
+        class _FakeClient:
+            def collect(self, channel, operation, value, **kwargs):
+                captured["channel"] = channel
+                captured["operation"] = operation
+                captured["value"] = value
+                captured["kwargs"] = kwargs
+                return {
+                    "ok": True,
+                    "channel": channel,
+                    "operation": operation,
+                    "items": [],
+                    "raw": None,
+                    "meta": {"count": 0},
+                    "error": None,
+                }
+
+        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+
+        assert (
+            main(
+                [
+                    "posts",
+                    "OpenAI",
+                    "--min-likes",
+                    "10",
+                    "--min-retweets",
+                    "5",
+                    "--min-views",
+                    "1000",
+                    "--topic-fit",
+                    str(topic_fit_path),
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        assert captured["channel"] == "twitter"
+        assert captured["operation"] == "user_posts"
+        assert captured["value"] == "OpenAI"
+        assert captured["kwargs"]["min_likes"] == 10
+        assert captured["kwargs"]["min_retweets"] == 5
+        assert captured["kwargs"]["min_views"] == 1000
+        assert captured["kwargs"]["topic_fit"] == {"required_any_terms": ["codex"]}
+
+    def test_posts_shortcut_rejects_invalid_topic_fit_json(self, tmp_path, capsys):
+        topic_fit_path = tmp_path / "bad-topic-fit.json"
+        topic_fit_path.write_text("{", encoding="utf-8")
+
+        assert main(["posts", "OpenAI", "--topic-fit", str(topic_fit_path), "--json"]) == 2
+
+        captured = capsys.readouterr()
+        assert "Could not collect: Invalid topic-fit JSON" in captured.err
 
     def test_collect_unknown_channel_returns_exit_2(self, capsys, monkeypatch):
         class _FakeClient:

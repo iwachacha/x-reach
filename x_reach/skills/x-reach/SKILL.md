@@ -40,6 +40,7 @@ Do not assume this fork chooses the investigation. The caller chooses scale, tim
 - Treat `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` as deterministic evidence-utility diagnostics, not final truth, trust, or publication decisions.
 - Add `--sort-by quality_score` only when the caller wants utility-sorted candidate review; default first-seen order remains the compatibility baseline.
 - Add `--topic-fit PATH.json` only when the caller supplied deterministic topic-fit rules; inspect `topic_fit` and `summary.topic_fit_reason_counts` as diagnostics, not final selection.
+- For account timeline collection, `posts` / `user_posts` can take explicit `--min-likes`, `--min-retweets`, `--min-views`, and `--topic-fit PATH.json`; use them only as caller-declared timeline filters, not as hidden search fallback or author expansion.
 - Use `--min-seen-in 2` only when a broader run benefits from keeping candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Broad discovery operations default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet`; use `quality_profile=recall` or explicit `--raw-mode full --item-text-mode full` only when fuller payloads are truly needed.
 - When a broad run uses `--concurrency > 1`, add explicit pacing such as `--query-delay 1 --throttle-cooldown 30`. Treat HTTP 409/429/conflict diagnostics as a reason to pause or narrow the next caller-owned run, not as a prompt to retry harder.
@@ -61,6 +62,7 @@ x-reach collect --operation search --input "OpenAI" --limit 5 --json
 x-reach search "AI agent" --limit 5 --quality-profile precision --json
 x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json
 x-reach collect --operation user --input "openai" --json
+x-reach posts "openai" --limit 20 --min-likes 10 --topic-fit topic-fit.json --json
 x-reach export-integration --client codex --format json --profile runtime-minimal
 ```
 

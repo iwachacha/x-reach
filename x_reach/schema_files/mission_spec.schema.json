@@ -32,6 +32,12 @@
                 "type": "string",
                 "minLength": 1
               },
+              "operation": {
+                "enum": [
+                  "search",
+                  "user_posts"
+                ]
+              },
               "query_id": {
                 "type": "string"
               },
@@ -44,6 +50,21 @@
               "limit": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "originals_only": {
+                "type": "boolean"
+              },
+              "min_likes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "min_retweets": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "min_views": {
+                "type": "integer",
+                "minimum": 0
               },
               "lang": {
                 "type": "string"

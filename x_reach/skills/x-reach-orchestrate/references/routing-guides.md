@@ -6,6 +6,7 @@ Choose routing hints that match the task. Do not hard-code unavailable channels;
 
 - Prefer official announcements, official docs, release notes, and recent primary-source pages outside X Reach.
 - Use `twitter` when the request explicitly needs Twitter/X reaction, timelines, or post-level evidence.
+- Use `posts` / `user_posts` only when the caller asks for a known account timeline; metric filters and `topic_fit` are explicit timeline filters, not hidden search fallback.
 - Require concrete dates in the final answer.
 - If the channel supports date bounds such as `since` or `until`, choose them from the live contract instead of assuming they exist.
 
