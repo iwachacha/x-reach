@@ -51,6 +51,33 @@ def test_mission_plan_normalizes_review_style_spec(tmp_path):
     assert payload["judge"]["fallback_policy"] == "keep_ranked"
 
 
+def test_mission_plan_normalizes_pacing_into_batch_plan(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "pacing diagnostics",
+            "queries": ["OpenAI"],
+            "target_posts": 1,
+            "pacing": {
+                "query_delay_seconds": 1,
+                "query_jitter_seconds": 0.5,
+                "throttle_cooldown_seconds": 15,
+                "throttle_error_limit": 2,
+            },
+        },
+    )
+
+    payload = build_mission_plan_payload(spec_path, output_dir=tmp_path / "out", run_id="run-test")
+
+    assert payload["pacing"]["query_delay_seconds"] == 1.0
+    assert payload["pacing"]["query_jitter_seconds"] == 0.5
+    assert payload["pacing"]["throttle_cooldown_seconds"] == 15.0
+    assert payload["pacing"]["throttle_error_limit"] == 2
+    assert payload["batch_plan"]["pacing"] == payload["pacing"]
+    assert payload["normalized_spec"]["pacing"] == payload["pacing"]
+
+
 def test_mission_coverage_can_be_disabled_with_zero_query_budget(tmp_path):
     spec_path = tmp_path / "mission.json"
     _write_spec(
@@ -638,12 +665,29 @@ def test_collect_spec_dry_run_cli(tmp_path, capsys):
     spec_path = tmp_path / "mission.json"
     _write_spec(spec_path, {"queries": ["OpenAI"], "target_posts": 1})
 
-    assert main(["collect", "--spec", str(spec_path), "--dry-run", "--json"]) == 0
+    assert (
+        main(
+            [
+                "collect",
+                "--spec",
+                str(spec_path),
+                "--dry-run",
+                "--query-delay",
+                "2",
+                "--throttle-error-limit",
+                "1",
+                "--json",
+            ]
+        )
+        == 0
+    )
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["command"] == "collect spec"
     assert payload["dry_run"] is True
     assert payload["query_count"] == 1
+    assert payload["pacing"]["query_delay_seconds"] == 2.0
+    assert payload["pacing"]["throttle_error_limit"] == 1
 
 
 def _post(item_id, author, text, *, likes):

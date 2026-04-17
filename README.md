@@ -63,6 +63,7 @@ x-reach collect --operation search --input "OpenAI" --limit 5 --json
 x-reach collect --operation search --input "OpenAI" --min-likes 100 --min-views 10000 --json
 x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-research --dry-run --json
 x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-research --json
+x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-research --concurrency 2 --query-delay 1 --throttle-cooldown 30 --json
 x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-research --resume --json
 x-reach collect --operation user --input "openai" --json
 x-reach posts "openai" --limit 20 --json
@@ -93,6 +94,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - Quality filtering exposes `quality_filter.dropped_samples` diagnostics so filter thresholds can be audited from a small sample of dropped posts.
 - `plan candidates --drop-noise` and mission `exclude.drop_low_content_posts` remove obvious low-content quote posts before ranking.
 - For declarative large-scale X collection, use `collect --spec`: it runs a mission plan, writes raw/canonical/ranked artifacts, and leaves a manifest for resumable handoff.
+- For broad runs that use `--concurrency > 1`, add explicit pacing such as `--query-delay 1 --throttle-cooldown 30`; throttle-sensitive 409/429/conflict errors are reported in diagnostics and can trip the bounded throttle guard instead of continuing to start every remaining query.
 - Mission `coverage` is opt-in and fills only explicit topic gaps; ranked-count gaps are reported but do not trigger automatic query expansion.
 - Mission `judge` is an opt-in forward-compatible contract. Until a judge runner is configured, it writes auditable fallback records and leaves deterministic `ranked.jsonl` unchanged.
 

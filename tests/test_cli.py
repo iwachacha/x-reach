@@ -560,6 +560,84 @@ class TestCLI:
         assert exc_info.value.code == 2
         assert "invalid choice" in capsys.readouterr().err
 
+    def test_batch_cli_passes_pacing_args(self, tmp_path, capsys, monkeypatch):
+        plan_path = tmp_path / "plan.json"
+        plan_path.write_text('{"queries":[]}', encoding="utf-8")
+        captured = {}
+
+        def fake_run_batch_plan(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return {"ok": True, "command": "batch", "summary": {}}, 0
+
+        monkeypatch.setattr("agent_reach.cli.run_batch_plan", fake_run_batch_plan)
+
+        assert (
+            main(
+                [
+                    "batch",
+                    "--plan",
+                    str(plan_path),
+                    "--save",
+                    str(tmp_path / "ledger.jsonl"),
+                    "--query-delay",
+                    "1.5",
+                    "--query-jitter",
+                    "0.25",
+                    "--throttle-cooldown",
+                    "12",
+                    "--throttle-error-limit",
+                    "2",
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        assert json.loads(capsys.readouterr().out)["command"] == "batch"
+        assert captured["kwargs"]["query_delay_seconds"] == 1.5
+        assert captured["kwargs"]["query_jitter_seconds"] == 0.25
+        assert captured["kwargs"]["throttle_cooldown_seconds"] == 12.0
+        assert captured["kwargs"]["throttle_error_limit"] == 2
+
+    def test_collect_spec_cli_passes_pacing_args(self, tmp_path, capsys, monkeypatch):
+        spec_path = tmp_path / "mission.json"
+        spec_path.write_text('{"queries":["OpenAI"]}', encoding="utf-8")
+        captured = {}
+
+        def fake_run_mission_spec(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return {"ok": True, "command": "collect spec"}
+
+        monkeypatch.setattr("agent_reach.cli.run_mission_spec", fake_run_mission_spec)
+
+        assert (
+            main(
+                [
+                    "collect",
+                    "--spec",
+                    str(spec_path),
+                    "--query-delay",
+                    "1",
+                    "--query-jitter",
+                    "0.5",
+                    "--throttle-cooldown",
+                    "30",
+                    "--throttle-error-limit",
+                    "3",
+                    "--json",
+                ]
+            )
+            == 0
+        )
+
+        assert json.loads(capsys.readouterr().out)["command"] == "collect spec"
+        assert captured["kwargs"]["query_delay_seconds"] == 1.0
+        assert captured["kwargs"]["query_jitter_seconds"] == 0.5
+        assert captured["kwargs"]["throttle_cooldown_seconds"] == 30.0
+        assert captured["kwargs"]["throttle_error_limit"] == 3
+
     def test_schema_judge_result_json(self, capsys):
         assert main(["schema", "judge-result", "--json"]) == 0
 

@@ -17,6 +17,7 @@ If the answer does not materially change the execution budget, choose a safe def
 - `発見フェーズ`: start with 2-4 discovery queries at `--limit 5` to `--limit 10`; keep channel count small and task-driven
 - `成果物サイズ予算`: for discovery handoffs, prefer `--raw-mode none` or `--raw-mode minimal`, `--item-text-mode snippet`, and `--item-text-max-chars 240` unless the user explicitly needs larger retained payloads
 - `証拠の残し方`: prefer `x-reach collect --spec` outputs for `broad_mission`; use `--save-dir .x-reach/shards` for manual multi-command broad runs, then merge before `ledger summarize`, `ledger query`, or `plan candidates`; use `--save .x-reach/evidence.jsonl` for a simpler single-ledger path
+- `並列実行`: when `broad_mission` uses `--concurrency > 1`, include explicit pacing such as `--query-delay 1 --throttle-cooldown 30` and stop widening if 409/429/conflict diagnostics appear
 - `候補選別ゲート`: use `x-reach plan candidates --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` before deep reads unless the user explicitly wants a wider shortlist; add `--sort-by quality_score` only for utility-sorted review, and inspect `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` as diagnostics, not final judgment
 - `深掘り予算`: default to at most 5 selected deep reads in one round
 - `最終まとめ境界`: summarize shortlisted or explicitly deep-read sources only; do not summarize every collected item
@@ -28,6 +29,7 @@ For `broad_mission` plans:
 
 - do not jump straight from discovery to summarizing everything collected
 - declare objective, queries, retention, filters, diversity, coverage, and outputs in a mission spec before collection starts
+- configure mission `pacing` or CLI `--query-delay` before concurrent runs; do not reproduce throttle errors with stress tests
 - use `coverage.enabled=true` only when the caller wants bounded topic gap-fill queries; when topics are only for annotation or topic spread, keep `coverage.enabled=false` and use `max_queries=0` if an explicit no-gap-fill budget helps
 - keep discovery artifacts compact first
 - shrink with candidate planning before deep reads

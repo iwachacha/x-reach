@@ -8,6 +8,7 @@ All notable changes to this fork are documented here.
 
 - added a schema-first mission `judge` contract with fallback-only `judge.jsonl` records and `x-reach schema judge-result --json`
 - added opt-in `x-reach plan candidates --sort-by quality_score` ordering while preserving first-seen candidate order by default
+- added explicit broad-run pacing controls for `batch` and `collect --spec`, including query start delays, jitter, throttle cooldowns, bounded throttle guards, and query wait diagnostics
 - documented the `agent_reach` compatibility shim retention and deletion criteria
 - documented X Reach's topic-agnostic research-runtime policy and tightened proposal-review skills against domain-specific overfit
 
@@ -17,6 +18,7 @@ All notable changes to this fork are documented here.
 - removed leftover non-Twitter dependencies, stale skill paths, and dead helper modules from the Twitter/X-only fork
 - narrowed bundled Codex skill guidance and exported runtime policy so X Reach is explicit opt-in and lightweight lookups stay on native browsing/search unless the user asks for X Reach
 - added a public budget-planning skill and tightened broad-run guidance so large X Reach investigations can stay compact before deep reads
+- classified plain Twitter/X HTTP 409 conflict and HTTP 429 rate-limit failures so broad-run diagnostics can slow or stop unstarted queries without retrying failed requests
 
 ## [1.12.0] - 2026-04-12
 

@@ -328,6 +328,40 @@
         }
       }
     },
+    "pacing": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "query_delay_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "query_delay": {
+          "type": "number",
+          "minimum": 0
+        },
+        "query_jitter_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "query_jitter": {
+          "type": "number",
+          "minimum": 0
+        },
+        "throttle_cooldown_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "throttle_cooldown": {
+          "type": "number",
+          "minimum": 0
+        },
+        "throttle_error_limit": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "retention": {
       "type": "object",
       "additionalProperties": true,

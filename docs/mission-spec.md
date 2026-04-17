@@ -11,6 +11,7 @@ For narrow probes, readiness checks, or one-off reads, prefer `x-reach collect -
 ```powershell
 x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --dry-run --json
 x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --json
+x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --concurrency 2 --query-delay 1 --throttle-cooldown 30 --json
 x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resume --json
 ```
 
@@ -60,6 +61,12 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
     ],
     "fallback_policy": "keep_ranked"
   },
+  "pacing": {
+    "query_delay_seconds": 1,
+    "query_jitter_seconds": 0,
+    "throttle_cooldown_seconds": 30,
+    "throttle_error_limit": 3
+  },
   "retention": {
     "raw_mode": "full",
     "item_text_mode": "full"
@@ -86,6 +93,8 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
 Mission results include neutral diagnostics so callers can inspect the run without treating X Reach as a final analyst:
 
 - `diagnostics.query_yield`: one row per executed query with query id, input, operation, source role, status, counts, URL count, and error code.
+- `diagnostics.pacing`: normalized pacing controls plus wait counts, total wait seconds, throttle-sensitive error count, and whether the throttle guard skipped unstarted queries.
+- `diagnostics.query_yield[*]`: also includes query start/finish timestamps, duration, planned/applied wait seconds, error category, retryability, and throttle-sensitive status when available.
 - `diagnostics.curation.quality_reason_counts`: aggregate counts for ranked-candidate `quality_reasons`, including deterministic scoring facets such as query match, concrete detail, capped engagement, post shape, media, and URL support.
 - `diagnostics.curation.topic_spread`: whether `diversity.require_topic_spread` was requested, applied, already satisfied, or skipped, plus selected topic ids, promoted count, and whether final order changed.
 - `diagnostics.curation.concentration`: author, thread, and URL concentration summaries for the final ranked set.
@@ -93,6 +102,17 @@ Mission results include neutral diagnostics so callers can inspect the run witho
 - `coverage.diagnostics`: gap-fill budget state, used and remaining query counts, whether query budget was exhausted, and whether ranked-count target gaps are report-only.
 
 `summary.md` mirrors the most important diagnostics with `Quality Reasons` and `Topic Spread` sections. These sections are meant for audit and handoff, not synthesis.
+
+## Pacing And Throttle Guard
+
+Mission specs can declare explicit pacing for broad runs:
+
+- `query_delay_seconds`: minimum spacing between query starts. Defaults to `0`.
+- `query_jitter_seconds`: bounded random extra wait before each query start. Defaults to `0`.
+- `throttle_cooldown_seconds`: wait applied after a throttle-sensitive error such as HTTP 429, HTTP 409, `conflict`, or `too many requests`. Defaults to `30`.
+- `throttle_error_limit`: after this many throttle-sensitive errors, unstarted queries are skipped with `reason=throttle_guard`. Defaults to `3`; set `0` to disable the stop guard.
+
+These controls do not retry failed queries and do not change the requested scope. They only pace future query starts and record what happened in diagnostics. For large runs with `--concurrency > 1`, prefer an explicit delay such as `--query-delay 1` or a matching spec `pacing.query_delay_seconds`.
 
 ## Coverage Gap Fill
 
@@ -152,6 +172,7 @@ No LLM/VLM call is made by this release. If `judge.enabled=true`, x-reach writes
 - Mission spec normalization and validation.
 - Query expansion by language and time range.
 - Batch execution with checkpoint/resume support.
+- Explicit batch/mission pacing controls with query wait diagnostics and a bounded throttle guard for 409/429/conflict-style failures.
 - Raw/canonical/curated output layers.
 - Deterministic keyword filtering, post dedupe, heuristic ranking, and author/thread/url diversity constraints.
 - Evidence-utility scoring facets for query match strength, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties.

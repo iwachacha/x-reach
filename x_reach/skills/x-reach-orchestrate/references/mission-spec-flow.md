@@ -18,6 +18,7 @@ Use this reference only when the ask is broad, resumable, provenance-heavy, cove
 - Use `exclude.drop_low_content_posts=true`, `drop_retweets=true`, and `drop_replies=true` unless the caller is explicitly studying those shapes.
 - Use `diversity.max_posts_per_author` and `max_posts_per_thread` for broad reaction collection so one account or thread does not dominate.
 - Use `diversity.require_topic_spread=true` only with caller-declared coverage topics.
+- For concurrent broad runs, include `pacing.query_delay_seconds` or pass `--query-delay`; keep it small, inspect diagnostics, and avoid retrying into repeated 409/429/conflict errors.
 
 ## Coverage Rules
 
@@ -34,8 +35,8 @@ Use this reference only when the ask is broad, resumable, provenance-heavy, cove
 3. Write the mission spec to a file.
 4. Run `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --dry-run --json`.
 5. Inspect the dry-run query count, retention, and operation options before the write-producing run.
-6. Run `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`.
-7. Inspect `mission-result.json` summary fields: `ranked_candidates`, `filter_drop_counts`, `quality_reason_counts`, `topic_spread_status`, `coverage_target_gap`, and `coverage_query_budget_exhausted`.
+6. Run `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`; add `--concurrency 2 --query-delay 1 --throttle-cooldown 30` when the caller explicitly wants concurrent broad collection.
+7. Inspect `mission-result.json` summary fields: `ranked_candidates`, `filter_drop_counts`, `quality_reason_counts`, `topic_spread_status`, `coverage_target_gap`, `coverage_query_budget_exhausted`, `throttle_sensitive_errors`, and `throttle_guard_triggered`.
 8. For a separate review shortlist, run `x-reach plan candidates --input .x-reach/missions/<run>/raw.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`; add `--sort-by quality_score` only when utility-sorted review helps.
 9. Treat `quality_score`, `quality_reasons`, `sort_by`, and `summary.quality_reason_counts` as deterministic utility diagnostics, not final selection or trust.
 

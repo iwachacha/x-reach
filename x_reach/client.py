@@ -275,6 +275,10 @@ class XReachClient:
         dry_run: bool = False,
         concurrency: int = 1,
         checkpoint_every: int = 25,
+        query_delay_seconds: float | None = None,
+        query_jitter_seconds: float | None = None,
+        throttle_cooldown_seconds: float | None = None,
+        throttle_error_limit: int | None = None,
     ) -> dict[str, Any]:
         """Run a mission spec through the raw, canonical, and curated layers."""
 
@@ -288,6 +292,10 @@ class XReachClient:
             dry_run=dry_run,
             concurrency=concurrency,
             checkpoint_every=checkpoint_every,
+            query_delay_seconds=query_delay_seconds,
+            query_jitter_seconds=query_jitter_seconds,
+            throttle_cooldown_seconds=throttle_cooldown_seconds,
+            throttle_error_limit=throttle_error_limit,
             client_factory=lambda: self,
         )
 

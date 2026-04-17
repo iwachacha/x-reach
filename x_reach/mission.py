@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from x_reach._version import __version__
-from x_reach.batch import BatchPlanError, run_batch_plan, validate_batch_plan
+from x_reach.batch import (
+    BatchPlanError,
+    normalize_pacing_config,
+    run_batch_plan,
+    validate_batch_plan,
+)
 from x_reach.candidates import CandidatePlanError, build_candidates_payload
 from x_reach.client import XReachClient
 from x_reach.evidence_scoring import (
@@ -88,6 +93,7 @@ def build_mission_plan_payload(
         "objective": normalized["objective"],
         "quality_profile": normalized["quality_profile"],
         "target_posts": normalized["target_posts"],
+        "pacing": normalized["pacing"],
         "judge": normalized["judge"],
         "query_count": len(plan["queries"]),
         "normalized_spec": normalized,
@@ -105,11 +111,22 @@ def run_mission_spec(
     dry_run: bool = False,
     concurrency: int = 1,
     checkpoint_every: int = 25,
+    query_delay_seconds: float | None = None,
+    query_jitter_seconds: float | None = None,
+    throttle_cooldown_seconds: float | None = None,
+    throttle_error_limit: int | None = None,
     client_factory: Callable[[], XReachClient] | None = None,
 ) -> dict[str, Any]:
     """Execute a mission spec and write raw, canonical, and curated artifacts."""
 
     plan_payload = build_mission_plan_payload(spec_path, output_dir=output_dir, run_id=run_id)
+    _apply_pacing_overrides(
+        plan_payload,
+        query_delay_seconds=query_delay_seconds,
+        query_jitter_seconds=query_jitter_seconds,
+        throttle_cooldown_seconds=throttle_cooldown_seconds,
+        throttle_error_limit=throttle_error_limit,
+    )
     if dry_run:
         return plan_payload
 
@@ -149,6 +166,10 @@ def run_mission_spec(
             concurrency=concurrency,
             resume=resume,
             checkpoint_every=checkpoint_every,
+            query_delay_seconds=query_delay_seconds,
+            query_jitter_seconds=query_jitter_seconds,
+            throttle_cooldown_seconds=throttle_cooldown_seconds,
+            throttle_error_limit=throttle_error_limit,
             client_factory=client_factory,
         )
         merge_payload = merge_ledger_inputs(raw_dir, paths["raw_jsonl"])
@@ -178,6 +199,10 @@ def run_mission_spec(
                     concurrency=concurrency,
                     resume=resume,
                     checkpoint_every=checkpoint_every,
+                    query_delay_seconds=query_delay_seconds,
+                    query_jitter_seconds=query_jitter_seconds,
+                    throttle_cooldown_seconds=throttle_cooldown_seconds,
+                    throttle_error_limit=throttle_error_limit,
                     client_factory=client_factory,
                 )
                 merge_payload = merge_ledger_inputs(raw_dir, paths["raw_jsonl"])
@@ -265,6 +290,7 @@ def render_mission_text(payload: dict[str, Any]) -> str:
                 f"Objective: {payload.get('objective') or '(none)'}",
                 f"Quality: {payload['quality_profile']}",
                 f"Target posts: {payload['target_posts']}",
+                f"Pacing: {_render_mission_pacing(payload.get('pacing') or {})}",
                 f"Queries: {payload['query_count']}",
             ]
         )
@@ -281,12 +307,31 @@ def render_mission_text(payload: dict[str, Any]) -> str:
             f"OK: {'yes' if payload.get('ok') else 'no'}",
             f"Queries: {summary.get('queries_total', 0)} total, {summary.get('queries_ok', 0)} ok, {summary.get('queries_errors', 0)} errors, {summary.get('queries_skipped', 0)} skipped",
             f"Items: {summary.get('items_seen', 0)} seen, {summary.get('canonical_items', 0)} canonical, {summary.get('ranked_candidates', 0)} ranked",
+            f"Pacing: {_render_mission_pacing(payload.get('pacing') or {})}",
             f"Coverage: {summary.get('coverage_gap_queries', 0)} gap queries, {summary.get('coverage_final_gaps', 0)} final gaps",
             f"Raw ledger: {outputs.get('raw_jsonl', '')}",
             f"Ranked posts: {outputs.get('ranked_jsonl', '')}",
             f"Summary: {outputs.get('summary_md', '')}",
         ]
     )
+
+
+def _render_mission_pacing(pacing: dict[str, Any]) -> str:
+    parts = [
+        f"delay={pacing.get('query_delay_seconds', 0)}s",
+        f"jitter={pacing.get('query_jitter_seconds', 0)}s",
+        f"throttle_cooldown={pacing.get('throttle_cooldown_seconds', 0)}s",
+        f"throttle_error_limit={pacing.get('throttle_error_limit', 0)}",
+    ]
+    if pacing.get("waits_applied") or pacing.get("throttle_sensitive_errors"):
+        parts.extend(
+            [
+                f"waits={pacing.get('waits_applied', 0)}",
+                f"throttle_sensitive_errors={pacing.get('throttle_sensitive_errors', 0)}",
+                f"guard={'yes' if pacing.get('throttle_guard_triggered') else 'no'}",
+            ]
+        )
+    return ", ".join(parts)
 
 
 def _load_spec(path: Path) -> dict[str, Any]:
@@ -316,6 +361,7 @@ def _normalize_spec(
     diversity = _mapping(raw_spec.get("diversity"))
     coverage = _mapping(raw_spec.get("coverage"))
     judge = _normalize_judge(raw_spec.get("judge"), target_posts=target_posts)
+    pacing = _normalize_pacing(raw_spec.get("pacing"))
     retention = _mapping(raw_spec.get("retention"))
     time_range = _mapping(raw_spec.get("time_range"))
     outputs = _normalize_outputs(raw_spec.get("outputs"))
@@ -369,6 +415,7 @@ def _normalize_spec(
         },
         "coverage": _normalize_coverage(coverage, target_posts=target_posts),
         "judge": judge,
+        "pacing": pacing,
         "retention": {
             "raw_mode": raw_mode,
             "raw_max_bytes": raw_max_bytes,
@@ -437,6 +484,47 @@ def _normalize_coverage(raw_coverage: dict[str, Any], *, target_posts: int) -> d
             default_min_posts=min_posts_per_topic,
         ),
     }
+
+
+def _normalize_pacing(raw_pacing: Any) -> dict[str, Any]:
+    try:
+        return normalize_pacing_config(raw_pacing)
+    except BatchPlanError as exc:
+        raise MissionSpecError(str(exc)) from exc
+
+
+def _apply_pacing_overrides(
+    plan_payload: dict[str, Any],
+    *,
+    query_delay_seconds: float | None,
+    query_jitter_seconds: float | None,
+    throttle_cooldown_seconds: float | None,
+    throttle_error_limit: int | None,
+) -> None:
+    if all(
+        value is None
+        for value in (
+            query_delay_seconds,
+            query_jitter_seconds,
+            throttle_cooldown_seconds,
+            throttle_error_limit,
+        )
+    ):
+        return
+    normalized_spec = plan_payload["normalized_spec"]
+    try:
+        pacing = normalize_pacing_config(
+            normalized_spec.get("pacing"),
+            query_delay_seconds=query_delay_seconds,
+            query_jitter_seconds=query_jitter_seconds,
+            throttle_cooldown_seconds=throttle_cooldown_seconds,
+            throttle_error_limit=throttle_error_limit,
+        )
+    except BatchPlanError as exc:
+        raise MissionSpecError(str(exc)) from exc
+    normalized_spec["pacing"] = pacing
+    plan_payload["pacing"] = pacing
+    plan_payload["batch_plan"]["pacing"] = pacing
 
 
 def _normalize_judge(raw_judge: Any, *, target_posts: int) -> dict[str, Any]:
@@ -598,6 +686,7 @@ def _build_batch_plan(spec: dict[str, Any]) -> dict[str, Any]:
         "objective": spec.get("objective"),
         "quality_profile": spec["quality_profile"],
         "failure_policy": spec["failure_policy"],
+        "pacing": spec["pacing"],
         "metadata": {
             "intent": _mission_intent(spec),
             "source_role": "mission_broad_recall",
@@ -1037,6 +1126,7 @@ def _empty_coverage_batch_plan(spec: dict[str, Any]) -> dict[str, Any]:
         "objective": spec.get("objective"),
         "quality_profile": spec["quality_profile"],
         "failure_policy": spec["failure_policy"],
+        "pacing": spec["pacing"],
         "metadata": {
             "intent": _mission_intent(spec),
             "source_role": "coverage_gap_fill",
@@ -1087,6 +1177,7 @@ def _combine_batch_payloads(primary: dict[str, Any], secondary: dict[str, Any] |
     queries = [*(primary.get("queries") or []), *(secondary.get("queries") or [])]
     combined["queries"] = queries
     combined["summary"] = _batch_summary_from_queries(queries)
+    combined["pacing"] = _combined_pacing_payload(primary.get("pacing") or {}, combined["summary"])
     combined["save_targets"] = sorted(set(primary.get("save_targets") or []) | set(secondary.get("save_targets") or []))
     combined["coverage_batch"] = secondary
     return combined
@@ -1101,6 +1192,7 @@ def _batch_summary_from_queries(queries: Sequence[dict[str, Any]]) -> dict[str, 
             source_roles[str(role)] = source_roles.get(str(role), 0) + 1
         urls.extend(str(url) for url in query.get("urls") or [] if url)
     unique_urls = set(urls)
+    total_wait = sum(float(query.get("applied_wait_seconds") or 0.0) for query in queries)
     return {
         "total": len(queries),
         "ok": sum(1 for query in queries if query.get("status") == "ok"),
@@ -1110,6 +1202,20 @@ def _batch_summary_from_queries(queries: Sequence[dict[str, Any]]) -> dict[str, 
         "unique_urls": len(unique_urls),
         "duplicate_urls": len(urls) - len(unique_urls),
         "source_roles": source_roles,
+        "waits_applied": sum(1 for query in queries if float(query.get("applied_wait_seconds") or 0.0) > 0),
+        "total_wait_seconds": round(max(total_wait, 0.0), 6),
+        "throttle_sensitive_errors": sum(1 for query in queries if query.get("throttle_sensitive")),
+        "throttle_guard_triggered": any(query.get("reason") == "throttle_guard" for query in queries),
+    }
+
+
+def _combined_pacing_payload(pacing: dict[str, Any], summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **pacing,
+        "waits_applied": summary.get("waits_applied", 0),
+        "total_wait_seconds": summary.get("total_wait_seconds", 0),
+        "throttle_sensitive_errors": summary.get("throttle_sensitive_errors", 0),
+        "throttle_guard_triggered": summary.get("throttle_guard_triggered", False),
     }
 
 
@@ -1471,6 +1577,14 @@ def _query_yield(batch_payload: dict[str, Any]) -> list[dict[str, Any]]:
                 "count": query.get("count", 0),
                 "url_count": len(query.get("urls") or []),
                 "error_code": query.get("error_code"),
+                "error_category": query.get("error_category"),
+                "error_retryable": query.get("error_retryable"),
+                "started_at": query.get("started_at"),
+                "finished_at": query.get("finished_at"),
+                "duration_seconds": query.get("duration_seconds"),
+                "planned_wait_seconds": query.get("planned_wait_seconds"),
+                "applied_wait_seconds": query.get("applied_wait_seconds"),
+                "throttle_sensitive": query.get("throttle_sensitive"),
             }
         )
     return rows
@@ -1560,11 +1674,15 @@ def _build_result_payload(
         "resume": resume,
         "concurrency": concurrency,
         "checkpoint_every": checkpoint_every,
+        "pacing": batch_payload.get("pacing") or plan_payload.get("pacing") or {},
         "summary": {
             "queries_total": batch_summary.get("total", 0),
             "queries_ok": batch_summary.get("ok", 0),
             "queries_errors": batch_summary.get("errors", 0),
             "queries_skipped": batch_summary.get("skipped", 0),
+            "throttle_sensitive_errors": batch_summary.get("throttle_sensitive_errors", 0),
+            "throttle_guard_triggered": batch_summary.get("throttle_guard_triggered", False),
+            "total_wait_seconds": batch_summary.get("total_wait_seconds", 0),
             "items_seen": batch_summary.get("items", 0),
             "unique_urls": batch_summary.get("unique_urls", 0),
             "duplicate_urls": batch_summary.get("duplicate_urls", 0),
@@ -1597,6 +1715,7 @@ def _build_result_payload(
         "judge": judge_payload,
         "diagnostics": {
             "query_yield": _query_yield(batch_payload),
+            "pacing": batch_payload.get("pacing") or plan_payload.get("pacing") or {},
             "curation": curated_payload.get("diagnostics", {}),
         },
         "curation": {
@@ -1695,6 +1814,21 @@ def _render_summary_markdown(
             )
     else:
         lines.append("- disabled")
+    pacing = batch_payload.get("pacing") or {}
+    if _mission_pacing_should_render(pacing):
+        lines.extend(["", "## Pacing", ""])
+        lines.extend(
+            [
+                f"- Query delay seconds: {pacing.get('query_delay_seconds', 0)}",
+                f"- Query jitter seconds: {pacing.get('query_jitter_seconds', 0)}",
+                f"- Throttle cooldown seconds: {pacing.get('throttle_cooldown_seconds', 0)}",
+                f"- Throttle error limit: {pacing.get('throttle_error_limit', 0)}",
+                f"- Waits applied: {pacing.get('waits_applied', 0)}",
+                f"- Total wait seconds: {pacing.get('total_wait_seconds', 0)}",
+                f"- Throttle-sensitive errors: {pacing.get('throttle_sensitive_errors', 0)}",
+                f"- Throttle guard triggered: {'yes' if pacing.get('throttle_guard_triggered') else 'no'}",
+            ]
+        )
     lines.extend(["", "## Judge", ""])
     lines.extend(
         [
@@ -1717,6 +1851,19 @@ def _render_summary_markdown(
         lines.append("- none")
     lines.append("")
     return "\n".join(lines)
+
+
+def _mission_pacing_should_render(pacing: dict[str, Any]) -> bool:
+    return any(
+        bool(pacing.get(key))
+        for key in (
+            "query_delay_seconds",
+            "query_jitter_seconds",
+            "waits_applied",
+            "throttle_sensitive_errors",
+            "throttle_guard_triggered",
+        )
+    )
 
 
 def _mission_paths(output_dir: Path) -> dict[str, Path]:

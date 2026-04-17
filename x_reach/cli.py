@@ -357,6 +357,29 @@ def _build_parser() -> argparse.ArgumentParser:
         default=25,
         help="Mission checkpoint interval used with --spec",
     )
+    p_collect.add_argument(
+        "--query-delay",
+        dest="query_delay_seconds",
+        type=float,
+        help="Minimum seconds between mission query starts used with --spec",
+    )
+    p_collect.add_argument(
+        "--query-jitter",
+        dest="query_jitter_seconds",
+        type=float,
+        help="Maximum random extra seconds before each mission query start used with --spec",
+    )
+    p_collect.add_argument(
+        "--throttle-cooldown",
+        dest="throttle_cooldown_seconds",
+        type=float,
+        help="Cooldown seconds after a throttle-sensitive mission query error",
+    )
+    p_collect.add_argument(
+        "--throttle-error-limit",
+        type=int,
+        help="Skip remaining mission queries after this many throttle-sensitive errors; 0 disables the stop guard",
+    )
     p_collect.add_argument("--limit", type=int, help="Optional item limit for returned tweets or replies")
     p_collect.add_argument("--since", help="Optional lower time boundary for operations that support it")
     p_collect.add_argument("--until", help="Optional upper time boundary for operations that support it")
@@ -591,6 +614,29 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=100,
         help="Emit checkpoint summaries after this many completed queries",
+    )
+    p_batch.add_argument(
+        "--query-delay",
+        dest="query_delay_seconds",
+        type=float,
+        help="Minimum seconds between collection starts",
+    )
+    p_batch.add_argument(
+        "--query-jitter",
+        dest="query_jitter_seconds",
+        type=float,
+        help="Maximum random extra seconds before each collection start",
+    )
+    p_batch.add_argument(
+        "--throttle-cooldown",
+        dest="throttle_cooldown_seconds",
+        type=float,
+        help="Cooldown seconds after a throttle-sensitive collection error",
+    )
+    p_batch.add_argument(
+        "--throttle-error-limit",
+        type=int,
+        help="Skip remaining queries after this many throttle-sensitive errors; 0 disables the stop guard",
     )
     p_batch.add_argument(
         "--quality",
@@ -1233,8 +1279,20 @@ def _cmd_collect(args) -> int:
     if not args.operation or not args.input:
         print("collect requires --operation and --input unless --spec is used", file=sys.stderr)
         return 2
-    if getattr(args, "dry_run", False) or getattr(args, "output_dir", None) or getattr(args, "resume", False):
-        print("dry-run, output-dir, and resume are only supported with --spec", file=sys.stderr)
+    spec_only_options = (
+        getattr(args, "dry_run", False),
+        getattr(args, "output_dir", None),
+        getattr(args, "resume", False),
+        getattr(args, "query_delay_seconds", None),
+        getattr(args, "query_jitter_seconds", None),
+        getattr(args, "throttle_cooldown_seconds", None),
+        getattr(args, "throttle_error_limit", None),
+    )
+    if any(value is not None and value is not False for value in spec_only_options):
+        print(
+            "dry-run, output-dir, resume, and pacing options are only supported with --spec",
+            file=sys.stderr,
+        )
         return 2
     if args.max_text_chars is not None and args.max_text_chars < 1:
         print("max-text-chars must be greater than or equal to 1", file=sys.stderr)
@@ -1385,6 +1443,10 @@ def _cmd_collect_spec(args) -> int:
             dry_run=args.dry_run,
             concurrency=args.concurrency,
             checkpoint_every=args.checkpoint_every,
+            query_delay_seconds=args.query_delay_seconds,
+            query_jitter_seconds=args.query_jitter_seconds,
+            throttle_cooldown_seconds=args.throttle_cooldown_seconds,
+            throttle_error_limit=args.throttle_error_limit,
         )
     except MissionSpecError as exc:
         print(f"Could not run mission spec: {exc}", file=sys.stderr)
@@ -1506,6 +1568,12 @@ def _batch_error_payload(args, message: str) -> dict:
         "save_dir": args.save_dir,
         "failure_policy": None,
         "quality_profile": args.quality,
+        "pacing": {
+            "query_delay_seconds": args.query_delay_seconds,
+            "query_jitter_seconds": args.query_jitter_seconds,
+            "throttle_cooldown_seconds": args.throttle_cooldown_seconds,
+            "throttle_error_limit": args.throttle_error_limit,
+        },
         "summary": None,
         "error": {
             "code": "batch_plan_error",
@@ -1578,6 +1646,10 @@ def _cmd_batch(args) -> int:
             payload = validate_batch_plan(
                 args.plan,
                 quality=args.quality,
+                query_delay_seconds=args.query_delay_seconds,
+                query_jitter_seconds=args.query_jitter_seconds,
+                throttle_cooldown_seconds=args.throttle_cooldown_seconds,
+                throttle_error_limit=args.throttle_error_limit,
             )
         except BatchPlanError as exc:
             if args.json:
@@ -1603,6 +1675,10 @@ def _cmd_batch(args) -> int:
             resume=args.resume,
             checkpoint_every=args.checkpoint_every,
             quality=args.quality,
+            query_delay_seconds=args.query_delay_seconds,
+            query_jitter_seconds=args.query_jitter_seconds,
+            throttle_cooldown_seconds=args.throttle_cooldown_seconds,
+            throttle_error_limit=args.throttle_error_limit,
         )
     except BatchPlanError as exc:
         print(f"Could not run batch plan: {exc}", file=sys.stderr)

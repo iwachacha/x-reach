@@ -81,6 +81,24 @@ def test_build_error_shape():
     }
 
 
+def test_build_error_classifies_rate_limit_and_conflict_http_errors():
+    rate_limit = build_error(
+        code="http_429",
+        message="Twitter API error (HTTP 429): too many requests",
+        details={"http_status": 429},
+    )
+    conflict = build_error(
+        code="http_409",
+        message="Twitter API error (HTTP 409): conflict",
+        details={"http_status": 409},
+    )
+
+    assert rate_limit["category"] == "rate_limited"
+    assert rate_limit["retryable"] is True
+    assert conflict["category"] == "upstream_unavailable"
+    assert conflict["retryable"] is True
+
+
 def test_build_item_normalizes_x_engagement_media_and_identifiers():
     item = build_item(
         item_id="tweet-1",

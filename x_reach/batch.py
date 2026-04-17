@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import json
+import math
+import random
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable
@@ -29,16 +33,102 @@ class BatchPlanError(Exception):
     """Raised when a batch plan cannot be executed."""
 
 
+_DEFAULT_PACING = {
+    "query_delay_seconds": 0.0,
+    "query_jitter_seconds": 0.0,
+    "throttle_cooldown_seconds": 30.0,
+    "throttle_error_limit": 3,
+}
+
+
+def normalize_pacing_config(
+    raw_pacing: Any = None,
+    *,
+    query_delay_seconds: float | None = None,
+    query_jitter_seconds: float | None = None,
+    throttle_cooldown_seconds: float | None = None,
+    throttle_error_limit: int | None = None,
+) -> dict[str, Any]:
+    """Normalize explicit batch/mission pacing controls."""
+
+    if raw_pacing is None:
+        pacing: dict[str, Any] = {}
+    elif isinstance(raw_pacing, dict):
+        pacing = raw_pacing
+    else:
+        raise BatchPlanError("pacing must be a JSON object")
+
+    config = dict(_DEFAULT_PACING)
+    raw_values = {
+        "query_delay_seconds": _first_present(
+            pacing,
+            "query_delay_seconds",
+            "query_delay",
+        ),
+        "query_jitter_seconds": _first_present(
+            pacing,
+            "query_jitter_seconds",
+            "query_jitter",
+        ),
+        "throttle_cooldown_seconds": _first_present(
+            pacing,
+            "throttle_cooldown_seconds",
+            "throttle_cooldown",
+        ),
+        "throttle_error_limit": _first_present(pacing, "throttle_error_limit"),
+    }
+    for key, value in raw_values.items():
+        if value is not None:
+            config[key] = value
+
+    overrides = {
+        "query_delay_seconds": query_delay_seconds,
+        "query_jitter_seconds": query_jitter_seconds,
+        "throttle_cooldown_seconds": throttle_cooldown_seconds,
+        "throttle_error_limit": throttle_error_limit,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            config[key] = value
+
+    return {
+        "query_delay_seconds": _nonnegative_float(
+            config["query_delay_seconds"],
+            "pacing.query_delay_seconds",
+        ),
+        "query_jitter_seconds": _nonnegative_float(
+            config["query_jitter_seconds"],
+            "pacing.query_jitter_seconds",
+        ),
+        "throttle_cooldown_seconds": _nonnegative_float(
+            config["throttle_cooldown_seconds"],
+            "pacing.throttle_cooldown_seconds",
+        ),
+        "throttle_error_limit": _nonnegative_int(
+            config["throttle_error_limit"],
+            "pacing.throttle_error_limit",
+        ),
+    }
+
+
 def validate_batch_plan(
     plan_path: str | Path,
     *,
     quality: str | None = None,
+    query_delay_seconds: float | None = None,
+    query_jitter_seconds: float | None = None,
+    throttle_cooldown_seconds: float | None = None,
+    throttle_error_limit: int | None = None,
 ) -> dict[str, Any]:
     """Validate a JSON batch plan without collecting or writing ledger data."""
 
-    path, _plan, normalized_queries, failure_policy, requested_quality = _prepare_batch_plan(
+    path, _plan, normalized_queries, failure_policy, requested_quality, pacing_config = _prepare_batch_plan(
         plan_path,
         quality=quality,
+        query_delay_seconds=query_delay_seconds,
+        query_jitter_seconds=query_jitter_seconds,
+        throttle_cooldown_seconds=throttle_cooldown_seconds,
+        throttle_error_limit=throttle_error_limit,
     )
     return {
         "schema_version": SCHEMA_VERSION,
@@ -50,6 +140,7 @@ def validate_batch_plan(
         "plan": str(path),
         "failure_policy": failure_policy,
         "quality_profile": requested_quality,
+        "pacing": _pacing_payload(pacing_config, []),
         "summary": _plan_summary(normalized_queries),
     }
 
@@ -64,7 +155,14 @@ def run_batch_plan(
     resume: bool = False,
     checkpoint_every: int = 100,
     quality: str | None = None,
+    query_delay_seconds: float | None = None,
+    query_jitter_seconds: float | None = None,
+    throttle_cooldown_seconds: float | None = None,
+    throttle_error_limit: int | None = None,
     client_factory: Callable[[], AgentReachClient] | None = None,
+    _sleep_func: Callable[[float], None] | None = None,
+    _time_func: Callable[[], float] | None = None,
+    _random_func: Callable[[], float] | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Run a JSON research plan and append results to a ledger."""
 
@@ -79,9 +177,13 @@ def run_batch_plan(
         if save_dir_path.exists() and not save_dir_path.is_dir():
             raise BatchPlanError("save_dir must point to a directory")
 
-    path, plan, normalized_queries, failure_policy, requested_quality = _prepare_batch_plan(
+    path, plan, normalized_queries, failure_policy, requested_quality, pacing_config = _prepare_batch_plan(
         plan_path,
         quality=quality,
+        query_delay_seconds=query_delay_seconds,
+        query_jitter_seconds=query_jitter_seconds,
+        throttle_cooldown_seconds=throttle_cooldown_seconds,
+        throttle_error_limit=throttle_error_limit,
     )
     run_id = str(plan.get("run_id") or default_run_id())
     save_target = save_dir or save_path
@@ -91,8 +193,15 @@ def run_batch_plan(
     written_targets: set[str] = set()
     started_at = utc_timestamp()
     make_client = client_factory or AgentReachClient
+    pacing = _PacingController(
+        pacing_config,
+        sleep_func=_sleep_func or time.sleep,
+        time_func=_time_func or time.monotonic,
+        random_func=_random_func or random.random,
+    )
 
     def execute(index: int, query: dict[str, Any]) -> dict[str, Any]:
+        base_status = _query_status_base(query, requested_quality=requested_quality)
         resume_query = {
             **query,
             "quality_profile": requested_quality if is_broad_operation(query["operation"]) else None,
@@ -100,17 +209,23 @@ def run_batch_plan(
         key = _query_key(resume_query)
         if resume and key in completed_keys:
             return {
-                "query_id": query["query_id"],
-                "channel": query["channel"],
-                "operation": query["operation"],
-                "input": query["input"],
-                "limit": query.get("limit"),
-                "intent": query.get("intent"),
-                "source_role": query.get("source_role"),
+                **base_status,
                 "status": "skipped",
                 "reason": "resume_existing",
                 "ok": True,
                 "count": 0,
+                **_empty_execution_diagnostics(),
+            }
+
+        start_wait = pacing.wait_for_start()
+        if start_wait["skipped"]:
+            return {
+                **base_status,
+                "status": "skipped",
+                "reason": "throttle_guard",
+                "ok": True,
+                "count": 0,
+                **_empty_execution_diagnostics(start_wait),
             }
 
         client = make_client()
@@ -139,41 +254,37 @@ def run_batch_plan(
                 kwargs[option_name] = query[option_name]
         if requested_quality is not None and is_broad_operation(query["operation"]):
             kwargs["quality_profile"] = requested_quality
+        started_at_query = utc_timestamp()
+        started_monotonic = pacing.now()
         payload = client.collect(query["channel"], query["operation"], query["input"], **kwargs)
+        finished_monotonic = pacing.now()
+        finished_at_query = utc_timestamp()
         error = payload.get("error")
+        error_category = error.get("category") if isinstance(error, dict) else None
+        retryable = error.get("retryable") if isinstance(error, dict) else None
+        throttle_sensitive = _is_throttle_sensitive_error(error, payload=payload)
+        throttle_diagnostics = pacing.record_result(throttle_sensitive)
         return {
             "_payload": payload,
             "_query": query,
-            "query_id": query["query_id"],
-            "channel": query["channel"],
-            "operation": query["operation"],
-            "input": query["input"],
-            "limit": query.get("limit"),
-            "intent": query.get("intent"),
-            "source_role": query.get("source_role"),
-            "since": query.get("since"),
-            "until": query.get("until"),
-            "from_user": query.get("from_user"),
-            "to_user": query.get("to_user"),
-            "lang": query.get("lang"),
-            "search_type": query.get("search_type"),
-            "has": query.get("has"),
-            "exclude": query.get("exclude"),
-            "min_likes": query.get("min_likes"),
-            "min_retweets": query.get("min_retweets"),
-            "min_views": query.get("min_views"),
-            "originals_only": query.get("originals_only"),
-            "quality_profile": requested_quality if is_broad_operation(query["operation"]) else None,
-            "raw_mode": query.get("raw_mode"),
-            "raw_max_bytes": query.get("raw_max_bytes"),
-            "item_text_mode": query.get("item_text_mode"),
-            "item_text_max_chars": query.get("item_text_max_chars"),
+            **base_status,
             "status": "ok" if payload.get("ok") else "error",
             "ok": bool(payload.get("ok")),
             "count": len(payload.get("items") or []),
             "urls": [item.get("url") for item in payload.get("items") or [] if item.get("url")],
-            "error_code": error["code"] if error else None,
-            "error_message": error["message"] if error else None,
+            "error_code": error["code"] if isinstance(error, dict) else None,
+            "error_category": error_category,
+            "error_retryable": retryable,
+            "error_message": error["message"] if isinstance(error, dict) else None,
+            "started_at": started_at_query,
+            "finished_at": finished_at_query,
+            "duration_seconds": _round_seconds(finished_monotonic - started_monotonic),
+            "planned_wait_seconds": start_wait["planned_wait_seconds"],
+            "applied_wait_seconds": start_wait["applied_wait_seconds"],
+            "throttle_sensitive": throttle_sensitive,
+            "throttle_cooldown_applied_seconds": throttle_diagnostics[
+                "throttle_cooldown_applied_seconds"
+            ],
         }
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
@@ -191,7 +302,10 @@ def run_batch_plan(
                     "status": "error",
                     "ok": False,
                     "count": 0,
+                    **_empty_execution_diagnostics(),
                     "error_code": "batch_error",
+                    "error_category": "unknown",
+                    "error_retryable": False,
                     "error_message": str(exc),
                 }
             payload = status.pop("_payload", None)
@@ -227,6 +341,8 @@ def run_batch_plan(
                             "status": "error",
                             "ok": False,
                             "error_code": "ledger_error",
+                            "error_category": "unknown",
+                            "error_retryable": False,
                             "error_message": str(exc),
                         }
                     )
@@ -254,6 +370,7 @@ def run_batch_plan(
         "failure_policy": failure_policy,
         "concurrency": concurrency,
         "resume": resume,
+        "pacing": _pacing_payload(pacing_config, final_statuses),
         "started_at": started_at,
         "finished_at": finished_at,
         "summary": summary,
@@ -269,6 +386,7 @@ def render_batch_text(payload: dict[str, Any]) -> str:
 
     summary = payload["summary"]
     if payload.get("validate_only"):
+        pacing = payload.get("pacing") or {}
         lines = [
             "X Reach Batch Validation",
             "========================================",
@@ -276,6 +394,7 @@ def render_batch_text(payload: dict[str, Any]) -> str:
             f"Valid: {'yes' if payload.get('valid') else 'no'}",
             f"Failure policy: {payload['failure_policy']}",
             f"Quality profile: {payload['quality_profile']}",
+            f"Pacing: {_render_pacing(pacing)}",
             f"Queries: {summary['query_count']}",
         ]
         if summary["channel_counts"]:
@@ -300,6 +419,7 @@ def render_batch_text(payload: dict[str, Any]) -> str:
         f"Run ID: {payload['run_id']}",
         f"Queries: {summary['total']} total, {summary['ok']} ok, {summary['errors']} errors, {summary['skipped']} skipped",
         f"Items: {summary['items']}",
+        f"Pacing: {_render_pacing(payload.get('pacing') or {})}",
     ]
     return "\n".join(lines)
 
@@ -320,7 +440,11 @@ def _prepare_batch_plan(
     plan_path: str | Path,
     *,
     quality: str | None = None,
-) -> tuple[Path, dict[str, Any], list[dict[str, Any]], str, str]:
+    query_delay_seconds: float | None = None,
+    query_jitter_seconds: float | None = None,
+    throttle_cooldown_seconds: float | None = None,
+    throttle_error_limit: int | None = None,
+) -> tuple[Path, dict[str, Any], list[dict[str, Any]], str, str, dict[str, Any]]:
     path = Path(plan_path)
     plan = _load_batch_plan(path)
     queries = plan.get("queries") or plan.get("pilot_queries") or []
@@ -338,7 +462,14 @@ def _prepare_batch_plan(
     ]
     failure_policy = str(plan.get("failure_policy") or "partial")
     requested_quality = str(quality or plan.get("quality_profile") or "balanced")
-    return path, plan, normalized_queries, failure_policy, requested_quality
+    pacing_config = normalize_pacing_config(
+        plan.get("pacing"),
+        query_delay_seconds=query_delay_seconds,
+        query_jitter_seconds=query_jitter_seconds,
+        throttle_cooldown_seconds=throttle_cooldown_seconds,
+        throttle_error_limit=throttle_error_limit,
+    )
+    return path, plan, normalized_queries, failure_policy, requested_quality, pacing_config
 
 
 def _normalize_query(
@@ -397,6 +528,225 @@ def _plan_metadata_defaults(plan: dict[str, Any]) -> dict[str, Any]:
         if value is not None:
             defaults[key] = value
     return defaults
+
+
+class _PacingController:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        *,
+        sleep_func: Callable[[float], None],
+        time_func: Callable[[], float],
+        random_func: Callable[[], float],
+    ) -> None:
+        self._config = config
+        self._sleep = sleep_func
+        self._time = time_func
+        self._random = random_func
+        self._lock = threading.Lock()
+        self._next_start = 0.0
+        self._throttle_sensitive_errors = 0
+        self._throttle_guard_triggered = False
+
+    def now(self) -> float:
+        return float(self._time())
+
+    def wait_for_start(self) -> dict[str, Any]:
+        with self._lock:
+            if self._throttle_guard_triggered:
+                return {
+                    "skipped": True,
+                    "planned_wait_seconds": 0.0,
+                    "applied_wait_seconds": 0.0,
+                }
+            now = self.now()
+            jitter = self._jitter_seconds()
+            planned_start = max(now, self._next_start) + jitter
+            planned_wait = max(planned_start - now, 0.0)
+            self._next_start = planned_start + float(self._config["query_delay_seconds"])
+
+        applied_wait = 0.0
+        if planned_wait > 0:
+            before_sleep = self.now()
+            self._sleep(planned_wait)
+            applied_wait = max(self.now() - before_sleep, 0.0)
+
+        with self._lock:
+            if self._throttle_guard_triggered:
+                return {
+                    "skipped": True,
+                    "planned_wait_seconds": _round_seconds(planned_wait),
+                    "applied_wait_seconds": _round_seconds(applied_wait),
+                }
+        return {
+            "skipped": False,
+            "planned_wait_seconds": _round_seconds(planned_wait),
+            "applied_wait_seconds": _round_seconds(applied_wait),
+        }
+
+    def record_result(self, throttle_sensitive: bool) -> dict[str, Any]:
+        cooldown_applied = 0.0
+        if not throttle_sensitive:
+            return {"throttle_cooldown_applied_seconds": cooldown_applied}
+
+        with self._lock:
+            self._throttle_sensitive_errors += 1
+            cooldown = float(self._config["throttle_cooldown_seconds"])
+            if cooldown > 0:
+                self._next_start = max(self._next_start, self.now() + cooldown)
+                cooldown_applied = cooldown
+            limit = int(self._config["throttle_error_limit"])
+            if limit > 0 and self._throttle_sensitive_errors >= limit:
+                self._throttle_guard_triggered = True
+        return {"throttle_cooldown_applied_seconds": _round_seconds(cooldown_applied)}
+
+    def _jitter_seconds(self) -> float:
+        jitter = float(self._config["query_jitter_seconds"])
+        if jitter <= 0:
+            return 0.0
+        value = min(max(float(self._random()), 0.0), 1.0)
+        return value * jitter
+
+
+def _first_present(values: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if values.get(key) is not None:
+            return values[key]
+    return None
+
+
+def _nonnegative_float(value: Any, name: str) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise BatchPlanError(f"{name} must be a number") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise BatchPlanError(f"{name} must be greater than or equal to 0")
+    return parsed
+
+
+def _nonnegative_int(value: Any, name: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise BatchPlanError(f"{name} must be an integer") from exc
+    if parsed < 0:
+        raise BatchPlanError(f"{name} must be greater than or equal to 0")
+    return parsed
+
+
+def _query_status_base(query: dict[str, Any], *, requested_quality: str | None) -> dict[str, Any]:
+    return {
+        "query_id": query["query_id"],
+        "channel": query["channel"],
+        "operation": query["operation"],
+        "input": query["input"],
+        "limit": query.get("limit"),
+        "intent": query.get("intent"),
+        "source_role": query.get("source_role"),
+        "since": query.get("since"),
+        "until": query.get("until"),
+        "from_user": query.get("from_user"),
+        "to_user": query.get("to_user"),
+        "lang": query.get("lang"),
+        "search_type": query.get("search_type"),
+        "has": query.get("has"),
+        "exclude": query.get("exclude"),
+        "min_likes": query.get("min_likes"),
+        "min_retweets": query.get("min_retweets"),
+        "min_views": query.get("min_views"),
+        "originals_only": query.get("originals_only"),
+        "quality_profile": requested_quality if is_broad_operation(query["operation"]) else None,
+        "raw_mode": query.get("raw_mode"),
+        "raw_max_bytes": query.get("raw_max_bytes"),
+        "item_text_mode": query.get("item_text_mode"),
+        "item_text_max_chars": query.get("item_text_max_chars"),
+    }
+
+
+def _empty_execution_diagnostics(wait_info: dict[str, Any] | None = None) -> dict[str, Any]:
+    wait = wait_info or {}
+    return {
+        "urls": [],
+        "error_code": None,
+        "error_category": None,
+        "error_retryable": None,
+        "error_message": None,
+        "started_at": None,
+        "finished_at": None,
+        "duration_seconds": None,
+        "planned_wait_seconds": wait.get("planned_wait_seconds", 0.0),
+        "applied_wait_seconds": wait.get("applied_wait_seconds", 0.0),
+        "throttle_sensitive": False,
+        "throttle_cooldown_applied_seconds": 0.0,
+    }
+
+
+def _round_seconds(value: float | int | None) -> float:
+    if value is None:
+        return 0.0
+    return round(max(float(value), 0.0), 6)
+
+
+def _pacing_payload(config: dict[str, Any], statuses: list[dict[str, Any]]) -> dict[str, Any]:
+    summary = _pacing_summary(statuses)
+    return {
+        **config,
+        **summary,
+    }
+
+
+def _pacing_summary(statuses: list[dict[str, Any]]) -> dict[str, Any]:
+    total_wait = sum(float(status.get("applied_wait_seconds") or 0.0) for status in statuses)
+    return {
+        "waits_applied": sum(1 for status in statuses if float(status.get("applied_wait_seconds") or 0.0) > 0),
+        "total_wait_seconds": _round_seconds(total_wait),
+        "throttle_sensitive_errors": sum(1 for status in statuses if status.get("throttle_sensitive")),
+        "throttle_guard_triggered": any(status.get("reason") == "throttle_guard" for status in statuses),
+    }
+
+
+def _is_throttle_sensitive_error(error: Any, *, payload: dict[str, Any] | None = None) -> bool:
+    if not isinstance(error, dict):
+        return False
+    if error.get("category") == "rate_limited":
+        return True
+    details = error.get("details") if isinstance(error.get("details"), dict) else {}
+    raw = (payload or {}).get("raw") if isinstance(payload, dict) else None
+    haystack = " ".join(
+        [
+            str(error.get("code") or ""),
+            str(error.get("category") or ""),
+            str(error.get("message") or ""),
+            " ".join(str(value) for value in details.values() if value is not None),
+            _scan_text(raw),
+        ]
+    ).casefold()
+    return any(
+        marker in haystack
+        for marker in (
+            "rate_limited",
+            "rate limit",
+            "too many requests",
+            "http 429",
+            "http_429",
+            "429",
+            "http 409",
+            "http_409",
+            "409",
+            "conflict",
+        )
+    )
+
+
+def _scan_text(value: Any, *, limit: int = 4000) -> str:
+    if value is None:
+        return ""
+    try:
+        text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+    except (TypeError, ValueError):
+        text = str(value)
+    return text[:limit]
 
 
 def _count_values(values: list[Any]) -> dict[str, int]:
@@ -511,6 +861,7 @@ def _summary(statuses: list[dict[str, Any]]) -> dict[str, Any]:
         for url in status.get("urls") or []:
             urls.append(str(url))
     unique_urls = set(urls)
+    pacing = _pacing_summary(statuses)
     return {
         "total": len(statuses),
         "ok": sum(1 for status in statuses if status.get("status") == "ok"),
@@ -520,9 +871,28 @@ def _summary(statuses: list[dict[str, Any]]) -> dict[str, Any]:
         "unique_urls": len(unique_urls),
         "duplicate_urls": len(urls) - len(unique_urls),
         "source_roles": source_roles,
+        **pacing,
     }
 
 
 def _render_counts(counts: dict[str, int]) -> str:
     return ", ".join(f"{key}={value}" for key, value in counts.items())
+
+
+def _render_pacing(pacing: dict[str, Any]) -> str:
+    parts = [
+        f"delay={pacing.get('query_delay_seconds', 0)}s",
+        f"jitter={pacing.get('query_jitter_seconds', 0)}s",
+        f"throttle_cooldown={pacing.get('throttle_cooldown_seconds', 0)}s",
+        f"throttle_error_limit={pacing.get('throttle_error_limit', 0)}",
+    ]
+    if pacing.get("waits_applied") or pacing.get("throttle_sensitive_errors"):
+        parts.extend(
+            [
+                f"waits={pacing.get('waits_applied', 0)}",
+                f"throttle_sensitive_errors={pacing.get('throttle_sensitive_errors', 0)}",
+                f"guard={'yes' if pacing.get('throttle_guard_triggered') else 'no'}",
+            ]
+        )
+    return ", ".join(parts)
 

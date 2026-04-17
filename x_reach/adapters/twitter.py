@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections import Counter
 from typing import Any, Sequence
@@ -496,6 +497,38 @@ def _parse_error_output(raw_output: str) -> tuple[str | None, str | None, dict |
     return (str(code) if code else None), (str(message) if message else None), payload
 
 
+def _detect_http_status(raw_output: str) -> int | None:
+    match = re.search(r"(?:http[\s_-]*|status[\s_-]*|error[\s_-]*)(\d{3})", raw_output, re.IGNORECASE)
+    if not match:
+        match = re.search(r"\b(409|429)\b", raw_output)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _plain_error_code(raw_output: str) -> str | None:
+    text = raw_output.casefold()
+    status = _detect_http_status(raw_output)
+    if status == 429 or "too many requests" in text or "rate limit" in text:
+        return "rate_limited"
+    if status == 409 or "conflict" in text:
+        return "http_409"
+    if "not_authenticated" in text:
+        return "not_authenticated"
+    return None
+
+
+def _plain_error_message(operation: str, code: str | None) -> str | None:
+    if code == "rate_limited":
+        return f"Twitter {operation} was rate limited or returned too many requests"
+    if code == "http_409":
+        return f"Twitter {operation} returned a conflict response"
+    return None
+
+
 class TwitterAdapter(BaseAdapter):
     """Read Twitter/X data through twitter-cli."""
 
@@ -927,21 +960,28 @@ class TwitterAdapter(BaseAdapter):
             message = f"Twitter {operation} command did not complete cleanly"
             raw: dict | str = raw_output
             parsed_code, parsed_message, parsed_payload = _parse_error_output(raw_output)
+            plain_code = _plain_error_code(raw_output)
             if parsed_code:
                 code = parsed_code
-            elif "not_authenticated" in raw_output.lower():
-                code = "not_authenticated"
+            elif plain_code:
+                code = plain_code
             if parsed_message:
                 message = parsed_message
+            elif plain_code:
+                message = _plain_error_message(operation, plain_code) or message
             if parsed_payload is not None:
                 raw = parsed_payload
+            details: dict[str, object] = {"returncode": result.returncode}
+            http_status = _detect_http_status(raw_output)
+            if http_status is not None:
+                details["http_status"] = http_status
             return self.error_result(
                 operation,
                 code=code,
                 message=message,
                 raw=raw,
                 meta=self.make_meta(value=value, limit=limit, started_at=started_at, **(extra_meta or {})),
-                details={"returncode": result.returncode},
+                details=details,
             )
 
         try:

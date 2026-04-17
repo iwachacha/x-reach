@@ -59,6 +59,13 @@ candidates = client.plan_candidates(
     drop_noise=True,
     min_seen_in=2,
 )
+mission = client.collect_spec(
+    "mission.json",
+    output_dir=".x-reach/missions/my-run",
+    concurrency=2,
+    query_delay_seconds=1,
+    throttle_cooldown_seconds=30,
+)
 matches = client.ledger_query(
     ".x-reach/evidence.jsonl",
     filters=["channel == twitter", "operation == search"],
@@ -92,8 +99,12 @@ Use `items` for downstream automation and `raw` when you need backend-native det
 - `ledger_summarize(input_path, filters=None)`
 - `ledger_query(input_path, filters=None, limit=None, fields=None)`
 - `plan_candidates(input_path, ..., min_seen_in=None)`
+- `mission_plan(spec_path, output_dir=None, run_id=None)`
+- `collect_spec(spec_path, ..., query_delay_seconds=None, query_jitter_seconds=None, throttle_cooldown_seconds=None, throttle_error_limit=None)`
 
 Leave `min_seen_in` unset for narrow or one-off collection. It becomes useful when a broader run spans multiple query variants and you want candidates that resurfaced across repeated sightings.
+
+For concurrent broad mission runs, set explicit pacing through `collect_spec(...)` or the CLI. Pacing controls query starts and diagnostics only; it does not retry failed requests or change the caller's query scope.
 
 ## Choosing CLI vs SDK
 

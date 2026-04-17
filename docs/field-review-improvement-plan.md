@@ -1,6 +1,6 @@
 # Field Review Improvement Plan
 
-Last refreshed: 2026-04-17 JST after the opt-in `plan candidates` quality-sort implementation.
+Last refreshed: 2026-04-18 JST after the broad-run pacing and throttle-guard implementation.
 
 This document records which field-review ideas are worth adopting into X Reach now, which useful primitives should be split away from risky automation, and which ideas should remain deferred or rejected. It complements [implementation-plan.md](implementation-plan.md) and keeps the same policy baseline from [project-principles.md](project-principles.md).
 
@@ -27,14 +27,14 @@ The repo already contains several pieces that make the review suggestions safer 
 - ranked candidates and `plan candidates` now share deterministic `quality_score` and `quality_reasons`;
 - `plan candidates` preserves first-seen order by default for compatibility and now supports explicit `sort_by=quality_score` utility ordering;
 - UTF-8 handling is already present in CLI printing, adapter subprocesses, JSONL writing, and spec loading, so the encoding finding needs a concrete reproduction before a runtime rewrite;
-- 429 and retryable error categories exist in result taxonomy, but mission and batch execution do not yet provide explicit pacing controls for large X runs.
+- mission and batch execution now provide explicit pacing controls, wait diagnostics, and a bounded throttle guard for 409/429/conflict-style broad-run failures.
 
 ## Adoption Decisions
 
 | Proposal | Decision | Why | Smallest safe boundary | Not adopted | Verification |
 | --- | --- | --- | --- | --- | --- |
 | Opt-in quality ordering for `plan candidates` | `implemented` | The score already exists, the current order was a known review gap, and an opt-in sort improves handoff without changing default compatibility. | Added candidate planner `sort_by` with default `first_seen`; exposed CLI `--sort-by first_seen|quality_score`; sort by descending score only when requested, with stable first-seen tie-breaks. | No default reordering and no final selection claim. | Targeted candidate/CLI tests, full suite, ruff, and live X Reach ledger check passed. |
-| Explicit broad-run pacing / safe mode primitive | `adopt_primitives_only` | Field runs hitting 429 directly hurt broad mission reliability. The useful part is bounded, inspectable pacing; the risky part is hidden adaptive automation. | Add explicit mission or batch execution controls for between-query delay, optional jitter, and bounded rate-limit handling. Record planned and applied waits plus retryable errors in diagnostics. | No hidden default safe mode, no indefinite backoff, no automatic query reduction or expansion. | Broader mission/batch tests with injected sleeper and fake rate-limit results; no live dependency required. |
+| Explicit broad-run pacing / safe mode primitive | `implemented` | Field runs hitting 409/429 directly hurt broad mission reliability. The useful part is bounded, inspectable pacing; the risky part is hidden adaptive automation. | Added explicit mission and batch controls for between-query delay, optional jitter, throttle cooldown, and bounded throttle guard. Planned/applied waits, durations, retryable categories, and throttle-sensitive flags now appear in diagnostics. | No automatic retry, no indefinite backoff, no silent query reduction or expansion, and no stress test intended to reproduce 409s. | Batch/mission/CLI/adapter/result tests, full suite, ruff, and a small live paced mission smoke passed. |
 | Caller-declared topic-fit rules | `adopt_now` | Review correctly identifies that query-token substring matching is too thin. A generic caller-declared rule layer improves theme fit without locking the runtime to one domain. | Add deterministic rules such as `required_any_terms`, `required_all_terms`, `preferred_terms`, `excluded_terms`, `exact_phrases`, `negative_phrases`, and `synonym_groups` to mission filtering and candidate analysis. Emit compact match/drop reasons. | No built-in domain synonym packs and no model-based semantic matching in this phase. | Broader tests across English/Japanese text, synonyms, required terms, negative terms, and query-token fallback. |
 | `user_posts` quality parity | `adopt_now` | Codex and users can reach a topic through account timelines; that path should not have weaker quality controls than search. | Extend `user_posts` through adapter, SDK, CLI, channel contract, and batch validation with client-side `min_likes`, `min_retweets`, `min_views`, plus optional caller-declared topic-fit rules when the rule layer exists. | No search-only `search_type` semantics and no hidden author deep reads. | Targeted adapter, CLI, contract, and batch tests. |
 | Soft-rescue filter buckets | `adopt_primitives_only` | The current quality fallback rescues only engagement misses. More useful boundary candidates can be preserved if hard drops and soft misses are separated. | After topic-fit rules land, classify hard drops such as retweets, replies, promo, and structural noise separately from soft misses such as low engagement, low content, or weak query fit. Keep rescue bounded by requested limit and expose reasons. | No opaque final importance score and no LLM rescue. | Representative filter tests with thin quote, promo, non-English, low-engagement concrete evidence, and weak query-fit examples. |
@@ -67,16 +67,25 @@ Verification:
 
 ### Phase 2: Mission And Batch Pacing
 
-Add explicit pacing controls for broad runs before any search-tab fallback or active refinement work.
+Status: completed in this pass.
 
-The first acceptable slice is between-query pacing and diagnostics. If bounded retry behavior is added, it must be opt-in, capped by attempt count and wait budget, and visible in result diagnostics. Prefer injected sleeper tests over live X checks.
+This patch adds explicit pacing controls for broad runs before any search-tab fallback or active refinement work. `x-reach batch` and `x-reach collect --spec` now accept `--query-delay`, `--query-jitter`, `--throttle-cooldown`, and `--throttle-error-limit`; mission specs and batch plans can declare the same values under `pacing`.
+
+The implementation preserves caller-owned scope and requested concurrency. It paces query starts, applies cooldown only after throttle-sensitive errors, and skips unstarted queries only when the bounded throttle guard is reached. It does not retry failed requests.
 
 Exit criteria:
 
-- no default runtime slowdown unless the caller asks for pacing;
+- no normal runtime slowdown unless the caller asks for query delay or jitter;
 - every wait is tied to an explicit query execution and appears in diagnostics;
-- rate-limited results remain normal collection-result errors when retries are disabled or exhausted;
+- rate-limited and conflict results remain normal collection-result errors;
 - resume behavior does not replay completed queries just because pacing changed.
+
+Verification:
+
+- `uv run pytest tests/test_batch.py tests/test_mission.py tests/test_cli.py tests/test_collect_adapters.py tests/test_results.py -q --tb=short`: 70 passed.
+- `uv run pytest tests/ -q --tb=short`: 191 passed.
+- `uv run ruff check x_reach tests`: passed.
+- Live paced mission smoke used two `OpenAI` queries with `--concurrency 2 --query-delay 1 --throttle-cooldown 30`; it completed with 2/2 queries ok, `waits_applied=1`, `total_wait_seconds=1.0`, and no throttle-sensitive errors.
 
 ### Phase 3: Caller-Declared Topic Fit
 
@@ -128,4 +137,4 @@ These ideas may become useful later but should not be implemented from this plan
 
 ## Immediate Handoff
 
-Phase 1 is complete. Move next to explicit pacing, because it addresses the field-run 429 friction without adopting hidden automation. Do not implement `Top` to `Latest` fallback, topic clustering, or VLM location inference until their safe primitive boundaries have been re-reviewed.
+Phase 1 and Phase 2 are complete. Move next to caller-declared topic-fit rules, then `user_posts` parity. Do not implement `Top` to `Latest` fallback, topic clustering, or VLM location inference until their safe primitive boundaries have been re-reviewed.

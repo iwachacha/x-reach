@@ -41,6 +41,7 @@ Do not assume this fork chooses the investigation. The caller chooses scale, tim
 - Add `--sort-by quality_score` only when the caller wants utility-sorted candidate review; default first-seen order remains the compatibility baseline.
 - Use `--min-seen-in 2` only when a broader run benefits from keeping candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Broad discovery operations default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet`; use `quality_profile=recall` or explicit `--raw-mode full --item-text-mode full` only when fuller payloads are truly needed.
+- When a broad run uses `--concurrency > 1`, add explicit pacing such as `--query-delay 1 --throttle-cooldown 30`. Treat HTTP 409/429/conflict diagnostics as a reason to pause or narrow the next caller-owned run, not as a prompt to retry harder.
 - Use `x-reach schema collection-result --json` when downstream code needs a contract-testable schema.
 - Use `x-reach schema judge-result --json` only for opt-in mission judge handoffs; the current runtime writes fallback records and does not call a model.
 - Treat `engagement`, `media_references`, `identifiers`, `meta.item_shape`, and `error.category` as diagnostics only. `quality_score` may help review evidence utility, but downstream code or the caller still owns final ranking and selection.
@@ -86,7 +87,7 @@ x-reach export-integration --client codex --format json --profile runtime-minima
 1. Run `x-reach doctor --json` and inspect `operation_statuses` when readiness matters.
 2. Start with 2-4 caller-chosen discovery queries at `--limit 5` to `--limit 10`.
 3. Choose `since` and `until` from the live contract instead of assuming a fixed route.
-4. Prefer `x-reach collect --spec` when one declared mission can cover the broad run; if a saved batch plan exists, run `x-reach batch --plan PLAN.json --validate-only --json` before the write-producing batch run.
+4. Prefer `x-reach collect --spec` when one declared mission can cover the broad run; add explicit pacing for concurrent runs, for example `--concurrency 2 --query-delay 1 --throttle-cooldown 30`.
 5. Save raw `CollectionResult` envelopes with `--save .x-reach/evidence.jsonl` or `--save-dir .x-reach/shards` when the run needs an evidence trail.
 6. If the run produced shards, merge them before summary or candidate planning.
 7. Run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when CI or downstream automation needs health counts.

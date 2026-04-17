@@ -50,7 +50,7 @@ _ENGAGEMENT_ALIASES = {
 _ERROR_CATEGORY_ALIASES = {
     "timeout": {"timeout", "timed_out"},
     "auth_required": {"auth_required", "not_authenticated", "not_authorized", "unauthorized", "forbidden"},
-    "rate_limited": {"rate_limited", "rate_limit", "too_many_requests"},
+    "rate_limited": {"rate_limited", "rate_limit", "too_many_requests", "http_429"},
     "dependency_missing": {"dependency_missing", "missing_dependency"},
     "invalid_input": {
         "invalid_input",
@@ -61,7 +61,14 @@ _ERROR_CATEGORY_ALIASES = {
     },
     "parse_error": {"parse_error", "parse_failed", "invalid_response", "invalid_json"},
     "no_results": {"no_results", "not_found"},
-    "upstream_unavailable": {"upstream_unavailable", "http_error", "dns_error", "command_failed", "internal_error"},
+    "upstream_unavailable": {
+        "upstream_unavailable",
+        "http_error",
+        "http_409",
+        "dns_error",
+        "command_failed",
+        "internal_error",
+    },
 }
 
 _RETRYABLE_ERROR_CATEGORIES = {"timeout", "rate_limited", "upstream_unavailable"}
@@ -331,8 +338,10 @@ def classify_error_category(
     haystack = f"{text} {detail_text} {message_text}"
     if "timeout" in haystack or "timed out" in haystack:
         return "timeout"
-    if "rate limit" in haystack or "too many requests" in haystack:
+    if "rate limit" in haystack or "too many requests" in haystack or "http 429" in haystack or "429" in haystack:
         return "rate_limited"
+    if "http 409" in haystack or "409" in haystack or "conflict" in haystack:
+        return "upstream_unavailable"
     if "auth" in haystack or "login" in haystack or "credential" in haystack:
         return "auth_required"
     return "unknown"

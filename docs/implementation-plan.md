@@ -1,6 +1,6 @@
 # Implementation Plan
 
-Last refreshed: 2026-04-17 JST after opt-in candidate quality sorting, bundled workflow alignment, and live `x-reach` verification.
+Last refreshed: 2026-04-18 JST after broad-run pacing, throttle-guard diagnostics, bundled workflow alignment, and live `x-reach` verification.
 
 This is a maintainer handoff for improving X Reach itself. It records the current project direction, the proposal decisions from `x-reach-review.md`, the runtime evidence gathered during the latest pass, and the next implementation slices. It is a working plan, not a promise to turn X Reach into a final analysis, synthesis, scheduling, or publishing system.
 
@@ -79,11 +79,20 @@ Live checks run on 2026-04-17 JST:
   - `uv run pytest tests/ -q --tb=short`: 179 passed.
   - `uv run ruff check x_reach tests`: passed.
   - A temporary live ledger from `x-reach collect --operation search --input "OpenAI Codex" --limit 8 --quality-profile balanced --json --save <temp-ledger>` confirmed default `sort_by=first_seen`, opt-in `sort_by=quality_score`, and descending quality scores.
+- The latest implementation pass added explicit broad-run pacing for `batch` and `collect --spec`.
+  - `x-reach batch` and `x-reach collect --spec` now accept `--query-delay`, `--query-jitter`, `--throttle-cooldown`, and `--throttle-error-limit`.
+  - Mission specs and batch plans can declare the same controls under `pacing`.
+  - Batch/mission diagnostics now include query start/finish, duration, planned/applied waits, error category/retryability, throttle-sensitive flags, wait totals, and throttle-guard status.
+  - Plain Twitter/X HTTP 409 conflict and HTTP 429 rate-limit command failures are classified into stable retryable categories.
+  - `uv run pytest tests/test_batch.py tests/test_mission.py tests/test_cli.py tests/test_collect_adapters.py tests/test_results.py -q --tb=short`: 70 passed.
+  - `uv run pytest tests/ -q --tb=short`: 191 passed.
+  - `uv run ruff check x_reach tests`: passed.
+  - A temporary live paced mission against `OpenAI Codex` / `OpenAI API` completed with 2/2 queries ok, `waits_applied=1`, `total_wait_seconds=1.0`, and no throttle-sensitive errors.
 
 Assessment from the live run:
 
 - The runtime is strongly aligned with current policy: explicit channel contract, reproducible mission artifacts, deterministic filtering, compact defaults, and judge fallback instead of hidden model judgment.
-- The biggest remaining usability gaps are now score calibration, broad-run pacing, and richer caller-declared fit rules. Candidate-review ordering has an explicit opt-in quality sort while first-seen order remains the default.
+- The biggest remaining usability gaps are now score calibration, richer caller-declared fit rules, and `user_posts` parity. Candidate-review ordering has an explicit opt-in quality sort while first-seen order remains the default, and broad-run pacing now has explicit controls plus diagnostics.
 - Candidate ranking and candidate planning now use shared query match strength, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties. Engagement is still present, but capped and inspectable through `engagement_capped`.
 - `diversity.require_topic_spread` now promotes or preserves available caller-declared topic buckets before final truncation. It still cannot rescue topics that were never collected unless coverage gap fill is enabled and has explicit follow-up queries.
 
@@ -98,6 +107,7 @@ Assessment from the live run:
 | Coverage expansion beyond explicit topics | `adopt_primitives_only` | Partially implemented. Explicit topic gap fill exists; ranked-count gaps are report-only, coverage budget diagnostics report queryable gaps/exhaustion/target gaps, and disabled coverage can explicitly use `max_queries=0`. | Keep expansion bounded to declared topics and avoid open-ended expansion. Add clearer wording where users confuse disabled coverage diagnostics with gap fill. |
 | Judge runner | `defer` | Contract and fallback records are implemented. External or model runner remains deferred. | Keep fallback as source of truth until deterministic narrowing and observability are stronger. |
 | Mission observability | `adopt_now` | Partially implemented. This pass added query-yield rows, quality reason counts, topic-spread diagnostics, author/thread/url concentration, time-spread summaries, and coverage query-budget diagnostics. | Add query duration where available and clearer dropped-sample availability. |
+| Broad-run pacing | `adopt_primitives_only` | Implemented. Batch and mission runs now expose explicit query delay, jitter, throttle cooldown, and throttle error limit controls with diagnostics. HTTP 409/429/conflict-style failures can cool down or stop unstarted queries without retrying failed requests. | Calibrate recommended pacing values with representative broad runs; keep retry behavior deferred unless it is explicit, capped, and separately reviewed. |
 | Bundled research workflows | `adopt_primitives_only` | Updated existing skills instead of creating a new top-level skill. Added a mission-spec execution workflow reference and aligned candidate-gate guidance with shared scoring. | Keep workflow guidance lean; add a new standalone skill only if repeated use proves a distinct trigger and non-overlapping responsibility. |
 
 ## Work Sequence
@@ -115,6 +125,7 @@ Status: completed in this pass.
 - Implemented the first scoring v2 slice and coverage-budget diagnostics without adding hidden model judgment or open-ended query expansion.
 - Implemented shared scoring for `plan candidates`, plus live verification on a real mission artifact.
 - Updated bundled workflow guidance so agents use mission specs and shared candidate diagnostics correctly without adding a duplicate public skill.
+- Implemented broad-run pacing and throttle-guard diagnostics for batch and mission execution, plus guidance for concurrent broad runs.
 
 ### Phase 1: Contract Hygiene And Mission Diagnostics
 
@@ -238,9 +249,9 @@ Revisit criteria:
 
 ## Handoff Notes
 
-Start the next implementation pass with explicit broad-run pacing unless there is a newer maintainer decision. Keep scoring calibration and broader thin/promo/non-English candidate examples in the follow-up queue.
+Start the next implementation pass with caller-declared topic-fit rules unless there is a newer maintainer decision. Keep scoring calibration and broader thin/promo/non-English candidate examples in the follow-up queue.
 
-A focused adoption record for the external field-review notes now lives in [field-review-improvement-plan.md](field-review-improvement-plan.md). That plan marks opt-in candidate quality sorting as completed; the next safe slices are explicit broad-run pacing, then caller-declared topic-fit and `user_posts` parity. It explicitly defers automatic `Top` to `Latest` fallback, topic clustering, and VLM/location inference until they pass a fresh proposal gate.
+A focused adoption record for the external field-review notes now lives in [field-review-improvement-plan.md](field-review-improvement-plan.md). That plan marks opt-in candidate quality sorting and explicit broad-run pacing as completed; the next safe slices are caller-declared topic-fit and `user_posts` parity. It explicitly defers automatic `Top` to `Latest` fallback, topic clustering, and VLM/location inference until they pass a fresh proposal gate.
 
 Completed in this pass:
 
@@ -254,6 +265,7 @@ Completed in this pass:
 - Added `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` to `plan candidates`.
 - Preserved existing `plan candidates` ordering while exposing scores for review.
 - Added opt-in `plan candidates --sort-by quality_score`, JSON and human `sort_by` output, stable first-seen tie-breaks, and bundled guidance that treats quality sorting as utility review only.
+- Added explicit batch and mission pacing controls, wait/duration diagnostics, Twitter/X HTTP 409/429 classification, and a bounded throttle guard for unstarted queries.
 - Allowed disabled coverage specs to use `coverage.max_queries=0`, with enabled coverage still requiring at least one query.
 - Verified the current behavior with a live `OpenAI Codex` mission and a follow-up `plan candidates` run over the mission `raw.jsonl`.
 - Reviewed whether new SKILL/rule/workflow surfaces were warranted. Chose not to add a standalone skill; added `x-reach-orchestrate/references/mission-spec-flow.md` and aligned existing X Reach skills with shared quality scoring and post-level candidate gates.
@@ -261,6 +273,6 @@ Completed in this pass:
 
 Suggested next PR boundary:
 
-- Add explicit broad-run pacing controls and diagnostics for mission or batch execution.
+- Add caller-declared topic-fit rules for mission filtering and candidate analysis.
 - Add more tests for high-engagement thin quotes, promo language, unmatched query tokens, non-English text shapes, and live-run calibration examples.
-- Add query-duration and dropped-sample availability diagnostics before considering any second-stage evidence expansion.
+- Revisit dropped-sample availability and score calibration before considering any second-stage evidence expansion.

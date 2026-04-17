@@ -542,3 +542,43 @@ def test_twitter_adapter_preserves_structured_backend_errors(config, monkeypatch
     assert payload["ok"] is False
     assert payload["error"]["code"] == "not_found"
     assert payload["raw"]["error"]["code"] == "not_found"
+
+
+def test_twitter_adapter_classifies_plain_http_409_conflict(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    monkeypatch.setattr(
+        adapter,
+        "run_command",
+        lambda command, timeout=120, env=None: _cp(
+            stderr="Twitter API error (HTTP 409): conflict",
+            returncode=1,
+        ),
+    )
+
+    payload = adapter.search("OpenAI", limit=1)
+
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "http_409"
+    assert payload["error"]["category"] == "upstream_unavailable"
+    assert payload["error"]["details"]["http_status"] == 409
+
+
+def test_twitter_adapter_classifies_plain_http_429_rate_limit(config, monkeypatch):
+    adapter = TwitterAdapter(config=config)
+    monkeypatch.setattr(adapter, "command_path", lambda _name: "twitter")
+    monkeypatch.setattr(
+        adapter,
+        "run_command",
+        lambda command, timeout=120, env=None: _cp(
+            stderr="Twitter API error (HTTP 429): too many requests",
+            returncode=1,
+        ),
+    )
+
+    payload = adapter.search("OpenAI", limit=1)
+
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "rate_limited"
+    assert payload["error"]["category"] == "rate_limited"
+    assert payload["error"]["details"]["http_status"] == 429

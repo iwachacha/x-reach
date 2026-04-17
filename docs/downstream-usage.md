@@ -42,6 +42,7 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 - Keep narrow asks narrow and avoid auto-escalate behavior.
 - Large-scale collection is explicit opt-in.
 - Use `collect --spec` for broad, resumable, artifact-heavy X runs instead of ad hoc shell orchestration.
+- For broad runs with `--concurrency > 1`, set explicit pacing such as `--query-delay 1 --throttle-cooldown 30`; 409/429/conflict-style failures remain normal errors but can slow or stop unstarted queries through the throttle guard.
 - `plan candidates` keeps the default `--limit 20` unless the caller asks for more.
 - `plan candidates --json` exposes deterministic `quality_score`, `quality_reasons`, and aggregate reason counts so downstream review can audit utility signals without treating them as final judgment.
 - `plan candidates --sort-by quality_score` is opt-in evidence-utility ordering; default output stays first-seen for compatibility.
