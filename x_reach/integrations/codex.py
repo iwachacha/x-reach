@@ -266,6 +266,7 @@ def _request_scale_policy() -> dict[str, Any]:
             "Broad discovery defaults stay compact: `search`, `hashtag`, and `user_posts` default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet`.",
             "`batch` and `scout` are explicit opt-in helpers, not the default route for everyday collection.",
             "`plan candidates` keeps its default `--limit 20`; raise it only when the caller explicitly wants a wider review set.",
+            "`plan candidates --sort-by quality_score` is opt-in utility ordering; default candidate plans stay first-seen for compatibility.",
             "Large-scale research is explicit opt-in and should be requested by the caller or host workflow.",
         ],
         "single_collect": {
@@ -295,7 +296,7 @@ def _request_scale_policy() -> dict[str, Any]:
                 "Run `x-reach batch --plan PLAN.json --validate-only --json` before executing a saved batch plan.",
                 "Append raw collection envelopes with `--save .x-reach/evidence.jsonl` when traceability matters.",
                 "Run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when downstream automation needs neutral artifact health counts.",
-                "Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` for no-model dedupe.",
+                "Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` for no-model dedupe; add `--sort-by quality_score` only for utility-sorted review.",
             ],
             "recommended_limits": {
                 "discovery": 10,

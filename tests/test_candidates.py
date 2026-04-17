@@ -5,7 +5,11 @@ import json
 
 import pytest
 
-from agent_reach.candidates import CandidatePlanError, build_candidates_payload
+from agent_reach.candidates import (
+    CandidatePlanError,
+    build_candidates_payload,
+    render_candidates_text,
+)
 from agent_reach.ledger import build_ledger_record
 from agent_reach.results import build_item, build_result
 
@@ -135,7 +139,9 @@ def test_candidates_limit_keeps_first_seen_order(tmp_path):
 
     assert payload["summary"]["candidate_count"] == 3
     assert payload["summary"]["returned"] == 2
+    assert payload["sort_by"] == "first_seen"
     assert [candidate["title"] for candidate in payload["candidates"]] == ["One", "Two"]
+    assert "Sort: first_seen" in render_candidates_text(payload)
 
 
 def test_candidates_expose_quality_scores_without_reordering(tmp_path):
@@ -178,6 +184,7 @@ def test_candidates_expose_quality_scores_without_reordering(tmp_path):
 
     payload = build_candidates_payload(path, by="post", limit=20)
 
+    assert payload["sort_by"] == "first_seen"
     assert [candidate["id"] for candidate in payload["candidates"]] == ["thin", "detail"]
     by_id = {candidate["id"]: candidate for candidate in payload["candidates"]}
     assert by_id["detail"]["quality_score"] > by_id["thin"]["quality_score"]
@@ -189,6 +196,86 @@ def test_candidates_expose_quality_scores_without_reordering(tmp_path):
 
     projected = build_candidates_payload(path, by="post", limit=20, fields="id,quality_score,quality_reasons")
     assert sorted(projected["candidates"][0]) == ["id", "quality_reasons", "quality_score"]
+
+
+def test_candidates_can_sort_by_quality_score_with_stable_ties(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    thin = build_item(
+        item_id="thin",
+        kind="post",
+        title="OpenAI Codex launches:",
+        url="https://x.com/example/status/1",
+        text="OpenAI Codex launches:",
+        author="example",
+        published_at=None,
+        source="twitter",
+        extras={"timeline_item_kind": "quote"},
+        engagement={"likes": 500_000, "retweets": 20_000, "views": 2_000_000},
+    )
+    detail_a = build_item(
+        item_id="detail-a",
+        kind="post",
+        title="OpenAI Codex rollout notes",
+        url="https://x.com/example/status/2",
+        text=(
+            "OpenAI Codex eval on 2026-04-10 reduced review time by 37% for "
+            "12 maintainers after the v2.1 rollout."
+        ),
+        author="example",
+        published_at=None,
+        source="twitter",
+        extras={"timeline_item_kind": "original"},
+    )
+    detail_b = build_item(
+        item_id="detail-b",
+        kind="post",
+        title="OpenAI Codex rollout notes",
+        url="https://x.com/example/status/3",
+        text=(
+            "OpenAI Codex eval on 2026-04-10 reduced review time by 37% for "
+            "12 maintainers after the v2.1 rollout."
+        ),
+        author="example",
+        published_at=None,
+        source="twitter",
+        extras={"timeline_item_kind": "original"},
+    )
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[thin, detail_a, detail_b],
+        input_value="OpenAI Codex",
+        meta={"query_tokens": ["openai", "codex"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(path, by="post", limit=20, sort_by="quality_score")
+
+    assert payload["sort_by"] == "quality_score"
+    assert [candidate["id"] for candidate in payload["candidates"]] == [
+        "detail-a",
+        "detail-b",
+        "thin",
+    ]
+    assert payload["candidates"][0]["quality_score"] == payload["candidates"][1]["quality_score"]
+
+    projected = build_candidates_payload(
+        path,
+        by="post",
+        limit=2,
+        sort_by="quality_score",
+        fields="id,quality_score,quality_reasons",
+    )
+    assert [candidate["id"] for candidate in projected["candidates"]] == ["detail-a", "detail-b"]
+    assert sorted(projected["candidates"][0]) == ["id", "quality_reasons", "quality_score"]
+
+
+def test_candidates_reject_unknown_sort_by(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    _write_jsonl(path, [build_ledger_record(_result(), run_id="run-1")])
+
+    with pytest.raises(CandidatePlanError):
+        build_candidates_payload(path, sort_by="importance")
 
 
 def test_candidates_invalid_jsonl_reports_error(tmp_path):

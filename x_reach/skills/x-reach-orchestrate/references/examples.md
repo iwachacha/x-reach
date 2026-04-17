@@ -46,6 +46,6 @@ Good behavior:
 - otherwise use `x-reach collect --json --save-dir .x-reach/shards`
 - include `x-reach ledger merge --input .x-reach/shards --output .x-reach/evidence.jsonl --json`
 - include `x-reach ledger summarize --input .x-reach/evidence.jsonl --json`
-- include `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`
+- include `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`; add `--sort-by quality_score` only when utility-sorted review is useful
 - review `quality_score`, `quality_reasons`, and reason counts as shortlist diagnostics, not final judgment
 

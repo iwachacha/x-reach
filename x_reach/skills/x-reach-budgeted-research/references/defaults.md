@@ -17,7 +17,7 @@ If the answer does not materially change the execution budget, choose a safe def
 - `発見フェーズ`: start with 2-4 discovery queries at `--limit 5` to `--limit 10`; keep channel count small and task-driven
 - `成果物サイズ予算`: for discovery handoffs, prefer `--raw-mode none` or `--raw-mode minimal`, `--item-text-mode snippet`, and `--item-text-max-chars 240` unless the user explicitly needs larger retained payloads
 - `証拠の残し方`: prefer `x-reach collect --spec` outputs for `broad_mission`; use `--save-dir .x-reach/shards` for manual multi-command broad runs, then merge before `ledger summarize`, `ledger query`, or `plan candidates`; use `--save .x-reach/evidence.jsonl` for a simpler single-ledger path
-- `候補選別ゲート`: use `x-reach plan candidates --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` before deep reads unless the user explicitly wants a wider shortlist; inspect `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` as utility diagnostics, not final judgment
+- `候補選別ゲート`: use `x-reach plan candidates --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` before deep reads unless the user explicitly wants a wider shortlist; add `--sort-by quality_score` only for utility-sorted review, and inspect `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` as diagnostics, not final judgment
 - `深掘り予算`: default to at most 5 selected deep reads in one round
 - `最終まとめ境界`: summarize shortlisted or explicitly deep-read sources only; do not summarize every collected item
 - `停止条件`: stop after the first discovery round if the candidate set is already sufficient; otherwise allow at most one follow-up round before surfacing uncertainty or asking whether to widen the run

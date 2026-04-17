@@ -17,6 +17,8 @@ from typing import List, Optional, Sequence, Tuple
 from x_reach import __version__
 from x_reach.batch import BatchPlanError, render_batch_text, run_batch_plan, validate_batch_plan
 from x_reach.candidates import (
+    SORT_BY_FIRST_SEEN,
+    SORT_BY_QUALITY_SCORE,
     CandidatePlanError,
     build_candidates_payload,
     render_candidates_text,
@@ -542,6 +544,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--min-seen-in",
         type=int,
         help="Keep only candidates observed in at least N ledger sightings",
+    )
+    p_candidates.add_argument(
+        "--sort-by",
+        choices=[SORT_BY_FIRST_SEEN, SORT_BY_QUALITY_SCORE],
+        default=SORT_BY_FIRST_SEEN,
+        help="Candidate order. Defaults to first_seen; quality_score is opt-in evidence-utility sorting",
     )
 
     p_scout = sub.add_parser("scout", help="Build an opt-in plan-only capability snapshot")
@@ -1441,6 +1449,7 @@ def _cmd_plan_candidates(args) -> int:
             drop_title_duplicates=args.drop_title_duplicates,
             require_query_match=args.require_query_match,
             min_seen_in=args.min_seen_in,
+            sort_by=args.sort_by,
         )
     except CandidatePlanError as exc:
         if args.json:
@@ -1467,6 +1476,7 @@ def _candidate_error_payload(args, message: str) -> dict:
         "ok": False,
         "input": args.input,
         "by": args.by,
+        "sort_by": args.sort_by,
         "limit": args.limit,
         "summary_only": bool(args.summary_only),
         "fields": fields,

@@ -36,8 +36,8 @@ Use this reference only when the ask is broad, resumable, provenance-heavy, cove
 5. Inspect the dry-run query count, retention, and operation options before the write-producing run.
 6. Run `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`.
 7. Inspect `mission-result.json` summary fields: `ranked_candidates`, `filter_drop_counts`, `quality_reason_counts`, `topic_spread_status`, `coverage_target_gap`, and `coverage_query_budget_exhausted`.
-8. For a separate review shortlist, run `x-reach plan candidates --input .x-reach/missions/<run>/raw.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`.
-9. Treat `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` as deterministic utility diagnostics, not final selection or trust.
+8. For a separate review shortlist, run `x-reach plan candidates --input .x-reach/missions/<run>/raw.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`; add `--sort-by quality_score` only when utility-sorted review helps.
+9. Treat `quality_score`, `quality_reasons`, `sort_by`, and `summary.quality_reason_counts` as deterministic utility diagnostics, not final selection or trust.
 
 ## Handoff
 

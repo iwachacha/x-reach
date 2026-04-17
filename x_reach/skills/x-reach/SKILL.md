@@ -38,6 +38,7 @@ Do not assume this fork chooses the investigation. The caller chooses scale, tim
 - Use `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --json` for lightweight X post dedupe before selected follow-up reads. Use `--by normalized_url` only when URL-level dedupe is the caller's actual review unit.
 - Keep `x-reach plan candidates` at the default `--limit 20` unless the caller explicitly wants a broader candidate set.
 - Treat `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` as deterministic evidence-utility diagnostics, not final truth, trust, or publication decisions.
+- Add `--sort-by quality_score` only when the caller wants utility-sorted candidate review; default first-seen order remains the compatibility baseline.
 - Use `--min-seen-in 2` only when a broader run benefits from keeping candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Broad discovery operations default to `quality_profile=balanced`, `raw_mode=none`, and `item_text_mode=snippet`; use `quality_profile=recall` or explicit `--raw-mode full --item-text-mode full` only when fuller payloads are truly needed.
 - Use `x-reach schema collection-result --json` when downstream code needs a contract-testable schema.
@@ -89,7 +90,7 @@ x-reach export-integration --client codex --format json --profile runtime-minima
 5. Save raw `CollectionResult` envelopes with `--save .x-reach/evidence.jsonl` or `--save-dir .x-reach/shards` when the run needs an evidence trail.
 6. If the run produced shards, merge them before summary or candidate planning.
 7. Run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when CI or downstream automation needs health counts.
-8. Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` before deeper reads. Inspect `quality_reasons` and `summary.quality_reason_counts`; add `--min-seen-in 2` only when repeated cross-query resurfacing is useful.
+8. Run `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json` before deeper reads. Inspect `quality_reasons` and `summary.quality_reason_counts`; add `--sort-by quality_score` for utility-sorted review and `--min-seen-in 2` only when repeated cross-query resurfacing is useful.
 9. Return partial results with clear readiness or collection failures instead of hiding them.
 
 ## Command Routing

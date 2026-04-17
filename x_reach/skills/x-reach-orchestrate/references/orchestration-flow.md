@@ -26,7 +26,7 @@
 - prefer `--save-dir .x-reach/shards` when multiple discovery commands will run, then merge before downstream ledger work
 - run `x-reach ledger merge --input .x-reach/shards --output .x-reach/evidence.jsonl --json` before summary, query, or candidate planning
 - run `x-reach ledger summarize --input .x-reach/evidence.jsonl --json` when downstream automation needs neutral artifact health counts
-- run `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`
+- run `x-reach plan candidates --input .x-reach/evidence.jsonl --by post --limit 20 --max-per-author 2 --prefer-originals --drop-noise --json`; add `--sort-by quality_score` only when utility-sorted review helps
 - inspect `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` as utility diagnostics before any selected deep reads
 - use `x-reach batch --plan PLAN.json --validate-only --json` before any saved batch execution
 

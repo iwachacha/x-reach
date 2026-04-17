@@ -67,6 +67,7 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-resear
 x-reach collect --operation user --input "openai" --json
 x-reach posts "openai" --limit 20 --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --json
+x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --sort-by quality_score --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --min-seen-in 2 --json
 x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
 ```
@@ -85,9 +86,10 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - Inspect `x-reach channels --json` `operation_contracts` before choosing `since` or `until`.
 - `x-reach plan candidates` keeps its default `--limit 20`; raise it only when the caller explicitly wants a wider candidate review set.
 - `x-reach plan candidates --json` includes deterministic `quality_score` and `quality_reasons` for review, but it does not make the caller's final selection.
+- `x-reach plan candidates --sort-by quality_score` is explicit opt-in utility ordering; the default remains first-seen order for compatibility.
 - For broad multi-query discovery, `x-reach plan candidates --min-seen-in 2` is an optional way to keep candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Saved evidence stays quiet by default; add `--warn-missing-evidence-metadata` only when provenance completeness matters for CI or downstream workflows.
-- For large-scale research, use a two-stage flow: compact discovery first, then `plan candidates` with `--max-per-author 2 --prefer-originals --drop-noise` before any deeper reads.
+- For large-scale research, use a two-stage flow: compact discovery first, then `plan candidates` with `--max-per-author 2 --prefer-originals --drop-noise` before any deeper reads; add `--sort-by quality_score` only when utility-sorted review is useful.
 - Quality filtering exposes `quality_filter.dropped_samples` diagnostics so filter thresholds can be audited from a small sample of dropped posts.
 - `plan candidates --drop-noise` and mission `exclude.drop_low_content_posts` remove obvious low-content quote posts before ranking.
 - For declarative large-scale X collection, use `collect --spec`: it runs a mission plan, writes raw/canonical/ranked artifacts, and leaves a manifest for resumable handoff.

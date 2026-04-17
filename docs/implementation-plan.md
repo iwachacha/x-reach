@@ -1,6 +1,6 @@
 # Implementation Plan
 
-Last refreshed: 2026-04-17 JST after shared scoring extraction, candidate-planning updates, bundled workflow alignment, and live `x-reach` verification.
+Last refreshed: 2026-04-17 JST after opt-in candidate quality sorting, bundled workflow alignment, and live `x-reach` verification.
 
 This is a maintainer handoff for improving X Reach itself. It records the current project direction, the proposal decisions from `x-reach-review.md`, the runtime evidence gathered during the latest pass, and the next implementation slices. It is a working plan, not a promise to turn X Reach into a final analysis, synthesis, scheduling, or publishing system.
 
@@ -72,11 +72,18 @@ Live checks run on 2026-04-17 JST:
   - Bundled `SKILL.md` frontmatter is now validator-friendly UTF-8 without BOM; all bundled skills pass `quick_validate.py` with `PYTHONUTF8=1`.
   - A dry-run mission matching the new workflow guidance confirmed `coverage.enabled=false`, `coverage.max_queries=0`, `diversity.require_topic_spread=true`, and compact retention normalize together.
   - `uv run pytest tests/test_skill_suite.py -q --tb=short`: 8 passed.
+- The latest implementation pass added explicit opt-in quality sorting for `x-reach plan candidates`.
+  - `sort_by` now defaults to `first_seen` and is recorded in JSON and human output.
+  - `--sort-by quality_score` orders candidates by descending deterministic utility score with stable first-seen tie-breaks.
+  - `uv run pytest tests/test_candidates.py tests/test_cli.py -q --tb=short`: 44 passed.
+  - `uv run pytest tests/ -q --tb=short`: 179 passed.
+  - `uv run ruff check x_reach tests`: passed.
+  - A temporary live ledger from `x-reach collect --operation search --input "OpenAI Codex" --limit 8 --quality-profile balanced --json --save <temp-ledger>` confirmed default `sort_by=first_seen`, opt-in `sort_by=quality_score`, and descending quality scores.
 
 Assessment from the live run:
 
 - The runtime is strongly aligned with current policy: explicit channel contract, reproducible mission artifacts, deterministic filtering, compact defaults, and judge fallback instead of hidden model judgment.
-- The biggest remaining usability gap is now score calibration and candidate-review ordering. `plan candidates` exposes the same deterministic quality facets, but it intentionally preserves first-seen/filter order for compatibility; an explicit opt-in quality sort is the next clean improvement to consider.
+- The biggest remaining usability gaps are now score calibration, broad-run pacing, and richer caller-declared fit rules. Candidate-review ordering has an explicit opt-in quality sort while first-seen order remains the default.
 - Candidate ranking and candidate planning now use shared query match strength, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties. Engagement is still present, but capped and inspectable through `engagement_capped`.
 - `diversity.require_topic_spread` now promotes or preserves available caller-declared topic buckets before final truncation. It still cannot rescue topics that were never collected unless coverage gap fill is enabled and has explicit follow-up queries.
 
@@ -85,7 +92,7 @@ Assessment from the live run:
 | Area | Decision | Current Status | Next Action |
 | --- | --- | --- | --- |
 | Compatibility boundary cleanup | `adopt_primitives_only` | Implemented for the current maintenance scope. `agent_reach` Python modules are now tested as wrapper-only shims or explicit SDK alias modules, and public guidance is checked for `x_reach` as the primary Python surface. | Keep the shim until the documented deletion criteria are met; do not remove it in this plan. |
-| Deterministic evidence utility scoring | `adopt_now` | Shared primitive implemented for mission ranking and `plan candidates`. Candidate plans now expose `quality_score`, `quality_reasons`, and aggregate reason counts without making final selections. | Calibrate weights with more representative runs and consider an explicit opt-in quality sort for `plan candidates`. |
+| Deterministic evidence utility scoring | `adopt_now` | Shared primitive implemented for mission ranking and `plan candidates`. Candidate plans now expose `quality_score`, `quality_reasons`, aggregate reason counts, and opt-in `sort_by=quality_score` without making final selections. | Calibrate weights with more representative runs and add broader tests for thin/promo/non-English shapes. |
 | Bounded second-stage evidence expansion | `defer` | Deferred. `tweet` can fetch thread/reply context manually, but mission does not do hidden seed expansion. | Revisit only after scoring, topic spread, and diagnostics are stronger, and only as an explicit bounded mission option. |
 | Topic spread enforcement | `adopt_now` | Implemented in this pass for available caller-declared coverage topics, with diagnostics for applied, already satisfied, and skipped cases. | Add more edge-case tests for unmatched topics and exhausted coverage budgets as coverage diagnostics evolve. |
 | Coverage expansion beyond explicit topics | `adopt_primitives_only` | Partially implemented. Explicit topic gap fill exists; ranked-count gaps are report-only, coverage budget diagnostics report queryable gaps/exhaustion/target gaps, and disabled coverage can explicitly use `max_queries=0`. | Keep expansion bounded to declared topics and avoid open-ended expansion. Add clearer wording where users confuse disabled coverage diagnostics with gap fill. |
@@ -141,7 +148,7 @@ Exit criteria:
 
 Goal: improve candidate ordering without adding hidden final judgment.
 
-Status: shared mission and candidate-planning implementation completed in this pass.
+Status: shared mission and candidate-planning implementation completed, including opt-in candidate quality sorting.
 
 Implemented:
 
@@ -155,11 +162,11 @@ Implemented:
 - thin-content, thin-quote, and promo-language penalties.
 - extraction to `x_reach.evidence_scoring` so mission ranking and `plan candidates` use the same deterministic score/reason primitive;
 - additive `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` in `plan candidates` output.
+- explicit `sort_by=first_seen|quality_score` for `plan candidates`, with first-seen as the default and quality sorting as opt-in utility ordering.
 
 Remaining:
 
 - Calibrate score weights against more representative mission runs.
-- Consider an explicit `plan candidates` quality-sort option that callers must opt into.
 - Add broader tests for high-engagement thin/promo/quote-shell posts across more item shapes.
 
 Guardrails:
@@ -173,7 +180,7 @@ Exit criteria:
 
 - Tests cover low-engagement but substantive posts outranking high-engagement thin posts.
 - Tests cover high-engagement thin/promo/quote-shell posts receiving penalties or drops.
-- Candidate planning exposes the shared score and reasons while preserving existing order unless the caller opts into different behavior.
+- Candidate planning exposes the shared score and reasons while preserving existing order unless the caller opts into `sort_by=quality_score`.
 - Mission summaries expose reason distributions so ranking changes are easy to audit.
 
 ### Phase 3: Topic Spread And Coverage Clarity
@@ -231,9 +238,9 @@ Revisit criteria:
 
 ## Handoff Notes
 
-Start the next implementation pass with scoring calibration and candidate-review ergonomics unless there is a newer maintainer decision. The highest-leverage runtime patch after this pass is an explicit opt-in quality sort for `plan candidates`, followed by more representative tests for thin quote/promo/non-English cases.
+Start the next implementation pass with explicit broad-run pacing unless there is a newer maintainer decision. Keep scoring calibration and broader thin/promo/non-English candidate examples in the follow-up queue.
 
-A focused adoption record for the external field-review notes now lives in [field-review-improvement-plan.md](field-review-improvement-plan.md). That plan keeps the next safe slice as opt-in candidate quality sorting, then explicit broad-run pacing, then caller-declared topic-fit and `user_posts` parity. It explicitly defers automatic `Top` to `Latest` fallback, topic clustering, and VLM/location inference until they pass a fresh proposal gate.
+A focused adoption record for the external field-review notes now lives in [field-review-improvement-plan.md](field-review-improvement-plan.md). That plan marks opt-in candidate quality sorting as completed; the next safe slices are explicit broad-run pacing, then caller-declared topic-fit and `user_posts` parity. It explicitly defers automatic `Top` to `Latest` fallback, topic clustering, and VLM/location inference until they pass a fresh proposal gate.
 
 Completed in this pass:
 
@@ -246,6 +253,7 @@ Completed in this pass:
 - Extracted shared deterministic scoring to `x_reach.evidence_scoring`.
 - Added `quality_score`, `quality_reasons`, and `summary.quality_reason_counts` to `plan candidates`.
 - Preserved existing `plan candidates` ordering while exposing scores for review.
+- Added opt-in `plan candidates --sort-by quality_score`, JSON and human `sort_by` output, stable first-seen tie-breaks, and bundled guidance that treats quality sorting as utility review only.
 - Allowed disabled coverage specs to use `coverage.max_queries=0`, with enabled coverage still requiring at least one query.
 - Verified the current behavior with a live `OpenAI Codex` mission and a follow-up `plan candidates` run over the mission `raw.jsonl`.
 - Reviewed whether new SKILL/rule/workflow surfaces were warranted. Chose not to add a standalone skill; added `x-reach-orchestrate/references/mission-spec-flow.md` and aligned existing X Reach skills with shared quality scoring and post-level candidate gates.
@@ -253,6 +261,6 @@ Completed in this pass:
 
 Suggested next PR boundary:
 
-- Add an explicit `plan candidates` opt-in quality sort, keeping the current order as the default.
+- Add explicit broad-run pacing controls and diagnostics for mission or batch execution.
 - Add more tests for high-engagement thin quotes, promo language, unmatched query tokens, non-English text shapes, and live-run calibration examples.
 - Add query-duration and dropped-sample availability diagnostics before considering any second-stage evidence expansion.

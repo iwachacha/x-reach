@@ -23,6 +23,10 @@ class CandidatePlanError(Exception):
     """Raised when candidate planning input cannot be read or parsed."""
 
 
+SORT_BY_FIRST_SEEN = "first_seen"
+SORT_BY_QUALITY_SCORE = "quality_score"
+ALLOWED_SORT_BY = {SORT_BY_FIRST_SEEN, SORT_BY_QUALITY_SCORE}
+
 ALLOWED_CANDIDATE_FIELDS = {
     "id",
     "kind",
@@ -83,11 +87,15 @@ def build_candidates_payload(
     drop_title_duplicates: bool = False,
     require_query_match: bool = False,
     min_seen_in: int | None = None,
+    sort_by: str = SORT_BY_FIRST_SEEN,
 ) -> dict[str, Any]:
     """Read evidence JSONL and return a deduped candidate payload."""
 
     if by not in {"url", "normalized_url", "id", "source_item_id", "domain", "author", "post"}:
         raise CandidatePlanError(f"Unsupported dedupe mode: {by}")
+    if sort_by not in ALLOWED_SORT_BY:
+        choices = ", ".join(sorted(ALLOWED_SORT_BY))
+        raise CandidatePlanError(f"sort_by must be one of: {choices}")
     if limit < 1:
         raise CandidatePlanError("limit must be greater than or equal to 1")
     if max_per_author is not None and max_per_author < 1:
@@ -175,7 +183,8 @@ def build_candidates_payload(
         min_seen_in=min_seen_in,
     )
     scored_candidates = _score_candidates(filtered_candidates)
-    returned = scored_candidates[:limit]
+    ordered_candidates = _sort_candidates(scored_candidates, sort_by=sort_by)
+    returned = ordered_candidates[:limit]
     returned_quality_reason_counts = quality_reason_counts(returned)
     max_seen_in = max((int(candidate.get("seen_in_count") or 0) for candidate in candidates), default=0)
     output_candidates = [] if summary_only else [_filter_candidate(candidate, selected_fields) for candidate in returned]
@@ -185,6 +194,7 @@ def build_candidates_payload(
         "command": "plan candidates",
         "input": str(evidence_path),
         "by": by,
+        "sort_by": sort_by,
         "limit": limit,
         "summary_only": summary_only,
         "fields": list(selected_fields) if selected_fields is not None else None,
@@ -224,6 +234,7 @@ def render_candidates_text(payload: dict[str, Any]) -> str:
         "========================================",
         f"Input: {payload['input']}",
         f"Mode: {payload['by']}",
+        f"Sort: {payload.get('sort_by', SORT_BY_FIRST_SEEN)}",
         f"Candidates: {summary['returned']}/{summary['candidate_count']}",
     ]
     if summary.get("skipped_records"):
@@ -474,6 +485,19 @@ def _score_candidates(candidates: Sequence[dict[str, Any]]) -> list[dict[str, An
         candidate_copy["quality_reasons"] = reasons
         scored.append(candidate_copy)
     return scored
+
+
+def _sort_candidates(candidates: Sequence[dict[str, Any]], *, sort_by: str) -> list[dict[str, Any]]:
+    if sort_by == SORT_BY_FIRST_SEEN:
+        return list(candidates)
+    if sort_by == SORT_BY_QUALITY_SCORE:
+        return sorted(
+            candidates,
+            key=lambda candidate: float(candidate.get("quality_score") or 0),
+            reverse=True,
+        )
+    choices = ", ".join(sorted(ALLOWED_SORT_BY))
+    raise CandidatePlanError(f"sort_by must be one of: {choices}")
 
 
 def _normalize_fields(fields: Sequence[str] | str | None) -> tuple[str, ...] | None:

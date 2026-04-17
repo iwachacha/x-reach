@@ -3,6 +3,8 @@
 
 import json
 
+import pytest
+
 import agent_reach.cli as cli
 from agent_reach.cli import main
 
@@ -525,6 +527,8 @@ class TestCLI:
                     "--require-query-match",
                     "--min-seen-in",
                     "2",
+                    "--sort-by",
+                    "quality_score",
                     "--json",
                 ]
             )
@@ -537,6 +541,24 @@ class TestCLI:
         assert captured["kwargs"]["drop_title_duplicates"] is True
         assert captured["kwargs"]["require_query_match"] is True
         assert captured["kwargs"]["min_seen_in"] == 2
+        assert captured["kwargs"]["sort_by"] == "quality_score"
+
+    def test_plan_candidates_rejects_invalid_sort_by_choice(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(
+                [
+                    "plan",
+                    "candidates",
+                    "--input",
+                    "evidence.jsonl",
+                    "--sort-by",
+                    "importance",
+                    "--json",
+                ]
+            )
+
+        assert exc_info.value.code == 2
+        assert "invalid choice" in capsys.readouterr().err
 
     def test_schema_judge_result_json(self, capsys):
         assert main(["schema", "judge-result", "--json"]) == 0
