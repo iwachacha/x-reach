@@ -564,6 +564,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Keep only candidates that still match stored query tokens",
     )
     p_candidates.add_argument(
+        "--topic-fit",
+        help="JSON file containing caller-declared topic-fit rules for deterministic candidate filtering",
+    )
+    p_candidates.add_argument(
         "--min-seen-in",
         type=int,
         help="Keep only candidates observed in at least N ledger sightings",
@@ -1499,6 +1503,14 @@ def _cmd_plan_candidates(args) -> int:
         print("min-seen-in must be greater than or equal to 1", file=sys.stderr)
         return 2
     try:
+        topic_fit = _load_topic_fit_arg(args.topic_fit)
+    except CandidatePlanError as exc:
+        if args.json:
+            _print_json(_candidate_error_payload(args, str(exc)))
+            return 2
+        print(f"Could not plan candidates: {exc}", file=sys.stderr)
+        return 2
+    try:
         payload = build_candidates_payload(
             args.input,
             by=args.by,
@@ -1512,6 +1524,7 @@ def _cmd_plan_candidates(args) -> int:
             require_query_match=args.require_query_match,
             min_seen_in=args.min_seen_in,
             sort_by=args.sort_by,
+            topic_fit=topic_fit,
         )
     except CandidatePlanError as exc:
         if args.json:
@@ -1547,6 +1560,7 @@ def _candidate_error_payload(args, message: str) -> dict:
         "drop_noise": bool(args.drop_noise),
         "drop_title_duplicates": bool(args.drop_title_duplicates),
         "require_query_match": bool(args.require_query_match),
+        "topic_fit": args.topic_fit,
         "min_seen_in": args.min_seen_in,
         "candidates": [],
         "error": {
@@ -1554,6 +1568,26 @@ def _candidate_error_payload(args, message: str) -> dict:
             "message": message,
         },
     }
+
+
+def _load_topic_fit_arg(path: str | None) -> dict | None:
+    if path is None:
+        return None
+    topic_fit_path = Path(path)
+    try:
+        payload = json.loads(topic_fit_path.read_text(encoding="utf-8-sig"))
+    except OSError as exc:
+        raise CandidatePlanError(f"Could not read topic-fit rules: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise CandidatePlanError(f"Invalid topic-fit JSON: {exc.msg}") from exc
+    if not isinstance(payload, dict):
+        raise CandidatePlanError("topic-fit JSON must be an object")
+    nested = payload.get("topic_fit")
+    if nested is not None:
+        if not isinstance(nested, dict):
+            raise CandidatePlanError("topic_fit must be an object")
+        return nested
+    return payload
 
 
 def _batch_error_payload(args, message: str) -> dict:

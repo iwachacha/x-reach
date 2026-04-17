@@ -499,8 +499,13 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "[WARN] evidence ledger save used without evidence metadata" in captured.err
 
-    def test_plan_candidates_passes_new_filtering_args(self, capsys, monkeypatch):
+    def test_plan_candidates_passes_new_filtering_args(self, tmp_path, capsys, monkeypatch):
         captured = {}
+        topic_fit_path = tmp_path / "topic-fit.json"
+        topic_fit_path.write_text(
+            json.dumps({"topic_fit": {"required_any_terms": ["codex"]}}),
+            encoding="utf-8",
+        )
 
         def fake_build_candidates_payload(*args, **kwargs):
             captured["kwargs"] = kwargs
@@ -525,6 +530,8 @@ class TestCLI:
                     "--drop-noise",
                     "--drop-title-duplicates",
                     "--require-query-match",
+                    "--topic-fit",
+                    str(topic_fit_path),
                     "--min-seen-in",
                     "2",
                     "--sort-by",
@@ -540,6 +547,7 @@ class TestCLI:
         assert captured["kwargs"]["drop_noise"] is True
         assert captured["kwargs"]["drop_title_duplicates"] is True
         assert captured["kwargs"]["require_query_match"] is True
+        assert captured["kwargs"]["topic_fit"] == {"required_any_terms": ["codex"]}
         assert captured["kwargs"]["min_seen_in"] == 2
         assert captured["kwargs"]["sort_by"] == "quality_score"
 

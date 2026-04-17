@@ -8,6 +8,7 @@ import re
 from typing import Any, Sequence
 
 from x_reach.high_signal import has_low_content, has_promo_phrase
+from x_reach.topic_fit import topic_fit_quality_reasons, topic_fit_score_bonus
 
 _ENGAGEMENT_SCORE_CAP = 6.0
 _CONCRETE_DETAIL_RE = re.compile(
@@ -88,6 +89,11 @@ def score_candidate(candidate: dict[str, Any]) -> tuple[float, list[str]]:
     if has_promo_phrase(text):
         score -= 2.0
         reasons.append("promo_language")
+    topic_fit = candidate.get("topic_fit") if isinstance(candidate.get("topic_fit"), dict) else None
+    topic_bonus = topic_fit_score_bonus(topic_fit)
+    if topic_bonus:
+        score += topic_bonus
+        reasons.extend(topic_fit_quality_reasons(topic_fit))
     return round(score, 3), reasons
 
 

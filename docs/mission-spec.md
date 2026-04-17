@@ -32,6 +32,18 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
     "drop_low_content_posts": true,
     "max_same_author_posts": 3
   },
+  "topic_fit": {
+    "required_any_terms": ["Feature X"],
+    "required_all_terms": ["feedback"],
+    "preferred_terms": ["bug", "pricing", "workflow"],
+    "excluded_terms": ["giveaway", "airdrop"],
+    "exact_phrases": ["Feature X"],
+    "negative_phrases": ["not about Feature X"],
+    "synonym_groups": [
+      ["bug", "regression", "broken"],
+      ["workflow", "process"]
+    ]
+  },
   "diversity": {
     "max_posts_per_author": 3,
     "max_posts_per_thread": 4,
@@ -82,7 +94,7 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
 - `raw/`: sharded ledger files from each query execution.
 - `raw.jsonl`: merged collection-result ledger.
 - `canonical.jsonl`: one normalized item per line with run/query provenance.
-- `ranked.jsonl`: deduped, keyword-filtered, diversity-constrained candidates with `rank`, `quality_score`, `quality_reasons`, and matched `coverage_topics` when coverage topics are configured.
+- `ranked.jsonl`: deduped, topic/keyword-filtered, diversity-constrained candidates with `rank`, `quality_score`, `quality_reasons`, optional `topic_fit` diagnostics, and matched `coverage_topics` when coverage topics are configured.
 - `judge.jsonl`: opt-in judge records for the top ranked candidates. The current runtime does not call a model; when `judge.enabled=true`, it writes `unjudged` fallback records so downstream tooling can test the contract without changing `ranked.jsonl`.
 - `summary.md`: human-readable job counts, filter drops, and top candidates.
 - `mission-result.json`: JSON-first manifest for downstream tools, including additive `summary.quality_reason_counts`, `summary.topic_spread_status`, and `diagnostics` blocks.
@@ -96,12 +108,29 @@ Mission results include neutral diagnostics so callers can inspect the run witho
 - `diagnostics.pacing`: normalized pacing controls plus wait counts, total wait seconds, throttle-sensitive error count, and whether the throttle guard skipped unstarted queries.
 - `diagnostics.query_yield[*]`: also includes query start/finish timestamps, duration, planned/applied wait seconds, error category, retryability, and throttle-sensitive status when available.
 - `diagnostics.curation.quality_reason_counts`: aggregate counts for ranked-candidate `quality_reasons`, including deterministic scoring facets such as query match, concrete detail, capped engagement, post shape, media, and URL support.
+- `diagnostics.curation.topic_fit`: normalized caller-declared topic-fit rules, evaluated/matched/dropped counts, match/drop reason counts, and missing required counts when `topic_fit` is configured.
 - `diagnostics.curation.topic_spread`: whether `diversity.require_topic_spread` was requested, applied, already satisfied, or skipped, plus selected topic ids, promoted count, and whether final order changed.
 - `diagnostics.curation.concentration`: author, thread, and URL concentration summaries for the final ranked set.
 - `diagnostics.curation.time_spread`: earliest/latest timestamps and date bucket counts when ranked candidates have timestamps.
 - `coverage.diagnostics`: gap-fill budget state, used and remaining query counts, whether query budget was exhausted, and whether ranked-count target gaps are report-only.
 
-`summary.md` mirrors the most important diagnostics with `Quality Reasons` and `Topic Spread` sections. These sections are meant for audit and handoff, not synthesis.
+`summary.md` mirrors the most important diagnostics with `Quality Reasons`, `Topic Fit`, and `Topic Spread` sections. These sections are meant for audit and handoff, not synthesis.
+
+## Topic Fit
+
+`topic_fit` is an optional caller-declared rule block for deterministic mission filtering and candidate diagnostics. It exists to replace brittle query-token fallback when the caller can state what counts as in-scope. X Reach does not ship domain-specific defaults and does not infer final truth, importance, stance, or relevance beyond the supplied strings.
+
+Supported fields:
+
+- `required_any_terms`: at least one term, or one of its declared synonyms, must match.
+- `required_all_terms`: every term, or one of each term's declared synonyms, must match.
+- `preferred_terms`: optional positive signals for scoring and reasons.
+- `excluded_terms`: matching terms drop the candidate with a topic-fit drop reason.
+- `exact_phrases`: optional positive phrase signals.
+- `negative_phrases`: matching phrases drop the candidate with a topic-fit drop reason.
+- `synonym_groups`: caller-declared groups such as `["codex", "coding agent"]`; if a group contains a required or preferred term, any term in that group can satisfy it.
+
+Matching is deterministic, case-insensitive, Unicode-normalized substring matching. It intentionally avoids English-only word-boundary assumptions, so Japanese phrases and mixed Japanese/English text work without a tokenizer. When active `topic_fit` rules are present, mission curation uses them before the older `require_query_match` fallback; when no topic-fit rules are configured, existing query-token fallback behavior is preserved.
 
 ## Pacing And Throttle Guard
 
@@ -175,6 +204,7 @@ No LLM/VLM call is made by this release. If `judge.enabled=true`, x-reach writes
 - Explicit batch/mission pacing controls with query wait diagnostics and a bounded throttle guard for 409/429/conflict-style failures.
 - Raw/canonical/curated output layers.
 - Deterministic keyword filtering, post dedupe, heuristic ranking, and author/thread/url diversity constraints.
+- Caller-declared `topic_fit` rules for deterministic required/preferred/excluded/phrase/synonym matching, mission filtering, candidate scoring diagnostics, and `plan candidates --topic-fit`.
 - Evidence-utility scoring facets for query match strength, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties.
 - Topic spread enforcement for available caller-declared coverage topics through `diversity.require_topic_spread`.
 - Mission diagnostics for query yield, quality reason counts, topic spread, author/thread/url concentration, time spread, and coverage query budgets.

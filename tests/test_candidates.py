@@ -650,6 +650,128 @@ def test_candidates_can_drop_noise_require_query_match_and_cap_authors(tmp_path)
     }
 
 
+def test_candidates_apply_topic_fit_filtering_and_projection(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[
+            build_item(
+                item_id="keep",
+                kind="post",
+                title="OpenAI Codex CLI notes",
+                url="https://x.com/alice/status/1",
+                text="OpenAI Codex CLI notes from a practical command line workflow",
+                author="alice",
+                published_at=None,
+                source="twitter",
+                extras={"timeline_item_kind": "original"},
+            ),
+            build_item(
+                item_id="synonym",
+                kind="post",
+                title="OpenAI coding agent notes",
+                url="https://x.com/bob/status/2",
+                text="OpenAI coding agent workflow for command line review",
+                author="bob",
+                published_at=None,
+                source="twitter",
+                extras={"timeline_item_kind": "original"},
+            ),
+            build_item(
+                item_id="negative",
+                kind="post",
+                title="OpenAI Codex giveaway",
+                url="https://x.com/spam/status/3",
+                text="OpenAI Codex giveaway airdrop",
+                author="spam",
+                published_at=None,
+                source="twitter",
+                extras={"timeline_item_kind": "original"},
+            ),
+            build_item(
+                item_id="miss",
+                kind="post",
+                title="OpenAI platform news",
+                url="https://x.com/carol/status/4",
+                text="OpenAI platform news without the declared topic",
+                author="carol",
+                published_at=None,
+                source="twitter",
+                extras={"timeline_item_kind": "original"},
+            ),
+        ],
+        input_value="OpenAI",
+        meta={"query_tokens": ["openai"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(
+        path,
+        by="post",
+        limit=20,
+        topic_fit={
+            "required_any_terms": ["codex"],
+            "required_all_terms": ["openai"],
+            "preferred_terms": ["cli"],
+            "excluded_terms": ["airdrop"],
+            "exact_phrases": ["OpenAI Codex"],
+            "synonym_groups": [["codex", "coding agent"], ["cli", "command line"]],
+        },
+        fields="id,quality_score,quality_reasons,topic_fit",
+    )
+
+    assert [candidate["id"] for candidate in payload["candidates"]] == ["keep", "synonym"]
+    assert payload["topic_fit"]["enabled"] is True
+    assert payload["topic_fit"]["query_match_fallback_used"] is False
+    assert payload["summary"]["filter_drop_counts"] == {
+        "topic_fit_excluded_term": 1,
+        "topic_fit_missing_required_any": 1,
+    }
+    assert payload["summary"]["topic_fit"]["dropped"] == 2
+    assert payload["summary"]["topic_fit_reason_counts"]["topic_fit_required_any"] == 2
+    assert payload["summary"]["topic_fit_reason_counts"]["topic_fit_synonym_group"] == 2
+    assert sorted(payload["candidates"][0]) == ["id", "quality_reasons", "quality_score", "topic_fit"]
+    assert "topic_fit_exact_phrase" in payload["candidates"][0]["quality_reasons"]
+    assert payload["candidates"][1]["topic_fit"]["matched_terms"]["required_any_terms"] == ["codex"]
+
+
+def test_candidates_topic_fit_takes_priority_over_query_match_fallback(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[
+            build_item(
+                item_id="keep",
+                kind="post",
+                title="Coding agent workflow",
+                url="https://x.com/alice/status/1",
+                text="Coding agent workflow from the command line",
+                author="alice",
+                published_at=None,
+                source="twitter",
+                extras={"timeline_item_kind": "original"},
+            ),
+        ],
+        input_value="OpenAI",
+        meta={"query_tokens": ["openai"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(
+        path,
+        by="post",
+        limit=20,
+        require_query_match=True,
+        topic_fit={"required_any_terms": ["coding agent"]},
+    )
+
+    assert [candidate["id"] for candidate in payload["candidates"]] == ["keep"]
+    assert payload["summary"]["filter_drop_counts"] == {}
+    assert payload["summary"]["topic_fit"]["query_match_fallback_used"] is False
+
+
 def test_candidates_can_drop_low_content_quote_posts(tmp_path):
     path = tmp_path / "evidence.jsonl"
     records = [

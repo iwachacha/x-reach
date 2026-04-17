@@ -1,6 +1,6 @@
 # Implementation Plan
 
-Last refreshed: 2026-04-18 JST after broad-run pacing, throttle-guard diagnostics, bundled workflow alignment, and live `x-reach` verification.
+Last refreshed: 2026-04-18 JST after caller-declared topic-fit implementation and verification.
 
 This is a maintainer handoff for improving X Reach itself. It records the current project direction, the proposal decisions from `x-reach-review.md`, the runtime evidence gathered during the latest pass, and the next implementation slices. It is a working plan, not a promise to turn X Reach into a final analysis, synthesis, scheduling, or publishing system.
 
@@ -88,12 +88,19 @@ Live checks run on 2026-04-17 JST:
   - `uv run pytest tests/ -q --tb=short`: 191 passed.
   - `uv run ruff check x_reach tests`: passed.
   - A temporary live paced mission against `OpenAI Codex` / `OpenAI API` completed with 2/2 queries ok, `waits_applied=1`, `total_wait_seconds=1.0`, and no throttle-sensitive errors.
+- The latest implementation pass added caller-declared topic-fit rules.
+  - Mission specs now accept `topic_fit` with required-any, required-all, preferred, excluded, exact phrase, negative phrase, and synonym group rules.
+  - Mission curation applies active topic-fit rules before the older query-token fallback and reports topic-fit drops, match reasons, and missing required counts in `mission-result.json` and `summary.md`.
+  - `x-reach plan candidates --topic-fit PATH.json` applies the same deterministic evaluator and supports `fields=id,quality_score,quality_reasons,topic_fit`.
+  - `uv run pytest tests/test_topic_fit.py tests/test_candidates.py tests/test_mission.py tests/test_cli.py -q --tb=short`: 72 passed.
+  - `uv run pytest tests/ -q --tb=short`: 204 passed.
+  - `uv run ruff check x_reach tests`: passed.
 
 Assessment from the live run:
 
 - The runtime is strongly aligned with current policy: explicit channel contract, reproducible mission artifacts, deterministic filtering, compact defaults, and judge fallback instead of hidden model judgment.
-- The biggest remaining usability gaps are now score calibration, richer caller-declared fit rules, and `user_posts` parity. Candidate-review ordering has an explicit opt-in quality sort while first-seen order remains the default, and broad-run pacing now has explicit controls plus diagnostics.
-- Candidate ranking and candidate planning now use shared query match strength, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties. Engagement is still present, but capped and inspectable through `engagement_capped`.
+- The biggest remaining usability gaps are now score calibration and `user_posts` parity. Candidate-review ordering has an explicit opt-in quality sort while first-seen order remains the default, broad-run pacing now has explicit controls plus diagnostics, and caller-declared topic-fit rules can replace brittle query-token fallback.
+- Candidate ranking and candidate planning now use shared query match strength, caller-declared topic-fit signals, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties. Engagement is still present, but capped and inspectable through `engagement_capped`.
 - `diversity.require_topic_spread` now promotes or preserves available caller-declared topic buckets before final truncation. It still cannot rescue topics that were never collected unless coverage gap fill is enabled and has explicit follow-up queries.
 
 ## Proposal Decisions
@@ -102,6 +109,7 @@ Assessment from the live run:
 | --- | --- | --- | --- |
 | Compatibility boundary cleanup | `adopt_primitives_only` | Implemented for the current maintenance scope. `agent_reach` Python modules are now tested as wrapper-only shims or explicit SDK alias modules, and public guidance is checked for `x_reach` as the primary Python surface. | Keep the shim until the documented deletion criteria are met; do not remove it in this plan. |
 | Deterministic evidence utility scoring | `adopt_now` | Shared primitive implemented for mission ranking and `plan candidates`. Candidate plans now expose `quality_score`, `quality_reasons`, aggregate reason counts, and opt-in `sort_by=quality_score` without making final selections. | Calibrate weights with more representative runs and add broader tests for thin/promo/non-English shapes. |
+| Caller-declared topic-fit rules | `adopt_now` | Implemented. Mission specs and `plan candidates --topic-fit` now share deterministic required/preferred/excluded/phrase/synonym matching with compact match/drop diagnostics. Active topic-fit rules take priority over query-token fallback. | Extend the same primitive to `user_posts` parity; do not add domain defaults or model judgment. |
 | Bounded second-stage evidence expansion | `defer` | Deferred. `tweet` can fetch thread/reply context manually, but mission does not do hidden seed expansion. | Revisit only after scoring, topic spread, and diagnostics are stronger, and only as an explicit bounded mission option. |
 | Topic spread enforcement | `adopt_now` | Implemented in this pass for available caller-declared coverage topics, with diagnostics for applied, already satisfied, and skipped cases. | Add more edge-case tests for unmatched topics and exhausted coverage budgets as coverage diagnostics evolve. |
 | Coverage expansion beyond explicit topics | `adopt_primitives_only` | Partially implemented. Explicit topic gap fill exists; ranked-count gaps are report-only, coverage budget diagnostics report queryable gaps/exhaustion/target gaps, and disabled coverage can explicitly use `max_queries=0`. | Keep expansion bounded to declared topics and avoid open-ended expansion. Add clearer wording where users confuse disabled coverage diagnostics with gap fill. |
@@ -249,9 +257,9 @@ Revisit criteria:
 
 ## Handoff Notes
 
-Start the next implementation pass with caller-declared topic-fit rules unless there is a newer maintainer decision. Keep scoring calibration and broader thin/promo/non-English candidate examples in the follow-up queue.
+Start the next implementation pass with `user_posts` parity unless there is a newer maintainer decision. Keep scoring calibration and broader thin/promo/non-English candidate examples in the follow-up queue.
 
-A focused adoption record for the external field-review notes now lives in [field-review-improvement-plan.md](field-review-improvement-plan.md). That plan marks opt-in candidate quality sorting and explicit broad-run pacing as completed; the next safe slices are caller-declared topic-fit and `user_posts` parity. It explicitly defers automatic `Top` to `Latest` fallback, topic clustering, and VLM/location inference until they pass a fresh proposal gate.
+A focused adoption record for the external field-review notes now lives in [field-review-improvement-plan.md](field-review-improvement-plan.md). That plan marks opt-in candidate quality sorting, explicit broad-run pacing, and caller-declared topic-fit as completed; the next safe slice is `user_posts` parity. It explicitly defers automatic `Top` to `Latest` fallback, topic clustering, and VLM/location inference until they pass a fresh proposal gate.
 
 Completed in this pass:
 
@@ -267,12 +275,13 @@ Completed in this pass:
 - Added opt-in `plan candidates --sort-by quality_score`, JSON and human `sort_by` output, stable first-seen tie-breaks, and bundled guidance that treats quality sorting as utility review only.
 - Added explicit batch and mission pacing controls, wait/duration diagnostics, Twitter/X HTTP 409/429 classification, and a bounded throttle guard for unstarted queries.
 - Allowed disabled coverage specs to use `coverage.max_queries=0`, with enabled coverage still requiring at least one query.
+- Added shared deterministic `topic_fit` rules for mission filtering, `plan candidates --topic-fit`, topic-fit match/drop diagnostics, and fallback preservation for `require_query_match`.
 - Verified the current behavior with a live `OpenAI Codex` mission and a follow-up `plan candidates` run over the mission `raw.jsonl`.
 - Reviewed whether new SKILL/rule/workflow surfaces were warranted. Chose not to add a standalone skill; added `x-reach-orchestrate/references/mission-spec-flow.md` and aligned existing X Reach skills with shared quality scoring and post-level candidate gates.
 - Normalized bundled skill frontmatter so the skill-creator validator can read every packaged `SKILL.md`.
 
 Suggested next PR boundary:
 
-- Add caller-declared topic-fit rules for mission filtering and candidate analysis.
+- Extend metric filters and optional topic-fit filtering to `user_posts` parity.
 - Add more tests for high-engagement thin quotes, promo language, unmatched query tokens, non-English text shapes, and live-run calibration examples.
 - Revisit dropped-sample availability and score calibration before considering any second-stage evidence expansion.

@@ -69,6 +69,7 @@ x-reach collect --operation user --input "openai" --json
 x-reach posts "openai" --limit 20 --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --sort-by quality_score --json
+x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --topic-fit topic-fit.json --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --min-seen-in 2 --json
 x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
 ```
@@ -88,6 +89,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - `x-reach plan candidates` keeps its default `--limit 20`; raise it only when the caller explicitly wants a wider candidate review set.
 - `x-reach plan candidates --json` includes deterministic `quality_score` and `quality_reasons` for review, but it does not make the caller's final selection.
 - `x-reach plan candidates --sort-by quality_score` is explicit opt-in utility ordering; the default remains first-seen order for compatibility.
+- `x-reach plan candidates --topic-fit topic-fit.json` applies caller-declared deterministic topic-fit rules and emits compact `topic_fit` match/drop diagnostics. When topic-fit rules are active, they take priority over the older query-token match fallback.
 - For broad multi-query discovery, `x-reach plan candidates --min-seen-in 2` is an optional way to keep candidates that resurfaced across multiple sightings. Leave it unset for narrow or one-off collection.
 - Saved evidence stays quiet by default; add `--warn-missing-evidence-metadata` only when provenance completeness matters for CI or downstream workflows.
 - For large-scale research, use a two-stage flow: compact discovery first, then `plan candidates` with `--max-per-author 2 --prefer-originals --drop-noise` before any deeper reads; add `--sort-by quality_score` only when utility-sorted review is useful.
@@ -96,6 +98,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 - For declarative large-scale X collection, use `collect --spec`: it runs a mission plan, writes raw/canonical/ranked artifacts, and leaves a manifest for resumable handoff.
 - For broad runs that use `--concurrency > 1`, add explicit pacing such as `--query-delay 1 --throttle-cooldown 30`; throttle-sensitive 409/429/conflict errors are reported in diagnostics and can trip the bounded throttle guard instead of continuing to start every remaining query.
 - Mission `coverage` is opt-in and fills only explicit topic gaps; ranked-count gaps are reported but do not trigger automatic query expansion.
+- Mission `topic_fit` lets the caller declare required, preferred, exact, negative, and synonym-based topic-fit rules. X Reach uses only those rules for deterministic filtering and diagnostics; it does not infer domain-specific truth or importance.
 - Mission `judge` is an opt-in forward-compatible contract. Until a judge runner is configured, it writes auditable fallback records and leaves deterministic `ranked.jsonl` unchanged.
 
 ## Docs

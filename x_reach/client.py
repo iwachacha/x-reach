@@ -235,6 +235,8 @@ class XReachClient:
         drop_title_duplicates: bool = False,
         require_query_match: bool = False,
         min_seen_in: int | None = None,
+        sort_by: str = "first_seen",
+        topic_fit: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build lightweight follow-up candidates from an evidence ledger."""
 
@@ -250,6 +252,8 @@ class XReachClient:
             drop_title_duplicates=drop_title_duplicates,
             require_query_match=require_query_match,
             min_seen_in=min_seen_in,
+            sort_by=sort_by,
+            topic_fit=topic_fit,
         )
 
     def mission_plan(

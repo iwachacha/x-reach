@@ -31,6 +31,7 @@ x-reach ledger validate --input .x-reach/evidence.jsonl --json
 x-reach ledger summarize --input .x-reach/evidence.jsonl --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by normalized_url --limit 20 --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --sort-by quality_score --json
+x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --topic-fit topic-fit.json --json
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --min-seen-in 2 --json
 ```
 
@@ -46,6 +47,7 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 - `plan candidates` keeps the default `--limit 20` unless the caller asks for more.
 - `plan candidates --json` exposes deterministic `quality_score`, `quality_reasons`, and aggregate reason counts so downstream review can audit utility signals without treating them as final judgment.
 - `plan candidates --sort-by quality_score` is opt-in evidence-utility ordering; default output stays first-seen for compatibility.
+- `plan candidates --topic-fit topic-fit.json` applies caller-owned deterministic fit rules and returns `topic_fit` diagnostics, including compact match/drop reasons. Use it when query tokens are too weak, but keep final selection in the host workflow.
 - `--min-seen-in` is useful for broad or multilingual runs where you want candidates that resurfaced across multiple queries; keep it off for narrow probes.
 - Saved evidence does not warn by default; use `--warn-missing-evidence-metadata` when downstream provenance completeness matters.
 

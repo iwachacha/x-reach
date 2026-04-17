@@ -24,6 +24,6 @@ Choose routing hints that match the task. Do not hard-code unavailable channels;
 - Prefer `--raw-mode minimal|none` and `--item-text-mode snippet|none` for discovery artifacts.
 - Prefer `--save-dir .x-reach/shards` when the run needs multiple collection commands.
 - Merge shards before `ledger summarize`, `ledger query`, or `plan candidates`.
-- Use `plan candidates --by post --max-per-author 2 --prefer-originals --drop-noise --json` for X post review, add `--sort-by quality_score` only when utility-sorted review helps, and inspect `quality_reasons` rather than treating engagement as quality.
+- Use `plan candidates --by post --max-per-author 2 --prefer-originals --drop-noise --json` for X post review, add `--sort-by quality_score` only when utility-sorted review helps, add `--topic-fit PATH.json` only with caller-declared fit rules, and inspect `quality_reasons` / `topic_fit` rather than treating engagement as quality.
 - Keep the deep-read budget small, and summarize shortlisted sources only when the deliverable calls for synthesis.
 

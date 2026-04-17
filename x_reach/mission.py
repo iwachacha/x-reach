@@ -27,6 +27,11 @@ from x_reach.evidence_scoring import (
 from x_reach.high_signal import QUALITY_PROFILES
 from x_reach.ledger import default_run_id, iter_ledger_records, merge_ledger_inputs
 from x_reach.schemas import SCHEMA_VERSION, utc_timestamp
+from x_reach.topic_fit import (
+    normalize_topic_fit_rules,
+    topic_fit_reason_counts,
+    topic_fit_rules_enabled,
+)
 
 
 class MissionSpecError(Exception):
@@ -93,6 +98,7 @@ def build_mission_plan_payload(
         "objective": normalized["objective"],
         "quality_profile": normalized["quality_profile"],
         "target_posts": normalized["target_posts"],
+        "topic_fit": normalized["topic_fit"],
         "pacing": normalized["pacing"],
         "judge": normalized["judge"],
         "query_count": len(plan["queries"]),
@@ -290,6 +296,7 @@ def render_mission_text(payload: dict[str, Any]) -> str:
                 f"Objective: {payload.get('objective') or '(none)'}",
                 f"Quality: {payload['quality_profile']}",
                 f"Target posts: {payload['target_posts']}",
+                f"Topic fit: {'enabled' if topic_fit_rules_enabled(payload.get('topic_fit')) else 'disabled'}",
                 f"Pacing: {_render_mission_pacing(payload.get('pacing') or {})}",
                 f"Queries: {payload['query_count']}",
             ]
@@ -360,6 +367,7 @@ def _normalize_spec(
     exclude = _mapping(raw_spec.get("exclude"))
     diversity = _mapping(raw_spec.get("diversity"))
     coverage = _mapping(raw_spec.get("coverage"))
+    topic_fit = _normalize_topic_fit(raw_spec.get("topic_fit"))
     judge = _normalize_judge(raw_spec.get("judge"), target_posts=target_posts)
     pacing = _normalize_pacing(raw_spec.get("pacing"))
     retention = _mapping(raw_spec.get("retention"))
@@ -414,6 +422,7 @@ def _normalize_spec(
             "require_topic_spread": _bool_or_default(diversity.get("require_topic_spread"), False),
         },
         "coverage": _normalize_coverage(coverage, target_posts=target_posts),
+        "topic_fit": topic_fit,
         "judge": judge,
         "pacing": pacing,
         "retention": {
@@ -490,6 +499,13 @@ def _normalize_pacing(raw_pacing: Any) -> dict[str, Any]:
     try:
         return normalize_pacing_config(raw_pacing)
     except BatchPlanError as exc:
+        raise MissionSpecError(str(exc)) from exc
+
+
+def _normalize_topic_fit(raw_topic_fit: Any) -> dict[str, Any]:
+    try:
+        return normalize_topic_fit_rules(raw_topic_fit)
+    except ValueError as exc:
         raise MissionSpecError(str(exc)) from exc
 
 
@@ -746,6 +762,7 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
         drop_title_duplicates=True,
         require_query_match=bool(spec.get("require_query_match")),
         min_seen_in=spec["diversity"].get("min_seen_in"),
+        topic_fit=spec.get("topic_fit"),
     )
     filtered, keyword_drops = _drop_excluded_keywords(
         candidate_payload.get("candidates") or [],
@@ -762,10 +779,12 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
     for rank, candidate in enumerate(ranked, start=1):
         candidate["rank"] = rank
     quality_reason_counts = count_quality_reasons(ranked)
+    ranked_topic_fit_reason_counts = topic_fit_reason_counts(ranked)
     diagnostics = _build_curation_diagnostics(
         ranked,
         topic_spread=topic_spread,
         quality_reason_counts=quality_reason_counts,
+        topic_fit=candidate_payload["summary"].get("topic_fit") or {},
     )
     filter_drop_counts = dict(candidate_payload["summary"].get("filter_drop_counts") or {})
     for reason, count in keyword_drops.items():
@@ -780,6 +799,8 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
         "candidate_summary": candidate_payload["summary"],
         "filter_drop_counts": {key: filter_drop_counts[key] for key in sorted(filter_drop_counts)},
         "quality_reason_counts": quality_reason_counts,
+        "topic_fit_reason_counts": ranked_topic_fit_reason_counts,
+        "topic_fit": candidate_payload["summary"].get("topic_fit") or {},
         "topic_spread": topic_spread,
         "diagnostics": diagnostics,
         "ranked_count": len(ranked),
@@ -1499,9 +1520,11 @@ def _build_curation_diagnostics(
     *,
     topic_spread: dict[str, Any],
     quality_reason_counts: dict[str, int],
+    topic_fit: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "quality_reason_counts": quality_reason_counts,
+        "topic_fit": topic_fit,
         "topic_spread": topic_spread,
         "concentration": {
             "authors": _concentration_summary(candidates, _candidate_author_label),
@@ -1693,6 +1716,8 @@ def _build_result_payload(
             "ranked_candidates": curated_payload.get("ranked_count", 0),
             "filter_drop_counts": curated_payload.get("filter_drop_counts", {}),
             "quality_reason_counts": curated_payload.get("quality_reason_counts", {}),
+            "topic_fit_reason_counts": curated_payload.get("topic_fit_reason_counts", {}),
+            "topic_fit_dropped": (curated_payload.get("topic_fit") or {}).get("dropped", 0),
             "topic_spread_status": (curated_payload.get("topic_spread") or {}).get("status"),
             "coverage_enabled": coverage_payload.get("enabled", False),
             "coverage_gap_queries": coverage_payload.get("gap_query_count", 0),
@@ -1782,6 +1807,22 @@ def _render_summary_markdown(
         lines.extend(f"- {reason}: {count}" for reason, count in quality_reason_counts.items())
     else:
         lines.append("- none")
+    lines.extend(["", "## Topic Fit", ""])
+    topic_fit = curated_payload.get("topic_fit") or {}
+    lines.extend(
+        [
+            f"- Enabled: {'yes' if topic_fit.get('enabled') else 'no'}",
+            f"- Evaluated: {topic_fit.get('evaluated', 0)}",
+            f"- Matched: {topic_fit.get('matched', 0)}",
+            f"- Dropped: {topic_fit.get('dropped', 0)}",
+        ]
+    )
+    topic_fit_reason_counts = curated_payload.get("topic_fit_reason_counts") or {}
+    if topic_fit_reason_counts:
+        lines.append(f"- Match reasons: {_render_inline_counts(topic_fit_reason_counts)}")
+    topic_fit_drop_counts = topic_fit.get("drop_counts") or {}
+    if topic_fit_drop_counts:
+        lines.append(f"- Drop reasons: {_render_inline_counts(topic_fit_drop_counts)}")
     lines.extend(["", "## Topic Spread", ""])
     topic_spread = curated_payload.get("topic_spread") or {}
     lines.extend(
@@ -1864,6 +1905,10 @@ def _mission_pacing_should_render(pacing: dict[str, Any]) -> bool:
             "throttle_guard_triggered",
         )
     )
+
+
+def _render_inline_counts(counts: dict[str, Any]) -> str:
+    return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
 
 def _mission_paths(output_dir: Path) -> dict[str, Path]:

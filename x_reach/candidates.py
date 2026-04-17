@@ -17,6 +17,13 @@ from x_reach.high_signal import (
 from x_reach.ledger import iter_jsonl_lines
 from x_reach.results import canonicalize_url as result_canonicalize_url
 from x_reach.schemas import SCHEMA_VERSION, utc_timestamp
+from x_reach.topic_fit import (
+    evaluate_candidate_topic_fit,
+    normalize_topic_fit_rules,
+    topic_fit_reason_counts,
+    topic_fit_result_summary,
+    topic_fit_rules_enabled,
+)
 
 
 class CandidatePlanError(Exception):
@@ -47,6 +54,7 @@ ALLOWED_CANDIDATE_FIELDS = {
     "seen_in_count",
     "quality_score",
     "quality_reasons",
+    "topic_fit",
     "extras",
 }
 
@@ -88,6 +96,7 @@ def build_candidates_payload(
     require_query_match: bool = False,
     min_seen_in: int | None = None,
     sort_by: str = SORT_BY_FIRST_SEEN,
+    topic_fit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Read evidence JSONL and return a deduped candidate payload."""
 
@@ -102,6 +111,12 @@ def build_candidates_payload(
         raise CandidatePlanError("max_per_author must be greater than or equal to 1")
     if min_seen_in is not None and min_seen_in < 1:
         raise CandidatePlanError("min_seen_in must be greater than or equal to 1")
+    try:
+        normalized_topic_fit = normalize_topic_fit_rules(topic_fit)
+    except ValueError as exc:
+        raise CandidatePlanError(str(exc)) from exc
+    topic_fit_enabled = topic_fit_rules_enabled(normalized_topic_fit)
+    query_match_fallback_used = bool(require_query_match and not topic_fit_enabled)
     selected_fields = _normalize_fields(fields)
 
     evidence_path = Path(path)
@@ -174,20 +189,27 @@ def build_candidates_payload(
             by_key[key] = candidate
             candidates.append(candidate)
 
-    filtered_candidates, filter_drop_counts = _post_filter_candidates(
+    filtered_candidates, filter_drop_counts, topic_fit_results = _post_filter_candidates(
         candidates,
         max_per_author=max_per_author,
         drop_noise=drop_noise,
         drop_title_duplicates=drop_title_duplicates,
-        require_query_match=require_query_match,
+        require_query_match=query_match_fallback_used,
         min_seen_in=min_seen_in,
+        topic_fit=normalized_topic_fit,
     )
     scored_candidates = _score_candidates(filtered_candidates)
     ordered_candidates = _sort_candidates(scored_candidates, sort_by=sort_by)
     returned = ordered_candidates[:limit]
     returned_quality_reason_counts = quality_reason_counts(returned)
+    returned_topic_fit_reason_counts = topic_fit_reason_counts(returned)
     max_seen_in = max((int(candidate.get("seen_in_count") or 0) for candidate in candidates), default=0)
     output_candidates = [] if summary_only else [_filter_candidate(candidate, selected_fields) for candidate in returned]
+    topic_fit_summary = topic_fit_result_summary(
+        normalized_topic_fit,
+        topic_fit_results,
+        query_match_fallback_used=query_match_fallback_used,
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": utc_timestamp(),
@@ -204,6 +226,11 @@ def build_candidates_payload(
         "drop_title_duplicates": drop_title_duplicates,
         "require_query_match": require_query_match,
         "min_seen_in": min_seen_in,
+        "topic_fit": {
+            "enabled": topic_fit_enabled,
+            "rules": normalized_topic_fit if topic_fit_enabled else {},
+            "query_match_fallback_used": query_match_fallback_used,
+        },
         "summary": {
             "records": len(records) + skipped_records,
             "collection_results": len(records),
@@ -217,6 +244,8 @@ def build_candidates_payload(
             "filtered_candidate_count": len(filtered_candidates),
             "filter_drop_counts": filter_drop_counts,
             "quality_reason_counts": returned_quality_reason_counts,
+            "topic_fit_reason_counts": returned_topic_fit_reason_counts,
+            "topic_fit": topic_fit_summary,
             "channel_counts": _count_summary_keys(channel_keys),
             "source_role_counts": _count_summary_keys(source_role_keys),
             "intent_counts": _count_summary_keys(intent_keys),
@@ -247,6 +276,8 @@ def render_candidates_text(payload: dict[str, Any]) -> str:
         lines.append(f"Source roles: {_render_count_summary(summary['source_role_counts'])}")
     if summary.get("quality_reason_counts"):
         lines.append(f"Quality reasons: {_render_count_summary(summary['quality_reason_counts'])}")
+    if summary.get("topic_fit_reason_counts"):
+        lines.append(f"Topic fit: {_render_count_summary(summary['topic_fit_reason_counts'])}")
     for candidate in payload["candidates"]:
         title = candidate.get("title") or candidate.get("id") or "(untitled)"
         url = candidate.get("url") or ""
@@ -544,11 +575,14 @@ def _post_filter_candidates(
     drop_title_duplicates: bool,
     require_query_match: bool,
     min_seen_in: int | None,
-) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    topic_fit: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, int], list[dict[str, Any]]]:
     returned: list[dict[str, Any]] = []
     dropped: dict[str, int] = {}
     author_counts: dict[str, int] = {}
     seen_title_keys: set[str] = set()
+    topic_fit_enabled = topic_fit_rules_enabled(topic_fit)
+    topic_fit_results: list[dict[str, Any]] = []
 
     for candidate in candidates:
         if drop_noise or require_query_match:
@@ -577,6 +611,16 @@ def _post_filter_candidates(
                     dropped[reason] = dropped.get(reason, 0) + 1
                 continue
 
+        if topic_fit_enabled:
+            result = evaluate_candidate_topic_fit(candidate, topic_fit)
+            topic_fit_results.append(result)
+            candidate["topic_fit"] = result
+            if not result.get("matched"):
+                for reason in result.get("drop_reasons") or []:
+                    reason_key = str(reason)
+                    dropped[reason_key] = dropped.get(reason_key, 0) + 1
+                continue
+
         if min_seen_in is not None and int(candidate.get("seen_in_count") or 0) < min_seen_in:
             dropped["seen_in"] = dropped.get("seen_in", 0) + 1
             continue
@@ -598,7 +642,7 @@ def _post_filter_candidates(
             author_counts[author_key] = current + 1
 
         returned.append(candidate)
-    return returned, {key: dropped[key] for key in sorted(dropped)}
+    return returned, {key: dropped[key] for key in sorted(dropped)}, topic_fit_results
 
 
 def _dedupe_key(

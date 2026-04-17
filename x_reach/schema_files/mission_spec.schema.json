@@ -239,6 +239,57 @@
         }
       }
     },
+    "topic_fit": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "required_any_terms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required_all_terms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preferred_terms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "excluded_terms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exact_phrases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "negative_phrases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "synonym_groups": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "judge": {
       "type": "object",
       "additionalProperties": true,

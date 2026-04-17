@@ -1,6 +1,6 @@
 # Field Review Improvement Plan
 
-Last refreshed: 2026-04-18 JST after the broad-run pacing and throttle-guard implementation.
+Last refreshed: 2026-04-18 JST after caller-declared topic-fit implementation.
 
 This document records which field-review ideas are worth adopting into X Reach now, which useful primitives should be split away from risky automation, and which ideas should remain deferred or rejected. It complements [implementation-plan.md](implementation-plan.md) and keeps the same policy baseline from [project-principles.md](project-principles.md).
 
@@ -26,6 +26,7 @@ The repo already contains several pieces that make the review suggestions safer 
 - mission runs already produce raw, canonical, ranked, summary, result, state, and optional judge fallback artifacts;
 - ranked candidates and `plan candidates` now share deterministic `quality_score` and `quality_reasons`;
 - `plan candidates` preserves first-seen order by default for compatibility and now supports explicit `sort_by=quality_score` utility ordering;
+- mission specs and `plan candidates` now support caller-declared `topic_fit` rules with deterministic match/drop diagnostics;
 - UTF-8 handling is already present in CLI printing, adapter subprocesses, JSONL writing, and spec loading, so the encoding finding needs a concrete reproduction before a runtime rewrite;
 - mission and batch execution now provide explicit pacing controls, wait diagnostics, and a bounded throttle guard for 409/429/conflict-style broad-run failures.
 
@@ -35,7 +36,7 @@ The repo already contains several pieces that make the review suggestions safer 
 | --- | --- | --- | --- | --- | --- |
 | Opt-in quality ordering for `plan candidates` | `implemented` | The score already exists, the current order was a known review gap, and an opt-in sort improves handoff without changing default compatibility. | Added candidate planner `sort_by` with default `first_seen`; exposed CLI `--sort-by first_seen|quality_score`; sort by descending score only when requested, with stable first-seen tie-breaks. | No default reordering and no final selection claim. | Targeted candidate/CLI tests, full suite, ruff, and live X Reach ledger check passed. |
 | Explicit broad-run pacing / safe mode primitive | `implemented` | Field runs hitting 409/429 directly hurt broad mission reliability. The useful part is bounded, inspectable pacing; the risky part is hidden adaptive automation. | Added explicit mission and batch controls for between-query delay, optional jitter, throttle cooldown, and bounded throttle guard. Planned/applied waits, durations, retryable categories, and throttle-sensitive flags now appear in diagnostics. | No automatic retry, no indefinite backoff, no silent query reduction or expansion, and no stress test intended to reproduce 409s. | Batch/mission/CLI/adapter/result tests, full suite, ruff, and a small live paced mission smoke passed. |
-| Caller-declared topic-fit rules | `adopt_now` | Review correctly identifies that query-token substring matching is too thin. A generic caller-declared rule layer improves theme fit without locking the runtime to one domain. | Add deterministic rules such as `required_any_terms`, `required_all_terms`, `preferred_terms`, `excluded_terms`, `exact_phrases`, `negative_phrases`, and `synonym_groups` to mission filtering and candidate analysis. Emit compact match/drop reasons. | No built-in domain synonym packs and no model-based semantic matching in this phase. | Broader tests across English/Japanese text, synonyms, required terms, negative terms, and query-token fallback. |
+| Caller-declared topic-fit rules | `implemented` | Review correctly identifies that query-token substring matching is too thin. A generic caller-declared rule layer improves theme fit without locking the runtime to one domain. | Added deterministic `topic_fit` rules such as `required_any_terms`, `required_all_terms`, `preferred_terms`, `excluded_terms`, `exact_phrases`, `negative_phrases`, and `synonym_groups` to mission filtering and candidate analysis. Emits compact match/drop reasons and summaries. | No built-in domain synonym packs and no model-based semantic matching in this phase. | Evaluator, mission, candidate, CLI, full suite, and ruff passed. |
 | `user_posts` quality parity | `adopt_now` | Codex and users can reach a topic through account timelines; that path should not have weaker quality controls than search. | Extend `user_posts` through adapter, SDK, CLI, channel contract, and batch validation with client-side `min_likes`, `min_retweets`, `min_views`, plus optional caller-declared topic-fit rules when the rule layer exists. | No search-only `search_type` semantics and no hidden author deep reads. | Targeted adapter, CLI, contract, and batch tests. |
 | Soft-rescue filter buckets | `adopt_primitives_only` | The current quality fallback rescues only engagement misses. More useful boundary candidates can be preserved if hard drops and soft misses are separated. | After topic-fit rules land, classify hard drops such as retweets, replies, promo, and structural noise separately from soft misses such as low engagement, low content, or weak query fit. Keep rescue bounded by requested limit and expose reasons. | No opaque final importance score and no LLM rescue. | Representative filter tests with thin quote, promo, non-English, low-engagement concrete evidence, and weak query-fit examples. |
 | Encoding display robustness | `defer` | The codebase already uses UTF-8 subprocess, printing, JSONL, and spec handling. The local review still warrants a guard, but not a broad rewrite without reproduction. | Add a focused regression only when a failing CLI path is identified; otherwise keep troubleshooting guidance around terminal encoding. | No UTF-8-SIG output default and no changing JSON encoding contracts. | Targeted test only if a concrete failing path is reproduced. |
@@ -89,9 +90,19 @@ Verification:
 
 ### Phase 3: Caller-Declared Topic Fit
 
+Status: completed in this pass.
+
 Replace the next layer of brittle query-token matching with deterministic caller-declared fit rules.
 
 This should be a general primitive that works for local events, product feedback, incidents, OSS, entertainment, and other themes without shipping any built-in domain pack. The rule layer should feed both filtering and scoring reasons so callers can inspect why a post survived or was dropped.
+
+Implemented:
+
+- added shared deterministic evaluator in `x_reach/topic_fit.py`;
+- added mission spec `topic_fit` normalization, schema, manifest, ranked candidate diagnostics, `summary.md` section, and curation diagnostics;
+- added `plan candidates --topic-fit PATH.json`, candidate projection field `topic_fit`, and compact summary counts;
+- kept `require_query_match` as the fallback when no active `topic_fit` rules are supplied;
+- added English/Japanese, required, negative, exact phrase, synonym, mission, candidate, CLI, projection, and fallback tests.
 
 Exit criteria:
 
@@ -99,6 +110,12 @@ Exit criteria:
 - matched and missing rules appear in compact reasons or diagnostics;
 - query-token matching remains as a fallback, not as the only signal;
 - tests include non-English examples and synonym groups without hard-coding a public domain default.
+
+Verification:
+
+- `uv run pytest tests/test_topic_fit.py tests/test_candidates.py tests/test_mission.py tests/test_cli.py -q --tb=short`: 72 passed.
+- `uv run pytest tests/ -q --tb=short`: 204 passed.
+- `uv run ruff check x_reach tests`: passed.
 
 ### Phase 4: `user_posts` Parity
 
@@ -137,4 +154,4 @@ These ideas may become useful later but should not be implemented from this plan
 
 ## Immediate Handoff
 
-Phase 1 and Phase 2 are complete. Move next to caller-declared topic-fit rules, then `user_posts` parity. Do not implement `Top` to `Latest` fallback, topic clustering, or VLM location inference until their safe primitive boundaries have been re-reviewed.
+Phase 1, Phase 2, and Phase 3 are complete. Move next to `user_posts` parity. Do not implement `Top` to `Latest` fallback, topic clustering, or VLM location inference until their safe primitive boundaries have been re-reviewed.

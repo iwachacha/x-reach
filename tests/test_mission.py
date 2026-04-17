@@ -78,6 +78,39 @@ def test_mission_plan_normalizes_pacing_into_batch_plan(tmp_path):
     assert payload["normalized_spec"]["pacing"] == payload["pacing"]
 
 
+def test_mission_plan_normalizes_topic_fit_rules(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "topic fit diagnostics",
+            "queries": ["OpenAI Codex"],
+            "target_posts": 2,
+            "topic_fit": {
+                "required_any_terms": ["codex"],
+                "required_all_terms": ["openai"],
+                "preferred_terms": ["cli"],
+                "excluded_terms": ["airdrop"],
+                "exact_phrases": ["OpenAI Codex"],
+                "negative_phrases": ["not about codex"],
+                "synonym_groups": [["codex", "coding agent"]],
+            },
+        },
+    )
+
+    payload = build_mission_plan_payload(spec_path, output_dir=tmp_path / "out", run_id="run-test")
+
+    topic_fit = payload["normalized_spec"]["topic_fit"]
+    assert topic_fit["required_any_terms"] == ["codex"]
+    assert topic_fit["required_all_terms"] == ["openai"]
+    assert topic_fit["preferred_terms"] == ["cli"]
+    assert topic_fit["excluded_terms"] == ["airdrop"]
+    assert topic_fit["exact_phrases"] == ["OpenAI Codex"]
+    assert topic_fit["negative_phrases"] == ["not about codex"]
+    assert topic_fit["synonym_groups"] == [["codex", "coding agent"]]
+    assert payload["topic_fit"] == topic_fit
+
+
 def test_mission_coverage_can_be_disabled_with_zero_query_budget(tmp_path):
     spec_path = tmp_path / "mission.json"
     _write_spec(
@@ -318,6 +351,129 @@ def test_mission_scoring_prefers_substantive_query_matched_evidence_over_viral_t
     assert "engagement_capped" in ranked[1]["quality_reasons"]
     assert payload["summary"]["quality_reason_counts"]["query_match"] == 2
     assert payload["summary"]["quality_reason_counts"]["concrete_detail"] == 1
+
+
+def test_mission_topic_fit_filters_and_reports_diagnostics(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    output_dir = tmp_path / "mission-output"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "OpenAI Codex fit",
+            "queries": ["OpenAI"],
+            "target_posts": 2,
+            "quality_profile": "balanced",
+            "exclude": {"drop_low_content_posts": False},
+            "topic_fit": {
+                "required_any_terms": ["codex"],
+                "required_all_terms": ["openai"],
+                "preferred_terms": ["cli"],
+                "excluded_terms": ["airdrop"],
+                "exact_phrases": ["OpenAI Codex"],
+                "synonym_groups": [["codex", "coding agent"], ["cli", "command line"]],
+            },
+            "retention": {"raw_mode": "full", "item_text_mode": "full"},
+        },
+    )
+
+    class _FakeClient:
+        def collect(self, channel, operation, value, **kwargs):
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=[
+                    _post(
+                        "exact",
+                        "alice",
+                        "OpenAI Codex CLI report with concrete 2026 rollout notes",
+                        likes=10,
+                    ),
+                    _post(
+                        "synonym",
+                        "bob",
+                        "OpenAI coding agent command line workflow report from maintainers",
+                        likes=9,
+                    ),
+                    _post("miss", "carol", "OpenAI platform update without declared topic", likes=1000),
+                    _post("excluded", "spam", "OpenAI Codex airdrop giveaway", likes=1000),
+                ],
+                raw={"value": value, "kwargs": kwargs},
+                meta={"input": value, "count": 4, "query_tokens": ["openai"]},
+                error=None,
+            )
+
+    payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-topic-fit",
+        client_factory=_FakeClient,
+    )
+
+    ranked = [
+        json.loads(line)
+        for line in (output_dir / "ranked.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert [item["id"] for item in ranked] == ["exact", "synonym"]
+    assert payload["summary"]["filter_drop_counts"] == {
+        "topic_fit_excluded_term": 1,
+        "topic_fit_missing_required_any": 1,
+    }
+    assert payload["summary"]["topic_fit_dropped"] == 2
+    assert payload["summary"]["topic_fit_reason_counts"]["topic_fit_required_any"] == 2
+    assert payload["summary"]["topic_fit_reason_counts"]["topic_fit_synonym_group"] == 2
+    assert "topic_fit_exact_phrase" in ranked[0]["quality_reasons"]
+    assert "topic_fit_preferred" in ranked[1]["quality_reasons"]
+    assert payload["diagnostics"]["curation"]["topic_fit"]["enabled"] is True
+    assert payload["diagnostics"]["curation"]["topic_fit"]["drop_counts"] == {
+        "topic_fit_excluded_term": 1,
+        "topic_fit_missing_required_any": 1,
+    }
+    assert payload["diagnostics"]["curation"]["topic_fit"]["missing_required_counts"] == {
+        "required_any_terms": 1
+    }
+    assert "Topic Fit" in (output_dir / "summary.md").read_text(encoding="utf-8")
+
+
+def test_mission_require_query_match_fallback_still_applies_without_topic_fit(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    output_dir = tmp_path / "mission-output"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "OpenAI fallback",
+            "queries": ["OpenAI"],
+            "target_posts": 1,
+            "quality_profile": "balanced",
+            "exclude": {"drop_low_content_posts": False},
+            "retention": {"raw_mode": "full", "item_text_mode": "full"},
+        },
+    )
+
+    class _FakeClient:
+        def collect(self, channel, operation, value, **kwargs):
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=[_post("offtopic", "alice", "Completely unrelated detailed post", likes=100)],
+                raw={"value": value, "kwargs": kwargs},
+                meta={"input": value, "count": 1, "query_tokens": ["openai"]},
+                error=None,
+            )
+
+    payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-query-fallback",
+        client_factory=_FakeClient,
+    )
+
+    assert payload["summary"]["ranked_candidates"] == 0
+    assert payload["summary"]["filter_drop_counts"] == {"query_miss": 1}
+    assert payload["diagnostics"]["curation"]["topic_fit"]["enabled"] is False
+    assert payload["diagnostics"]["curation"]["topic_fit"]["query_match_fallback_used"] is True
 
 
 def test_mission_run_executes_coverage_gap_fill_for_missing_topic(tmp_path):

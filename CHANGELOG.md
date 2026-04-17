@@ -9,6 +9,7 @@ All notable changes to this fork are documented here.
 - added a schema-first mission `judge` contract with fallback-only `judge.jsonl` records and `x-reach schema judge-result --json`
 - added opt-in `x-reach plan candidates --sort-by quality_score` ordering while preserving first-seen candidate order by default
 - added explicit broad-run pacing controls for `batch` and `collect --spec`, including query start delays, jitter, throttle cooldowns, bounded throttle guards, and query wait diagnostics
+- added caller-declared `topic_fit` rules for mission filtering, candidate diagnostics, `plan candidates --topic-fit`, and topic-fit reason/count summaries
 - documented the `agent_reach` compatibility shim retention and deletion criteria
 - documented X Reach's topic-agnostic research-runtime policy and tightened proposal-review skills against domain-specific overfit
 
