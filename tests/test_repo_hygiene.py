@@ -34,6 +34,7 @@ def test_docs_folder_only_contains_supported_docs():
         "compatibility-shim.md",
         "codex-integration.md",
         "downstream-usage.md",
+        "field-review-improvement-plan.md",
         "implementation-plan.md",
         "install.md",
         "mission-spec.md",

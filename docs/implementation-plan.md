@@ -233,6 +233,8 @@ Revisit criteria:
 
 Start the next implementation pass with scoring calibration and candidate-review ergonomics unless there is a newer maintainer decision. The highest-leverage runtime patch after this pass is an explicit opt-in quality sort for `plan candidates`, followed by more representative tests for thin quote/promo/non-English cases.
 
+A focused adoption record for the external field-review notes now lives in [field-review-improvement-plan.md](field-review-improvement-plan.md). That plan keeps the next safe slice as opt-in candidate quality sorting, then explicit broad-run pacing, then caller-declared topic-fit and `user_posts` parity. It explicitly defers automatic `Top` to `Latest` fallback, topic clustering, and VLM/location inference until they pass a fresh proposal gate.
+
 Completed in this pass:
 
 - Implemented mission diagnostics for `quality_reason_counts`, `topic_spread`, query yield, concentration, and time spread.
