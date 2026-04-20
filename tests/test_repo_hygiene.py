@@ -45,6 +45,19 @@ def test_docs_folder_only_contains_supported_docs():
     assert names == expected_docs
 
 
+def test_cli_package_layout_matches_refactor_boundary():
+    repo_root = _repo_root()
+    cli_root = repo_root / "x_reach" / "cli"
+
+    assert not (repo_root / "x_reach" / "cli.py").exists()
+    assert (cli_root / "__init__.py").exists()
+    assert (cli_root / "__main__.py").exists()
+    assert (cli_root / "main.py").exists()
+    assert (cli_root / "parser.py").exists()
+    assert (cli_root / "commands").is_dir()
+    assert (cli_root / "renderers").is_dir()
+
+
 def test_llms_txt_points_at_current_fork_docs():
     llms = (_repo_root() / "llms.txt").read_text(encoding="utf-8")
 

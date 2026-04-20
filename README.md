@@ -53,6 +53,7 @@ x-reach version
 ## Quick flow
 
 ```powershell
+x-reach --help
 x-reach channels --json
 x-reach doctor --json
 x-reach doctor --json --probe
@@ -74,6 +75,18 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-author 2 --prefer-originals --drop-noise --min-seen-in 2 --json
 x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
 ```
+
+## CLI Layout
+
+The public CLI contract stays the same, but the implementation now lives under `x_reach/cli/`:
+
+- `x_reach/cli/main.py` keeps `main()` thin
+- `x_reach/cli/__main__.py` preserves `python -m x_reach.cli`
+- `x_reach/cli/parser.py` builds the parser and registers subcommands
+- `x_reach/cli/commands/*.py` holds command handlers
+- `x_reach/cli/renderers/*.py` holds human-readable text rendering
+
+`agent_reach.cli` remains a compatibility wrapper that resolves to the primary `x_reach.cli` package.
 
 ## Caller-control policy
 

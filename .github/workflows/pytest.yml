@@ -26,6 +26,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -c constraints.txt -e ".[dev]"
 
+      - name: Run ruff
+        run: |
+          ruff check .
+
+      - name: Run CLI mypy gate
+        run: |
+          mypy --follow-imports skip x_reach/cli agent_reach/cli.py
+
+      - name: Run CLI contract tests
+        run: |
+          pytest tests/test_cli_contracts.py tests/test_agent_reach_compat.py -q
+
       - name: Run tests
         run: |
           pytest -q

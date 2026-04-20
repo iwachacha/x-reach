@@ -19,20 +19,22 @@ def utc_timestamp() -> str:
 def collection_result_schema() -> dict:
     """Return the packaged JSON Schema for CollectionResult envelopes."""
 
-    text = files("x_reach.schema_files").joinpath("collection_result.schema.json").read_text(encoding="utf-8")
-    return json.loads(text)
+    return _read_schema("collection_result.schema.json")
 
 
 def mission_spec_schema() -> dict:
     """Return the packaged JSON Schema for mission specs."""
 
-    text = files("x_reach.schema_files").joinpath("mission_spec.schema.json").read_text(encoding="utf-8")
-    return json.loads(text)
+    return _read_schema("mission_spec.schema.json")
 
 
 def judge_result_schema() -> dict:
     """Return the packaged JSON Schema for judge result records."""
 
-    text = files("x_reach.schema_files").joinpath("judge_result.schema.json").read_text(encoding="utf-8")
+    return _read_schema("judge_result.schema.json")
+
+
+def _read_schema(name: str) -> dict:
+    text = files("x_reach.schema_files").joinpath(name).read_text(encoding="utf-8-sig")
     return json.loads(text)
 

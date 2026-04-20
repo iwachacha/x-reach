@@ -6,6 +6,7 @@
 
 - New code should import from `x_reach`.
 - Docs and examples should prefer `x-reach` for the CLI and `x_reach` for Python.
+- The primary CLI implementation lives under the `x_reach.cli` package; `agent_reach.cli` must remain a wrapper-only entrypoint.
 - `agent_reach` modules must stay thin wrappers around `x_reach` modules. Do not add new runtime logic there.
 - Compatibility aliases such as `AgentReachClient` may remain while downstream projects migrate to `XReachClient`.
 

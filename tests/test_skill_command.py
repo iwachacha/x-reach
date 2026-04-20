@@ -8,7 +8,7 @@ from x_reach.integrations.codex import LEGACY_PACKAGED_SKILL_NAMES, PACKAGED_SKI
 def test_install_skill_prefers_codex_home(monkeypatch, tmp_path):
     codex_home = tmp_path / "codex-home"
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
-    monkeypatch.setattr("x_reach.cli.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("x_reach.cli.commands.install.Path.home", lambda: tmp_path)
 
     installed = _install_skill()
 
@@ -21,7 +21,7 @@ def test_install_skill_prefers_codex_home(monkeypatch, tmp_path):
 
 def test_uninstall_skill_removes_known_locations(monkeypatch, tmp_path):
     monkeypatch.delenv("CODEX_HOME", raising=False)
-    monkeypatch.setattr("x_reach.cli.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("x_reach.cli.commands.install.Path.home", lambda: tmp_path)
 
     targets = []
     for skill_name in PACKAGED_SKILL_NAMES:
@@ -39,7 +39,7 @@ def test_uninstall_skill_removes_known_locations(monkeypatch, tmp_path):
 
 def test_uninstall_skill_also_removes_legacy_skill_names(monkeypatch, tmp_path):
     monkeypatch.delenv("CODEX_HOME", raising=False)
-    monkeypatch.setattr("x_reach.cli.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("x_reach.cli.commands.install.Path.home", lambda: tmp_path)
 
     targets = []
     for skill_name in LEGACY_PACKAGED_SKILL_NAMES:
@@ -57,7 +57,7 @@ def test_uninstall_skill_also_removes_legacy_skill_names(monkeypatch, tmp_path):
 
 def test_candidate_skill_roots_do_not_include_legacy_agent_dirs(monkeypatch, tmp_path):
     monkeypatch.delenv("CODEX_HOME", raising=False)
-    monkeypatch.setattr("x_reach.cli.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("x_reach.cli.commands.install.Path.home", lambda: tmp_path)
 
     roots = _candidate_skill_roots()
     rendered = [str(root) for root in roots]

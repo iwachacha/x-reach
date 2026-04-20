@@ -21,11 +21,14 @@ uv pip install -e ".[dev]"
 Run these before submitting changes:
 
 ```powershell
+python -m pytest tests/test_cli_contracts.py -q
 python -m pytest -q
-uvx ruff check agent_reach x_reach tests
-uvx mypy agent_reach x_reach
+uvx ruff check .
+uvx mypy --follow-imports skip x_reach/cli agent_reach/cli.py
 uvx --from build pyproject-build --wheel --sdist
 ```
+
+The staged `mypy` target is intentional. Full-package typing is still blocked by pre-existing errors outside the refactored CLI boundary, so CI currently type-checks the rebuilt `x_reach.cli` surface and the legacy `agent_reach.cli` wrapper first.
 
 If dependencies changed, refresh the lock file too:
 
@@ -65,10 +68,22 @@ When a design choice is unclear, use this order:
 
 When you change channel support, update all of the following together:
 
-1. `agent_reach/channels/` metadata and health checks
-2. `agent_reach/adapters/` collection implementation
+1. `x_reach/channels/` metadata and health checks
+2. `x_reach/adapters/` collection implementation
 3. tests for channel contract, adapter behavior, and CLI output
 4. docs and skill references
+
+## CLI Maintenance
+
+The CLI implementation is split across:
+
+1. `x_reach/cli/main.py`
+2. `x_reach/cli/__main__.py`
+3. `x_reach/cli/parser.py`
+4. `x_reach/cli/commands/*.py`
+5. `x_reach/cli/renderers/*.py`
+
+When changing CLI behavior, update parser registration, the command handler, contract tests in `tests/test_cli_contracts.py`, and any affected docs in one boundary.
 
 Every channel contract must include:
 
