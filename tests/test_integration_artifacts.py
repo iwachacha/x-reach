@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import yaml
 
-from agent_reach.integrations.codex import (
+from x_reach.integrations.codex import (
     export_codex_integration,
     render_codex_integration_powershell,
     render_codex_integration_text,
@@ -30,7 +30,7 @@ def test_codex_plugin_manifest_exists_and_is_valid():
     assert len(manifest["interface"]["defaultPrompt"]) == 4
 
 
-def test_setup_agent_reach_action_installs_from_repo_root():
+def test_setup_x_reach_action_installs_from_repo_root():
     action_path = _repo_root() / ".github" / "actions" / "setup-x-reach" / "action.yml"
     action_text = action_path.read_text(encoding="utf-8")
     action = yaml.safe_load(action_text)
@@ -43,7 +43,7 @@ def test_setup_agent_reach_action_installs_from_repo_root():
     assert 'uv tool install --force twitter-cli' in action_text
 
 
-def test_agent_reach_smoke_workflow_collects_and_uploads_raw_artifacts():
+def test_x_reach_smoke_workflow_collects_and_uploads_raw_artifacts():
     workflow_path = _repo_root() / ".github" / "workflows" / "x-reach-smoke.yml"
     workflow_text = workflow_path.read_text(encoding="utf-8")
     workflow = yaml.safe_load(workflow_text)
@@ -83,7 +83,7 @@ def test_export_points_at_existing_checkout_artifacts():
     assert payload["mcp_config"] is None
     assert all(Path(path).exists() for path in payload["recommended_docs"])
     assert any(path.endswith("project-principles.md") for path in payload["recommended_docs"])
-    assert any(path.endswith("implementation-plan.md") for path in payload["recommended_docs"])
+    assert any(path.endswith("improvement-plan.md") for path in payload["recommended_docs"])
     channel_contracts = {channel["name"]: channel for channel in payload["channels"]}
     assert list(channel_contracts) == ["twitter"]
     assert channel_contracts["twitter"]["operation_contracts"]["search"]["options"][0]["name"] == "from"
@@ -130,8 +130,8 @@ def test_export_tool_install_omits_dead_paths(tmp_path):
     fake_repo_root = tmp_path / "site-packages"
     fake_repo_root.mkdir(parents=True)
 
-    with patch("agent_reach.integrations.codex._repo_root", return_value=fake_repo_root), patch(
-        "agent_reach.integrations.codex._current_working_dir",
+    with patch("x_reach.integrations.codex._repo_root", return_value=fake_repo_root), patch(
+        "x_reach.integrations.codex._current_working_dir",
         return_value=tmp_path / "consumer-project",
     ):
         payload = export_codex_integration()

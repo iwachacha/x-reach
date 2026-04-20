@@ -16,7 +16,7 @@ Use this skill even when the user also asks for implementation in the same turn:
 1. Read [../../../docs/project-principles.md](../../../docs/project-principles.md) as the source of current project policy.
 2. Read [references/policy-tests.md](references/policy-tests.md) to apply the adoption gate.
 3. Read [references/review-output.md](references/review-output.md) to keep the decision record compact and reusable.
-4. Inspect the current repo surface before judging overlap. Check `README.md`, `docs/`, `docs/implementation-plan.md`, relevant CLI/runtime modules, schemas, tests, and existing skills when needed.
+4. Inspect the current repo surface before judging overlap. Check `README.md`, `docs/`, `docs/improvement-plan.md`, relevant CLI/runtime modules, schemas, tests, and existing skills when needed.
 5. Judge each proposal independently first. Only bundle accepted items when they clearly share one primitive or one release boundary.
 6. Split proposals that mix a valuable primitive with risky automation. Use `adopt_primitives_only` when the primitive is worth shipping but the policy layer is not.
 7. If the user asked for implementation too, briefly record the gate decision in working notes or docs, then edit only `adopt_now` or `adopt_primitives_only` slices.

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for the external collection result schema helpers."""
 
-from agent_reach.results import (
+from x_reach.results import (
     apply_item_text_mode,
     apply_raw_mode,
     build_error,

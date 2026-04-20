@@ -3,10 +3,10 @@
 
 import json
 
-from agent_reach.config import Config
-from agent_reach.ledger import build_ledger_record
-from agent_reach.results import build_item, build_result
 from x_reach import XReach, XReachClient
+from x_reach.config import Config
+from x_reach.ledger import build_ledger_record
+from x_reach.results import build_item, build_result
 
 
 class _StubAdapter:

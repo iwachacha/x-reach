@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Tests for the narrowed Twitter-only channel registry."""
 
-from agent_reach.channels import get_all_channels, get_channel
-from agent_reach.channels.twitter import TwitterChannel
+from x_reach.channels import get_all_channels, get_channel
+from x_reach.channels.twitter import TwitterChannel
 
 
 def test_registry_contains_only_twitter():

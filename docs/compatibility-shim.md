@@ -11,7 +11,7 @@
 
 ## Keep The Shim While
 
-- tests still intentionally import `agent_reach` to prove backward compatibility;
+- a focused compatibility regression test still imports `agent_reach` to prove backward compatibility while primary runtime tests import `x_reach`;
 - existing release notes, uninstall paths, or skill cleanup flows need legacy names;
 - there is no migration note in the README, SDK docs, and Codex integration docs;
 - removing the shim would break a documented public surface.
@@ -20,7 +20,7 @@
 
 The shim can be removed in a future major release only after all of these are true:
 
-- repo tests import `x_reach` directly except for a small removal-warning test, or no compatibility test remains;
+- repo tests import `x_reach` directly except for the dedicated compatibility shim regression, or no compatibility test remains;
 - docs and packaged skill guidance no longer instruct users to import `agent_reach`;
 - the changelog has announced at least one release window for removal;
 - `uv run x-reach doctor --json --probe` and the core CLI smoke tests pass without any `agent_reach` import path;

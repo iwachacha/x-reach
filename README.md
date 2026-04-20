@@ -106,7 +106,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 ## Docs
 
 - Project principles: [docs/project-principles.md](docs/project-principles.md)
-- Implementation plan: [docs/implementation-plan.md](docs/implementation-plan.md)
+- Improvement plan: [docs/improvement-plan.md](docs/improvement-plan.md)
 - Install guide: [docs/install.md](docs/install.md)
 - Downstream usage: [docs/downstream-usage.md](docs/downstream-usage.md)
 - Codex integration: [docs/codex-integration.md](docs/codex-integration.md)

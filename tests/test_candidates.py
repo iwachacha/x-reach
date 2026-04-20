@@ -5,13 +5,13 @@ import json
 
 import pytest
 
-from agent_reach.candidates import (
+from x_reach.candidates import (
     CandidatePlanError,
     build_candidates_payload,
     render_candidates_text,
 )
-from agent_reach.ledger import build_ledger_record
-from agent_reach.results import build_item, build_result
+from x_reach.ledger import build_ledger_record
+from x_reach.results import build_item, build_result
 
 
 def _result(channel="web", operation="read", items=None, input_value="query", meta=None):

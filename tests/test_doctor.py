@@ -5,8 +5,8 @@ import re
 
 import pytest
 
-import agent_reach.doctor as doctor
-from agent_reach.config import Config
+import x_reach.doctor as doctor
+from x_reach.config import Config
 
 
 class _StubChannel:

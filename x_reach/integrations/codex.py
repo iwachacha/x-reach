@@ -76,7 +76,7 @@ def _artifact_paths(repo_root: Path) -> dict[str, Path]:
         "plugin_manifest": repo_root / ".codex-plugin" / "plugin.json",
         "mcp_config": repo_root / ".mcp.json",
         "docs_project_principles": repo_root / "docs" / "project-principles.md",
-        "docs_implementation_plan": repo_root / "docs" / "implementation-plan.md",
+        "docs_improvement_plan": repo_root / "docs" / "improvement-plan.md",
         "docs_install": repo_root / "docs" / "install.md",
         "docs_codex_integration": repo_root / "docs" / "codex-integration.md",
         "docs_downstream_usage": repo_root / "docs" / "downstream-usage.md",
@@ -105,7 +105,7 @@ def _existing_path(path: Path) -> str | None:
 def _recommended_docs(repo_root: Path) -> list[str]:
     docs = [
         _artifact_paths(repo_root)["docs_project_principles"],
-        _artifact_paths(repo_root)["docs_implementation_plan"],
+        _artifact_paths(repo_root)["docs_improvement_plan"],
         _artifact_paths(repo_root)["docs_install"],
         _artifact_paths(repo_root)["docs_codex_integration"],
         _artifact_paths(repo_root)["docs_downstream_usage"],
@@ -176,7 +176,7 @@ def _documentation_summary() -> list[str]:
     return [
         f"Install the latest Twitter-only fork from `{FORK_REPO_URL}` or pin a commit/ref when reproducibility matters.",
         "Use `docs/project-principles.md` as the design boundary: X Reach executes reproducible X collection and handoff, while callers own research meaning and final deliverables.",
-        "Use `docs/implementation-plan.md` for the accepted near-term maintainer work sequence.",
+        "Use `docs/improvement-plan.md` for the accepted near-term maintainer work sequence.",
         "`x-reach skill --install` installs the bundled Codex skill suite for Twitter/X diagnostics, shaping, planning, orchestration, and maintainer workflows.",
         "Use X Reach only when the user explicitly asks for X Reach or one of its bundled skills; otherwise prefer the model's native browsing/search for lightweight lookups.",
         "Use `x-reach collect --json` as the primary external interface in arbitrary projects.",

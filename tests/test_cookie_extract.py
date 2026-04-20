@@ -3,7 +3,7 @@
 
 from http.cookiejar import Cookie
 
-from agent_reach.cookie_extract import _extract_twitter_tokens
+from x_reach.cookie_extract import _extract_twitter_tokens
 
 
 def _cookie(name: str, value: str, domain: str) -> Cookie:

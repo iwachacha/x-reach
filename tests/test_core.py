@@ -3,7 +3,7 @@
 
 import pytest
 
-from agent_reach.config import Config
+from x_reach.config import Config
 from x_reach.core import XReach
 
 

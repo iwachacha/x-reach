@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_reach.adapters.base import BaseAdapter
-from agent_reach.adapters.twitter import TwitterAdapter
-from agent_reach.config import Config
+from x_reach.adapters.base import BaseAdapter
+from x_reach.adapters.twitter import TwitterAdapter
+from x_reach.config import Config
 
 
 @pytest.fixture

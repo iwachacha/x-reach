@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-import agent_reach.cli as cli
-from agent_reach.cli import main
+import x_reach.cli as cli
+from x_reach.cli import main
 
 
 class TestCLI:
@@ -30,7 +30,7 @@ class TestCLI:
         assert ct0 == "ct0abc"
 
     def test_safe_install_lists_twitter_commands(self, capsys, monkeypatch):
-        monkeypatch.setattr("agent_reach.cli.find_command", lambda _name: None)
+        monkeypatch.setattr("x_reach.cli.find_command", lambda _name: None)
         assert main(["install", "--safe", "--channels=twitter"]) == 0
         output = capsys.readouterr().out
         assert "uv tool install twitter-cli" in output
@@ -38,7 +38,7 @@ class TestCLI:
         assert "GitHub.cli" not in output
 
     def test_install_dry_run_json(self, capsys, monkeypatch):
-        monkeypatch.setattr("agent_reach.cli.find_command", lambda _name: None)
+        monkeypatch.setattr("x_reach.cli.find_command", lambda _name: None)
         assert main(["install", "--dry-run", "--json", "--channels=twitter"]) == 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["command"] == "install"
@@ -59,7 +59,7 @@ class TestCLI:
             lambda: calls.append("twitter") or True,
         )
         monkeypatch.setattr(
-            "agent_reach.doctor.check_all",
+            "x_reach.doctor.check_all",
             lambda _config: {
                 "twitter": {
                     "status": "ok",
@@ -70,14 +70,14 @@ class TestCLI:
                 }
             },
         )
-        monkeypatch.setattr("agent_reach.doctor.format_report", lambda _results: "report")
+        monkeypatch.setattr("x_reach.doctor.format_report", lambda _results: "report")
 
         assert main(["install", "--channels=all"]) == 0
         assert calls == ["twitter"]
 
     def test_doctor_json(self, capsys, monkeypatch):
         monkeypatch.setattr(
-            "agent_reach.doctor.check_all",
+            "x_reach.doctor.check_all",
             lambda _config, probe=False: {
                 "twitter": {
                     "name": "twitter",
@@ -105,7 +105,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert (
             main(
@@ -143,7 +143,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert (
             main(
@@ -188,7 +188,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert (
             main(
@@ -232,7 +232,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert (
             main(
@@ -282,7 +282,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert main(["search", "OpenAI", "--min-views", "1000", "--json"]) == 0
 
@@ -307,7 +307,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert main(["search", "OpenAI", "--quality-profile", "precision", "--json"]) == 0
 
@@ -331,7 +331,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert main(["hashtag", "OpenAI", "--json"]) == 0
 
@@ -358,7 +358,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert main(["posts", "OpenAI", "--limit", "5", "--originals-only", "--json"]) == 0
 
@@ -389,7 +389,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert (
             main(
@@ -444,7 +444,7 @@ class TestCLI:
                     },
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert (
             main(
@@ -481,7 +481,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert (
             main(
@@ -515,7 +515,7 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
 
         assert (
             main(
@@ -550,8 +550,8 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
-        monkeypatch.setattr("agent_reach.cli.save_collection_result", lambda *args, **kwargs: None)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.save_collection_result", lambda *args, **kwargs: None)
 
         assert (
             main(
@@ -587,8 +587,8 @@ class TestCLI:
                     "error": None,
                 }
 
-        monkeypatch.setattr("agent_reach.cli.AgentReachClient", _FakeClient)
-        monkeypatch.setattr("agent_reach.cli.save_collection_result", lambda *args, **kwargs: None)
+        monkeypatch.setattr("x_reach.cli.AgentReachClient", _FakeClient)
+        monkeypatch.setattr("x_reach.cli.save_collection_result", lambda *args, **kwargs: None)
 
         assert (
             main(
@@ -628,7 +628,7 @@ class TestCLI:
                 "candidates": [],
             }
 
-        monkeypatch.setattr("agent_reach.cli.build_candidates_payload", fake_build_candidates_payload)
+        monkeypatch.setattr("x_reach.cli.build_candidates_payload", fake_build_candidates_payload)
 
         assert (
             main(
@@ -691,7 +691,7 @@ class TestCLI:
             captured["kwargs"] = kwargs
             return {"ok": True, "command": "batch", "summary": {}}, 0
 
-        monkeypatch.setattr("agent_reach.cli.run_batch_plan", fake_run_batch_plan)
+        monkeypatch.setattr("x_reach.cli.run_batch_plan", fake_run_batch_plan)
 
         assert (
             main(
@@ -731,7 +731,7 @@ class TestCLI:
             captured["kwargs"] = kwargs
             return {"ok": True, "command": "collect spec"}
 
-        monkeypatch.setattr("agent_reach.cli.run_mission_spec", fake_run_mission_spec)
+        monkeypatch.setattr("x_reach.cli.run_mission_spec", fake_run_mission_spec)
 
         assert (
             main(
@@ -770,4 +770,5 @@ class TestCLI:
         assert main(["uninstall", "--dry-run"]) == 0
         output = capsys.readouterr().out
         assert "uv tool uninstall twitter-cli" in output
+
 

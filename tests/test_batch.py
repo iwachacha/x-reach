@@ -8,8 +8,8 @@ import threading
 
 import pytest
 
-from agent_reach.batch import BatchPlanError, run_batch_plan, validate_batch_plan
-from agent_reach.results import build_error, build_result
+from x_reach.batch import BatchPlanError, run_batch_plan, validate_batch_plan
+from x_reach.results import build_error, build_result
 
 
 def _write_plan(path, inputs):

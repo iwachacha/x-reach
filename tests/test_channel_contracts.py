@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Contract tests for the Twitter-only channel surface."""
 
-from agent_reach.channels import get_all_channels
-from agent_reach.config import Config
+from x_reach.channels import get_all_channels
+from x_reach.config import Config
 
 
 def test_channel_registry_contract():

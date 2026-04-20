@@ -5,7 +5,7 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 ## Quick start
 
 - Project principles: https://github.com/iwachacha/x-reach/blob/main/docs/project-principles.md
-- Implementation plan: https://github.com/iwachacha/x-reach/blob/main/docs/implementation-plan.md
+- Improvement plan: https://github.com/iwachacha/x-reach/blob/main/docs/improvement-plan.md
 - Install guide: https://github.com/iwachacha/x-reach/blob/main/docs/install.md
 - Downstream usage: https://github.com/iwachacha/x-reach/blob/main/docs/downstream-usage.md
 - Codex integration: https://github.com/iwachacha/x-reach/blob/main/docs/codex-integration.md

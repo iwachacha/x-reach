@@ -1,9 +1,9 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Tests for the Twitter/X channel."""
 
 from unittest.mock import Mock, patch
 
-from agent_reach.channels.twitter import TwitterChannel
+from x_reach.channels.twitter import TwitterChannel
 
 
 def _cp(stdout="", stderr="", returncode=0):
@@ -15,7 +15,7 @@ def _cp(stdout="", stderr="", returncode=0):
 
 
 def test_check_reports_warn_when_not_installed():
-    with patch("agent_reach.channels.twitter.find_command", return_value=None), patch(
+    with patch("x_reach.channels.twitter.find_command", return_value=None), patch(
         "shutil.which", return_value=None
     ):
         status, message, extra = TwitterChannel().check_detailed()
@@ -28,7 +28,7 @@ def test_check_reports_warn_when_not_installed():
 
 
 def test_check_preserves_two_tuple_contract():
-    with patch("agent_reach.channels.twitter.find_command", return_value=None), patch(
+    with patch("x_reach.channels.twitter.find_command", return_value=None), patch(
         "shutil.which", return_value=None
     ):
         status, message = TwitterChannel().check()
@@ -39,7 +39,7 @@ def test_check_preserves_two_tuple_contract():
 def test_check_reports_warn_when_live_operations_are_unverified():
     channel = TwitterChannel()
     with patch(
-        "agent_reach.channels.twitter.find_command",
+        "x_reach.channels.twitter.find_command",
         return_value="/usr/local/bin/twitter",
     ), patch(
         "subprocess.run",
@@ -60,7 +60,7 @@ def test_check_reports_warn_when_live_operations_are_unverified():
 def test_check_reports_warn_when_not_authenticated():
     channel = TwitterChannel()
     with patch(
-        "agent_reach.channels.twitter.find_command",
+        "x_reach.channels.twitter.find_command",
         return_value="/usr/local/bin/twitter",
     ), patch(
         "subprocess.run",
@@ -73,7 +73,7 @@ def test_check_reports_warn_when_not_authenticated():
 
 
 def test_check_passes_config_credentials_into_status(tmp_path):
-    from agent_reach.config import Config
+    from x_reach.config import Config
 
     config = Config(config_path=tmp_path / "config.yaml")
     config.set("twitter_auth_token", "auth-token")
@@ -85,7 +85,7 @@ def test_check_passes_config_credentials_into_status(tmp_path):
         "os.environ",
         {},
     ), patch(
-        "agent_reach.channels.twitter.find_command",
+        "x_reach.channels.twitter.find_command",
         return_value="/usr/local/bin/twitter",
     ), patch(
         "subprocess.run",
@@ -103,13 +103,13 @@ def test_check_passes_config_credentials_into_status(tmp_path):
 def test_probe_uses_live_user_lookup():
     channel = TwitterChannel()
     with patch(
-        "agent_reach.channels.twitter.find_command",
+        "x_reach.channels.twitter.find_command",
         return_value="/usr/local/bin/twitter",
     ), patch(
         "shutil.which",
         return_value="/usr/local/bin/twitter",
     ), patch(
-        "agent_reach.channels.twitter.TwitterAdapter.user",
+        "x_reach.channels.twitter.TwitterAdapter.user",
         return_value={
             "ok": True,
             "channel": "twitter",
@@ -120,7 +120,7 @@ def test_probe_uses_live_user_lookup():
             "error": None,
         },
     ) as mocked_user, patch(
-        "agent_reach.channels.twitter.TwitterAdapter.search",
+        "x_reach.channels.twitter.TwitterAdapter.search",
         return_value={
             "ok": True,
             "channel": "twitter",
@@ -131,7 +131,7 @@ def test_probe_uses_live_user_lookup():
             "error": None,
         },
     ) as mocked_search, patch(
-        "agent_reach.channels.twitter.TwitterAdapter.user_posts",
+        "x_reach.channels.twitter.TwitterAdapter.user_posts",
         return_value={
             "ok": True,
             "channel": "twitter",
@@ -142,7 +142,7 @@ def test_probe_uses_live_user_lookup():
             "error": None,
         },
     ) as mocked_user_posts, patch(
-        "agent_reach.channels.twitter.TwitterAdapter.tweet",
+        "x_reach.channels.twitter.TwitterAdapter.tweet",
         return_value={
             "ok": True,
             "channel": "twitter",
@@ -174,13 +174,13 @@ def test_probe_uses_live_user_lookup():
 def test_probe_reports_search_failure_separately_from_live_user_lookup():
     channel = TwitterChannel()
     with patch(
-        "agent_reach.channels.twitter.find_command",
+        "x_reach.channels.twitter.find_command",
         return_value="/usr/local/bin/twitter",
     ), patch(
         "shutil.which",
         return_value="/usr/local/bin/twitter",
     ), patch(
-        "agent_reach.channels.twitter.TwitterAdapter.user",
+        "x_reach.channels.twitter.TwitterAdapter.user",
         return_value={
             "ok": True,
             "channel": "twitter",
@@ -191,7 +191,7 @@ def test_probe_reports_search_failure_separately_from_live_user_lookup():
             "error": None,
         },
     ), patch(
-        "agent_reach.channels.twitter.TwitterAdapter.search",
+        "x_reach.channels.twitter.TwitterAdapter.search",
         return_value={
             "ok": False,
             "channel": "twitter",
@@ -206,7 +206,7 @@ def test_probe_reports_search_failure_separately_from_live_user_lookup():
             },
         },
     ), patch(
-        "agent_reach.channels.twitter.TwitterAdapter.user_posts",
+        "x_reach.channels.twitter.TwitterAdapter.user_posts",
         return_value={
             "ok": True,
             "channel": "twitter",
@@ -217,7 +217,7 @@ def test_probe_reports_search_failure_separately_from_live_user_lookup():
             "error": None,
         },
     ), patch(
-        "agent_reach.channels.twitter.TwitterAdapter.tweet",
+        "x_reach.channels.twitter.TwitterAdapter.tweet",
         return_value={
             "ok": True,
             "channel": "twitter",
@@ -238,4 +238,3 @@ def test_probe_reports_search_failure_separately_from_live_user_lookup():
     assert extra["operation_statuses"]["user"]["status"] == "ok"
     assert extra["operation_statuses"]["search"]["error_code"] == "not_found"
     assert extra["operation_statuses"]["hashtag"]["error_code"] == "not_found"
-
