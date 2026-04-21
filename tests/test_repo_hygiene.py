@@ -98,6 +98,19 @@ def test_caller_control_policy_is_documented_consistently():
     assert "does not choose scope" in texts["agent_prompt"]
 
 
+def test_readme_documents_ci_gate_and_smoke_role():
+    text = (_repo_root() / "README.md").read_text(encoding="utf-8")
+
+    assert "Pull requests and pushes run" in text
+    assert "ruff check" in text
+    assert "mypy" in text
+    assert "pytest" in text
+    assert "manual observational workflow" in text
+    assert "not a required release gate" in text
+    assert "doctor --json --probe" in text
+    assert "collect" in text
+
+
 def test_agent_reach_python_modules_are_compatibility_shims():
     repo_root = _repo_root()
     shim_root = repo_root / "agent_reach"

@@ -71,23 +71,6 @@ class TestCLI:
         assert main(["install", "--channels=all"]) == 0
         assert calls == ["twitter"]
 
-    def test_doctor_json(self, capsys, monkeypatch):
-        monkeypatch.setattr(
-            "x_reach.doctor.check_all",
-            lambda _config, probe=False: {
-                "twitter": {
-                    "name": "twitter",
-                    "description": "Twitter/X",
-                    "status": "ok",
-                    "message": "ready",
-                }
-            },
-        )
-        assert main(["doctor", "--json"]) == 0
-        payload = json.loads(capsys.readouterr().out)
-        assert payload["summary"]["ready"] == 1
-        assert payload["channels"][0]["name"] == "twitter"
-
     def test_collect_json_success(self, capsys, monkeypatch):
         class _FakeClient:
             def collect(self, channel, operation, value, **kwargs):
@@ -754,13 +737,6 @@ class TestCLI:
         assert captured["kwargs"]["query_jitter_seconds"] == 0.5
         assert captured["kwargs"]["throttle_cooldown_seconds"] == 30.0
         assert captured["kwargs"]["throttle_error_limit"] == 3
-
-    def test_schema_judge_result_json(self, capsys):
-        assert main(["schema", "judge-result", "--json"]) == 0
-
-        payload = json.loads(capsys.readouterr().out)
-        assert payload["title"] == "X Reach JudgeResult"
-        assert "fallback_keep" in payload["properties"]["decision"]["enum"]
 
     def test_uninstall_dry_run_mentions_twitter_cleanup(self, capsys):
         assert main(["uninstall", "--dry-run"]) == 0

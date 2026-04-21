@@ -76,6 +76,14 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 x-reach collect --operation tweet --input "https://x.com/OpenAI/status/2042296046009626989" --limit 20 --json
 ```
 
+## CI and smoke
+
+Pull requests and pushes run `.github/workflows/pytest.yml` as the required CI gate. It keeps three pillars live: `ruff check`, scoped `mypy` over the contract-bearing `x_reach/` modules, and `pytest`.
+
+Those gates are intended to protect the stable public surface: `x-reach --help`, `x-reach channels --json`, `x-reach doctor --json`, `x-reach doctor --json --probe`, the packaged schema commands, and `x-reach plan candidates --input ... --json`.
+
+`.github/workflows/x-reach-smoke.yml` is a manual observational workflow, not a required release gate. It always captures `channels --json`, `doctor --json`, ledger summary, and candidate-planning artifacts. Live `doctor --json --probe` and `collect` are soft-fail observational checks because auth state and Twitter/X runtime behavior can vary outside the repository.
+
 ## CLI Layout
 
 The public CLI contract stays the same, but the implementation now lives under `x_reach/cli/`:

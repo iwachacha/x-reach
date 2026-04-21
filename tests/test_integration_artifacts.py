@@ -43,6 +43,28 @@ def test_setup_x_reach_action_installs_from_repo_root():
     assert 'uv tool install --force twitter-cli' in action_text
 
 
+def test_pytest_workflow_runs_lint_type_and_test_gates():
+    workflow_path = _repo_root() / ".github" / "workflows" / "pytest.yml"
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+
+    assert workflow["name"] == "CI"
+    assert set(workflow["on"]) == {"push", "pull_request"}
+    assert set(workflow["jobs"]) == {"lint", "typecheck", "test"}
+    assert "ruff check ." in workflow_text
+    assert "mypy --follow-imports skip" in workflow_text
+    assert "x_reach/channels" in workflow_text
+    assert "x_reach/candidates.py" in workflow_text
+    assert "x_reach/doctor.py" in workflow_text
+    assert "x_reach/ledger.py" in workflow_text
+    assert "x_reach/results.py" in workflow_text
+    assert "x_reach/schemas.py" in workflow_text
+    assert "agent_reach/cli.py" in workflow_text
+    assert "pytest -q" in workflow_text
+    assert "windows-latest" in workflow_text
+    assert "ubuntu-latest" in workflow_text
+
+
 def test_x_reach_smoke_workflow_collects_and_uploads_raw_artifacts():
     workflow_path = _repo_root() / ".github" / "workflows" / "x-reach-smoke.yml"
     workflow_text = workflow_path.read_text(encoding="utf-8")
@@ -51,10 +73,16 @@ def test_x_reach_smoke_workflow_collects_and_uploads_raw_artifacts():
     assert "workflow_dispatch" in workflow["on"]
     assert "uses: ./.github/actions/setup-x-reach" in workflow_text
     assert "install-twitter-cli: \"true\"" in workflow_text
+    assert "Capture required smoke contracts" in workflow_text
+    assert "Capture observational live smoke outputs" in workflow_text
     assert "x-reach channels --json" in workflow_text
     assert "x-reach doctor --json" in workflow_text
+    assert "x-reach doctor --json --probe" in workflow_text
     assert "x-reach collect --json --save" in workflow_text
+    assert "|| true" in workflow_text
+    assert ": > .x-reach/evidence.jsonl" in workflow_text
     assert "actions/upload-artifact" in workflow_text
+    assert ".x-reach/doctor-probe.json" in workflow_text
     assert ".x-reach/twitter.json" in workflow_text
     assert ".x-reach/candidates.json" in workflow_text
 

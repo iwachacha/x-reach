@@ -1,10 +1,50 @@
-name: ci
+name: CI
 
-on:
+"on":
   push:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install package and dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -c constraints.txt -e ".[dev]"
+
+      - name: Run ruff check
+        run: |
+          ruff check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install package and dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -c constraints.txt -e ".[dev]"
+
+      - name: Run scoped mypy gate
+        run: |
+          mypy --follow-imports skip x_reach/cli x_reach/channels x_reach/candidates.py x_reach/doctor.py x_reach/ledger.py x_reach/results.py x_reach/schemas.py agent_reach/cli.py
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -21,23 +61,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install package and test deps
+      - name: Install package and dev deps
         run: |
           python -m pip install --upgrade pip
           pip install -c constraints.txt -e ".[dev]"
 
-      - name: Run ruff
-        run: |
-          ruff check .
-
-      - name: Run CLI mypy gate
-        run: |
-          mypy --follow-imports skip x_reach/cli agent_reach/cli.py
-
-      - name: Run CLI contract tests
-        run: |
-          pytest tests/test_cli_contracts.py tests/test_agent_reach_compat.py -q
-
-      - name: Run tests
+      - name: Run pytest
         run: |
           pytest -q
