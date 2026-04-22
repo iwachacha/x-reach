@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
-from x_reach.evidence_scoring import quality_diagnostics, quality_reason_counts, score_candidate
+from x_reach.evidence_scoring import (
+    apply_ranking_quality_adjustments,
+    quality_diagnostics,
+    quality_reason_counts,
+    score_candidate,
+)
 from x_reach.high_signal import (
     analyze_item_quality,
     extract_query_tokens,
@@ -522,7 +527,7 @@ def _score_candidates(candidates: Sequence[dict[str, Any]]) -> list[dict[str, An
         candidate_copy["quality_score"] = score
         candidate_copy["quality_reasons"] = reasons
         scored.append(candidate_copy)
-    return scored
+    return apply_ranking_quality_adjustments(scored)
 
 
 def _sort_candidates(candidates: Sequence[dict[str, Any]], *, sort_by: str) -> list[dict[str, Any]]:

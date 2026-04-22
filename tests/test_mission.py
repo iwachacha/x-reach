@@ -551,11 +551,98 @@ def test_mission_curated_path_exposes_scoring_v2_quality_diagnostics(tmp_path):
         assert reason in reasons
         assert payload["summary"]["quality_reason_counts"][reason] == 1
     assert ranked[0]["coverage_topics"] == [{"topic_id": "codex", "label": "codex"}]
-    assert payload["summary"]["quality_scoring_version"] == "deterministic_evidence_v2"
-    assert payload["curation"]["quality_diagnostics"]["scoring_version"] == "deterministic_evidence_v2"
+    assert payload["summary"]["quality_scoring_version"] == "deterministic_evidence_v3"
+    assert payload["curation"]["quality_diagnostics"]["scoring_version"] == "deterministic_evidence_v3"
     assert payload["diagnostics"]["curation"]["quality_diagnostics"]["reason_counts"] == payload["summary"][
         "quality_reason_counts"
     ]
+
+
+def test_mission_ranked_path_downranks_near_duplicate_promos_in_diagnostics(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    output_dir = tmp_path / "mission-output"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "OpenAI Codex plugin field evidence",
+            "queries": ["OpenAI Codex plugin"],
+            "target_posts": 5,
+            "quality_profile": "balanced",
+            "require_query_match": False,
+            "exclude": {"drop_low_content_posts": False},
+            "retention": {"raw_mode": "full", "item_text_mode": "full"},
+        },
+    )
+
+    class _FakeClient:
+        def collect(self, channel, operation, value, **kwargs):
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=[
+                    _post(
+                        "promo-a",
+                        "brand",
+                        "OpenAI Codex plugin launch: shop now with coupon code DEV20, order today, link in bio.",
+                        likes=200_000,
+                    ),
+                    _post(
+                        "promo-b",
+                        "brand",
+                        "OpenAI Codex plugin launch: shop now with coupon code DEV25, order today, link in bio.",
+                        likes=150_000,
+                    ),
+                    _post(
+                        "promo-c",
+                        "brand",
+                        "OpenAI Codex plugin launch: shop now with coupon code DEV30, order today, link in bio.",
+                        likes=100_000,
+                    ),
+                    _post(
+                        "specific-a",
+                        "alice",
+                        (
+                            "OpenAI Codex plugin: I tested install on 2026-04-10 across 12 repos "
+                            "and measured 37% less review time after a workflow change."
+                        ),
+                        likes=3,
+                    ),
+                    _post(
+                        "specific-b",
+                        "bob",
+                        (
+                            "OpenAI Codex plugin: we measured CLI configuration on 2026-04-11; "
+                            "p95 task time fell 18% across 9 runs."
+                        ),
+                        likes=2,
+                    ),
+                ],
+                raw={"value": value, "kwargs": kwargs},
+                meta={"input": value, "count": 5, "query_tokens": ["openai", "codex", "plugin"]},
+                error=None,
+            )
+
+    payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-near-duplicate-quality",
+        client_factory=_FakeClient,
+    )
+
+    ranked = [
+        json.loads(line)
+        for line in (output_dir / "ranked.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert [item["id"] for item in ranked[:2]] == ["specific-a", "specific-b"]
+    assert sum(1 for item in ranked[:3] if str(item["id"]).startswith("promo-")) <= 1
+    by_id = {item["id"]: item for item in ranked}
+    assert "near_duplicate_downrank" in by_id["promo-b"]["quality_reasons"]
+    assert "near_duplicate_downrank" in by_id["promo-c"]["quality_reasons"]
+    quality_diagnostics = payload["diagnostics"]["curation"]["quality_diagnostics"]
+    assert quality_diagnostics["downrank_reason_counts"]["near_duplicate_downrank"] == 2
+    assert payload["summary"]["quality_reason_counts"]["near_duplicate_promo_cluster"] == 2
 
 
 def test_mission_topic_fit_filters_and_reports_diagnostics(tmp_path):

@@ -19,6 +19,7 @@ from x_reach.batch import (
 from x_reach.candidates import CandidatePlanError, build_candidates_payload
 from x_reach.client import XReachClient
 from x_reach.evidence_scoring import (
+    apply_ranking_quality_adjustments,
     quality_diagnostics,
     score_candidate,
 )
@@ -1357,6 +1358,7 @@ def _rank_candidates(candidates: Sequence[dict[str, Any]]) -> list[dict[str, Any
         candidate_copy["quality_score"] = score
         candidate_copy["quality_reasons"] = reasons
         ranked.append(candidate_copy)
+    ranked = apply_ranking_quality_adjustments(ranked)
     ranked.sort(
         key=lambda item: (
             -float(item.get("quality_score") or 0),

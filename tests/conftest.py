@@ -104,9 +104,12 @@ def assert_candidate_plan_quality_contract_payload(payload: dict[str, Any]) -> N
     assert isinstance(summary.get("quality_reason_counts"), dict)
     quality_diagnostics = summary.get("quality_diagnostics")
     assert isinstance(quality_diagnostics, dict)
-    assert quality_diagnostics["scoring_version"] == "deterministic_evidence_v2"
+    assert quality_diagnostics["scoring_version"] == "deterministic_evidence_v3"
     assert isinstance(quality_diagnostics["scored_candidates"], int)
     assert quality_diagnostics["reason_counts"] == summary["quality_reason_counts"]
+    assert isinstance(quality_diagnostics.get("negative_reason_counts"), dict)
+    assert isinstance(quality_diagnostics.get("downrank_reason_counts"), dict)
+    assert isinstance(quality_diagnostics.get("downrank_samples"), list)
 
     for candidate in payload["candidates"]:
         assert isinstance(candidate.get("quality_score"), (int, float))

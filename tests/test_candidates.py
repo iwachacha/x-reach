@@ -44,6 +44,22 @@ def _item(item_id, url, title, source="web"):
     )
 
 
+def _post(item_id, text, *, author="alice", likes=0, media_references=None, extras=None):
+    return build_item(
+        item_id=item_id,
+        kind="post",
+        title=text,
+        url=f"https://x.com/{author}/status/{item_id}",
+        text=text,
+        author=author,
+        published_at=None,
+        source="twitter",
+        extras={"timeline_item_kind": "original", **(extras or {})},
+        engagement={"likes": likes} if likes else None,
+        media_references=media_references,
+    )
+
+
 def _write_jsonl(path, records):
     path.write_text(
         "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records),
@@ -304,11 +320,13 @@ def test_candidates_scoring_v2_reasons_and_counts_are_public(tmp_path):
     }:
         assert reason in candidate["quality_reasons"]
         assert payload["summary"]["quality_reason_counts"][reason] == 1
-    assert payload["summary"]["quality_diagnostics"] == {
-        "scoring_version": SCORING_RUBRIC_VERSION,
-        "scored_candidates": 1,
-        "reason_counts": payload["summary"]["quality_reason_counts"],
-    }
+    diagnostics = payload["summary"]["quality_diagnostics"]
+    assert diagnostics["scoring_version"] == SCORING_RUBRIC_VERSION
+    assert diagnostics["scored_candidates"] == 1
+    assert diagnostics["reason_counts"] == payload["summary"]["quality_reason_counts"]
+    assert diagnostics["negative_reason_counts"] == {}
+    assert diagnostics["downrank_reason_counts"] == {}
+    assert diagnostics["downrank_samples"] == []
 
 
 def test_candidates_can_sort_by_quality_score_with_stable_ties(tmp_path):
@@ -342,11 +360,11 @@ def test_candidates_can_sort_by_quality_score_with_stable_ties(tmp_path):
     detail_b = build_item(
         item_id="detail-b",
         kind="post",
-        title="OpenAI Codex rollout notes",
+        title="OpenAI Codex setup notes",
         url="https://x.com/example/status/3",
         text=(
-            "OpenAI Codex eval on 2026-04-10 reduced review time by 37% for "
-            "12 maintainers after the v2.1 rollout."
+            "OpenAI Codex setup notes on 2026-04-11 cut triage time by 37% for "
+            "12 reviewers after the v2.1 update."
         ),
         author="example",
         published_at=None,
@@ -381,6 +399,211 @@ def test_candidates_can_sort_by_quality_score_with_stable_ties(tmp_path):
     )
     assert [candidate["id"] for candidate in projected["candidates"]] == ["detail-a", "detail-b"]
     assert sorted(projected["candidates"][0]) == ["id", "quality_reasons", "quality_score"]
+
+
+def test_candidates_rank_specific_first_hand_post_above_high_engagement_promo_cta(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[
+            _post(
+                "promo",
+                "OpenAI Codex plugin sale: shop now with coupon code DEV20, order today, link in bio.",
+                author="brand",
+                likes=500_000,
+            ),
+            _post(
+                "generic",
+                "OpenAI Codex workflow now available. Check out our launch and follow for more updates.",
+                author="brand",
+                likes=50_000,
+            ),
+            _post(
+                "specific",
+                (
+                    "OpenAI Codex: I tested 12 review runs on 2026-04-10 and measured p95 triage "
+                    "time 37% lower after changing the workflow."
+                ),
+                author="alice",
+                likes=2,
+            ),
+        ],
+        input_value="OpenAI Codex",
+        meta={"query_tokens": ["openai", "codex"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(path, by="post", limit=20, sort_by="quality_score")
+    by_id = {candidate["id"]: candidate for candidate in payload["candidates"]}
+
+    assert payload["candidates"][0]["id"] == "specific"
+    assert by_id["specific"]["quality_score"] > by_id["promo"]["quality_score"]
+    assert "first_hand_signal" in by_id["specific"]["quality_reasons"]
+    assert "process_evidence" in by_id["specific"]["quality_reasons"]
+    assert "concrete_detail" in by_id["specific"]["quality_reasons"]
+    for reason in {"promo_language", "commerce_language", "cta_language", "low_evidence_promo"}:
+        assert reason in by_id["promo"]["quality_reasons"]
+    assert payload["summary"]["quality_diagnostics"]["negative_reason_counts"]["promo_language"] == 1
+
+
+def test_candidates_media_only_post_does_not_get_observable_boost(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[
+            _post(
+                "media-only",
+                "OpenAI Codex launch image",
+                author="brand",
+                likes=100_000,
+                media_references=[{"kind": "image", "url": "https://example.com/image.png"}],
+            ),
+            _post(
+                "measured",
+                (
+                    "OpenAI Codex: we tested 9 repository reviews on 2026-04-11 and measured "
+                    "p95 review time 28% lower after changing the setup."
+                ),
+                author="alice",
+                likes=1,
+            ),
+        ],
+        input_value="OpenAI Codex",
+        meta={"query_tokens": ["openai", "codex"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(path, by="post", limit=20, sort_by="quality_score")
+    by_id = {candidate["id"]: candidate for candidate in payload["candidates"]}
+
+    assert payload["candidates"][0]["id"] == "measured"
+    assert "media" in by_id["media-only"]["quality_reasons"]
+    assert "media_only" in by_id["media-only"]["quality_reasons"]
+    assert "observable_signal" not in by_id["media-only"]["quality_reasons"]
+    assert "observable_signal" in by_id["measured"]["quality_reasons"]
+
+
+def test_candidates_coverage_topic_only_is_auxiliary_to_evidence_density(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    coverage_topic = {"topic_id": "codex", "label": "codex"}
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[
+            _post(
+                "coverage-only",
+                "OpenAI Codex topic match update",
+                author="brand",
+                likes=100_000,
+                extras={"coverage_topics": [coverage_topic]},
+            ),
+            _post(
+                "field-note",
+                (
+                    "OpenAI Codex field note: I ran 14 reviews on 2026-04-12, compared before/after "
+                    "latency, and changed one workflow step."
+                ),
+                author="alice",
+                likes=2,
+            ),
+        ],
+        input_value="OpenAI Codex",
+        meta={"query_tokens": ["openai", "codex"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(path, by="post", limit=20, sort_by="quality_score")
+    by_id = {candidate["id"]: candidate for candidate in payload["candidates"]}
+
+    assert payload["candidates"][0]["id"] == "field-note"
+    assert "novel_signal" in by_id["coverage-only"]["quality_reasons"]
+    assert "coverage_topic_only" in by_id["coverage-only"]["quality_reasons"]
+    assert "weak_evidence_density" in by_id["coverage-only"]["quality_reasons"]
+    assert "evidence_dense" not in by_id["coverage-only"]["quality_reasons"]
+    assert "evidence_dense" in by_id["field-note"]["quality_reasons"]
+
+
+def test_evidence_scoring_strengthens_process_measurement_first_hand_signals():
+    score, reasons = score_candidate(
+        {
+            "id": "process",
+            "title": "Field recipe note",
+            "text": (
+                "I brewed 18g with 280ml water, dialed the grind twice, tasted both batches, "
+                "and compared the 4 minute result against yesterday."
+            ),
+            "url": "https://x.com/alice/status/process",
+            "extras": {"timeline_item_kind": "original", "query_tokens": ["recipe"]},
+        }
+    )
+
+    assert score > 0
+    for reason in {"first_hand_signal", "process_evidence", "concrete_detail", "comparison_signal"}:
+        assert reason in reasons
+
+
+def test_candidates_downrank_near_duplicate_promo_templates(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[
+            _post(
+                "promo-a",
+                "OpenAI Codex plugin launch: shop now with coupon code DEV20, order today, link in bio.",
+                author="brand",
+                likes=200_000,
+            ),
+            _post(
+                "promo-b",
+                "OpenAI Codex plugin launch: shop now with coupon code DEV25, order today, link in bio.",
+                author="brand",
+                likes=150_000,
+            ),
+            _post(
+                "promo-c",
+                "OpenAI Codex plugin launch: shop now with coupon code DEV30, order today, link in bio.",
+                author="brand",
+                likes=100_000,
+            ),
+            _post(
+                "specific-a",
+                (
+                    "OpenAI Codex plugin: I tested install on 2026-04-10 across 12 repos and "
+                    "measured 37% less review time after a workflow change."
+                ),
+                author="alice",
+                likes=3,
+            ),
+            _post(
+                "specific-b",
+                (
+                    "OpenAI Codex plugin: we measured CLI configuration on 2026-04-11; "
+                    "p95 task time fell 18% across 9 runs."
+                ),
+                author="bob",
+                likes=2,
+            ),
+        ],
+        input_value="OpenAI Codex plugin",
+        meta={"query_tokens": ["openai", "codex", "plugin"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(path, by="post", limit=20, sort_by="quality_score")
+    top_three_ids = [candidate["id"] for candidate in payload["candidates"][:3]]
+    by_id = {candidate["id"]: candidate for candidate in payload["candidates"]}
+
+    assert top_three_ids[:2] == ["specific-a", "specific-b"]
+    assert sum(1 for candidate_id in top_three_ids if candidate_id.startswith("promo-")) <= 1
+    assert "near_duplicate_downrank" in by_id["promo-b"]["quality_reasons"]
+    assert "near_duplicate_downrank" in by_id["promo-c"]["quality_reasons"]
+    diagnostics = payload["summary"]["quality_diagnostics"]
+    assert diagnostics["downrank_reason_counts"]["near_duplicate_downrank"] == 2
+    assert diagnostics["downrank_reason_counts"]["near_duplicate_promo_cluster"] == 2
+    assert [sample["id"] for sample in diagnostics["downrank_samples"]] == ["promo-b", "promo-c"]
 
 
 def test_candidates_reject_unknown_sort_by(tmp_path):

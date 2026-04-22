@@ -144,8 +144,8 @@ Mission results include neutral diagnostics so callers can inspect the run witho
 - `diagnostics.query_yield`: one row per executed query with query id, input, operation, source role, status, counts, URL count, and error code.
 - `diagnostics.pacing`: normalized pacing controls plus wait counts, total wait seconds, throttle-sensitive error count, and whether the throttle guard skipped unstarted queries.
 - `diagnostics.query_yield[*]`: also includes query start/finish timestamps, duration, planned/applied wait seconds, error category, retryability, and throttle-sensitive status when available.
-- `diagnostics.curation.quality_reason_counts`: aggregate counts for ranked-candidate `quality_reasons`, including deterministic scoring facets such as declared topic fit, query match, concrete detail, first-hand or observable signals, evidence density, capped engagement, post shape, media, URL support, and declared diversity signals.
-- `diagnostics.curation.quality_diagnostics`: the deterministic scoring version, scored ranked-candidate count, and the same quality reason counts in a compact diagnostics object.
+- `diagnostics.curation.quality_reason_counts`: aggregate counts for ranked-candidate `quality_reasons`, including deterministic scoring facets such as declared topic fit, query match, concrete detail, first-hand or observable signals, evidence density, capped engagement, post shape, media, URL support, declared diversity signals, weak promo/CTA evidence, media-only posts, and near-duplicate downranks.
+- `diagnostics.curation.quality_diagnostics`: the deterministic scoring version, scored ranked-candidate count, the same quality reason counts, additive negative reason counts, and compact downrank samples in a diagnostics object.
 - `diagnostics.curation.target_posts`: target/ranked/gap status plus compact shortfall reasons when the ranked set did not reach `target_posts`.
 - `diagnostics.curation.topic_fit`: normalized caller-declared topic-fit rules, evaluated/matched/dropped counts, match/drop reason counts, and missing required counts when `topic_fit` is configured.
 - `diagnostics.curation.topic_spread`: whether `diversity.require_topic_spread` was requested, applied, already satisfied, or skipped, plus selected topic ids, promoted count, and whether final order changed.
@@ -245,7 +245,7 @@ No LLM/VLM call is made by this release. If `judge.enabled=true`, x-reach writes
 - Deterministic keyword filtering, post dedupe, heuristic ranking, and author/thread/url diversity constraints.
 - Caller-declared `topic_fit` rules for deterministic required/preferred/excluded/phrase/synonym matching, mission filtering, candidate scoring diagnostics, and `plan candidates --topic-fit`.
 - Explicit `user_posts` mission query objects with client-side metric filters and mission `topic_fit` filtering.
-- Evidence-utility scoring facets for query match strength, concrete detail markers, capped engagement, post shape, media, URL support, and thin-content penalties.
+- Evidence-utility scoring facets for query match strength, concrete detail markers, process/measurement/first-hand language, capped engagement, post shape, media context, URL support, weak promo/CTA evidence, thin-content penalties, and near-duplicate downranks.
 - Topic spread enforcement for available caller-declared coverage topics through `diversity.require_topic_spread`.
 - Mission diagnostics for query yield, quality reason counts, topic spread, author/thread/url concentration, time spread, and coverage query budgets.
 - Low-content quote filtering through `exclude.drop_low_content_posts`.
