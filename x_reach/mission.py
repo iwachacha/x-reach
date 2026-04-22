@@ -19,10 +19,11 @@ from x_reach.batch import (
 from x_reach.candidates import CandidatePlanError, build_candidates_payload
 from x_reach.client import XReachClient
 from x_reach.evidence_scoring import (
-    quality_reason_counts as count_quality_reasons,
+    quality_diagnostics,
+    score_candidate,
 )
 from x_reach.evidence_scoring import (
-    score_candidate,
+    quality_reason_counts as count_quality_reasons,
 )
 from x_reach.high_signal import QUALITY_PROFILES
 from x_reach.ledger import default_run_id, iter_ledger_records, merge_ledger_inputs
@@ -785,9 +786,9 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
         candidate_payload.get("candidates") or [],
         spec["exclude"].get("keywords") or [],
     )
+    _annotate_coverage_topics(filtered, spec)
     ranked = _rank_candidates(filtered)
     ranked, diversity_drops = _apply_diversity_constraints(ranked, spec)
-    _annotate_coverage_topics(ranked, spec)
     ranked, topic_spread = _apply_topic_spread_constraints(
         ranked,
         spec,
@@ -796,11 +797,13 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
     for rank, candidate in enumerate(ranked, start=1):
         candidate["rank"] = rank
     quality_reason_counts = count_quality_reasons(ranked)
+    ranked_quality_diagnostics = quality_diagnostics(ranked)
     ranked_topic_fit_reason_counts = topic_fit_reason_counts(ranked)
     diagnostics = _build_curation_diagnostics(
         ranked,
         topic_spread=topic_spread,
         quality_reason_counts=quality_reason_counts,
+        quality_diagnostics=ranked_quality_diagnostics,
         topic_fit=candidate_payload["summary"].get("topic_fit") or {},
     )
     filter_drop_counts = dict(candidate_payload["summary"].get("filter_drop_counts") or {})
@@ -816,6 +819,7 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
         "candidate_summary": candidate_payload["summary"],
         "filter_drop_counts": {key: filter_drop_counts[key] for key in sorted(filter_drop_counts)},
         "quality_reason_counts": quality_reason_counts,
+        "quality_diagnostics": ranked_quality_diagnostics,
         "topic_fit_reason_counts": ranked_topic_fit_reason_counts,
         "topic_fit": candidate_payload["summary"].get("topic_fit") or {},
         "topic_spread": topic_spread,
@@ -1537,10 +1541,12 @@ def _build_curation_diagnostics(
     *,
     topic_spread: dict[str, Any],
     quality_reason_counts: dict[str, int],
+    quality_diagnostics: dict[str, Any],
     topic_fit: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "quality_reason_counts": quality_reason_counts,
+        "quality_diagnostics": quality_diagnostics,
         "topic_fit": topic_fit,
         "topic_spread": topic_spread,
         "concentration": {
@@ -1699,6 +1705,7 @@ def _build_result_payload(
 ) -> dict[str, Any]:
     batch_summary = batch_payload.get("summary") or {}
     candidate_summary = curated_payload.get("candidate_summary") or {}
+    quality_diagnostics = curated_payload.get("quality_diagnostics") or {}
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": utc_timestamp(),
@@ -1733,6 +1740,7 @@ def _build_result_payload(
             "ranked_candidates": curated_payload.get("ranked_count", 0),
             "filter_drop_counts": curated_payload.get("filter_drop_counts", {}),
             "quality_reason_counts": curated_payload.get("quality_reason_counts", {}),
+            "quality_scoring_version": quality_diagnostics.get("scoring_version"),
             "topic_fit_reason_counts": curated_payload.get("topic_fit_reason_counts", {}),
             "topic_fit_dropped": (curated_payload.get("topic_fit") or {}).get("dropped", 0),
             "topic_spread_status": (curated_payload.get("topic_spread") or {}).get("status"),

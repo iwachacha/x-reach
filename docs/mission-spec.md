@@ -126,10 +126,10 @@ For `user_posts`, X Reach applies metric filters and active mission `topic_fit` 
 - `raw/`: sharded ledger files from each query execution.
 - `raw.jsonl`: merged collection-result ledger.
 - `canonical.jsonl`: one normalized item per line with run/query provenance.
-- `ranked.jsonl`: deduped, topic/keyword-filtered, diversity-constrained candidates with `rank`, `quality_score`, `quality_reasons`, optional `topic_fit` diagnostics, and matched `coverage_topics` when coverage topics are configured.
+- `ranked.jsonl`: deduped, topic/keyword-filtered, diversity-constrained candidates with `rank`, `quality_score`, compact deterministic `quality_reasons`, optional `topic_fit` diagnostics, and matched `coverage_topics` when coverage topics are configured.
 - `judge.jsonl`: opt-in judge records for the top ranked candidates. The current runtime does not call a model; when `judge.enabled=true`, it writes `unjudged` fallback records so downstream tooling can test the contract without changing `ranked.jsonl`.
 - `summary.md`: human-readable job counts, filter drops, and top candidates.
-- `mission-result.json`: JSON-first manifest for downstream tools, including additive `summary.quality_reason_counts`, `summary.topic_spread_status`, and `diagnostics` blocks.
+- `mission-result.json`: JSON-first manifest for downstream tools, including additive `summary.quality_reason_counts`, `summary.quality_scoring_version`, `summary.topic_spread_status`, and `diagnostics` blocks.
 - `mission-state.json`: resumable status marker for handoff/debugging.
 
 ## Mission Diagnostics
@@ -139,7 +139,8 @@ Mission results include neutral diagnostics so callers can inspect the run witho
 - `diagnostics.query_yield`: one row per executed query with query id, input, operation, source role, status, counts, URL count, and error code.
 - `diagnostics.pacing`: normalized pacing controls plus wait counts, total wait seconds, throttle-sensitive error count, and whether the throttle guard skipped unstarted queries.
 - `diagnostics.query_yield[*]`: also includes query start/finish timestamps, duration, planned/applied wait seconds, error category, retryability, and throttle-sensitive status when available.
-- `diagnostics.curation.quality_reason_counts`: aggregate counts for ranked-candidate `quality_reasons`, including deterministic scoring facets such as query match, concrete detail, capped engagement, post shape, media, and URL support.
+- `diagnostics.curation.quality_reason_counts`: aggregate counts for ranked-candidate `quality_reasons`, including deterministic scoring facets such as declared topic fit, query match, concrete detail, first-hand or observable signals, evidence density, capped engagement, post shape, media, URL support, and declared diversity signals.
+- `diagnostics.curation.quality_diagnostics`: the deterministic scoring version, scored ranked-candidate count, and the same quality reason counts in a compact diagnostics object.
 - `diagnostics.curation.topic_fit`: normalized caller-declared topic-fit rules, evaluated/matched/dropped counts, match/drop reason counts, and missing required counts when `topic_fit` is configured.
 - `diagnostics.curation.topic_spread`: whether `diversity.require_topic_spread` was requested, applied, already satisfied, or skipped, plus selected topic ids, promoted count, and whether final order changed.
 - `diagnostics.curation.concentration`: author, thread, and URL concentration summaries for the final ranked set.

@@ -10,13 +10,35 @@ from typing import Any, Sequence
 from x_reach.high_signal import has_low_content, has_promo_phrase
 from x_reach.topic_fit import topic_fit_quality_reasons, topic_fit_score_bonus
 
+SCORING_RUBRIC_VERSION = "deterministic_evidence_v2"
+
 _ENGAGEMENT_SCORE_CAP = 6.0
 _CONCRETE_DETAIL_RE = re.compile(
     r"(\b\d{1,4}(?:[.,]\d+)?%?\b|\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b|"
     r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|"
-    r"\$[0-9]|\bv?\d+\.\d+\b)",
+    r"\$[0-9]|\bv?\d+\.\d+\b|\b(?:p50|p90|p95|p99)\b|"
+    r"\b(?:ms|sec|secs|seconds|minutes|hours|days)\b)",
     re.IGNORECASE,
 )
+_FIRST_HAND_SIGNAL_RE = re.compile(
+    r"(\b(?:i|we|my|our)\b.{0,48}\b"
+    r"(?:tried|tested|built|shipped|deployed|migrated|ran|saw|found|noticed|"
+    r"measured|benchmarked|reproduced|debugged|used|switched|paid|cancelled|"
+    r"installed|upgraded|rolled back|hit|fixed|broke)\b|"
+    r"\b(?:our|my) (?:team|company|org|production|prod|deployment|workflow)\b)",
+    re.IGNORECASE,
+)
+_OBSERVABLE_SIGNAL_RE = re.compile(
+    r"\b(?:screenshot|screen recording|video|demo|log|logs|trace|stack trace|"
+    r"error|repro|reproduced|benchmark|metric|metrics|chart|table|graph|diff|"
+    r"commit|pull request|pr #?\d+|issue #?\d+|latency|throughput)\b",
+    re.IGNORECASE,
+)
+_STRONG_TOPIC_FIT_REASONS = {
+    "topic_fit_required_any",
+    "topic_fit_required_all",
+    "topic_fit_exact_phrase",
+}
 
 
 def score_candidate(candidate: dict[str, Any]) -> tuple[float, list[str]]:
@@ -24,10 +46,13 @@ def score_candidate(candidate: dict[str, Any]) -> tuple[float, list[str]]:
 
     score = 0.0
     reasons: list[str] = []
+    evidence_units = 0
+    topic_signal = False
     seen_in_count = int(candidate.get("seen_in_count") or 0)
     if seen_in_count > 1:
         score += min(seen_in_count, 5) * 6.0
         reasons.append("multi_seen")
+        evidence_units += 1
 
     kind = _candidate_timeline_kind(candidate)
     if kind == "original":
@@ -50,6 +75,8 @@ def score_candidate(candidate: dict[str, Any]) -> tuple[float, list[str]]:
             match_ratio = len(matched_tokens) / len(query_tokens)
             score += 2.0 + min(len(matched_tokens) * 1.5, 4.0)
             reasons.append("query_match")
+            topic_signal = True
+            evidence_units += 1
             if match_ratio >= 0.75:
                 score += 2.0
                 reasons.append("strong_query_match")
@@ -68,18 +95,35 @@ def score_candidate(candidate: dict[str, Any]) -> tuple[float, list[str]]:
     if len(text) >= 80:
         score += 4.0
         reasons.append("substantial_text")
+        evidence_units += 1
     elif len(text) >= 35:
         score += 2.0
         reasons.append("some_text")
     if candidate.get("media_references"):
         score += 1.0
         reasons.append("media")
+        evidence_units += 1
     if candidate.get("url"):
         score += 1.0
         reasons.append("has_url")
-    if _has_concrete_detail(candidate):
+        evidence_units += 1
+    concrete_detail_count = _concrete_detail_count(candidate)
+    if concrete_detail_count:
         score += 3.0
         reasons.append("concrete_detail")
+        evidence_units += min(concrete_detail_count, 3)
+    if _has_first_hand_signal(candidate):
+        score += 3.0
+        reasons.append("first_hand_signal")
+        evidence_units += 1
+    if _has_observable_signal(candidate):
+        score += 2.0
+        reasons.append("observable_signal")
+        evidence_units += 1
+    if _has_declared_diversity_signal(candidate):
+        score += 2.0
+        reasons.append("novel_signal")
+        evidence_units += 1
     if kind == "quote" and len(_text_without_urls(text)) < 80:
         score -= 3.0
         reasons.append("thin_quote")
@@ -93,7 +137,16 @@ def score_candidate(candidate: dict[str, Any]) -> tuple[float, list[str]]:
     topic_bonus = topic_fit_score_bonus(topic_fit)
     if topic_bonus:
         score += topic_bonus
-        reasons.extend(topic_fit_quality_reasons(topic_fit))
+        topic_reasons = topic_fit_quality_reasons(topic_fit)
+        reasons.extend(topic_reasons)
+        topic_signal = True
+        evidence_units += 1
+        if _has_strong_topic_fit(topic_bonus, topic_reasons):
+            score += 2.0
+            reasons.append("topic_fit_strong")
+    if topic_signal and evidence_units >= 4:
+        score += 2.5
+        reasons.append("evidence_dense")
     return round(score, 3), reasons
 
 
@@ -109,6 +162,23 @@ def quality_reason_counts(candidates: Sequence[dict[str, Any]]) -> dict[str, int
             reason_key = str(reason)
             counts[reason_key] = counts.get(reason_key, 0) + 1
     return {key: counts[key] for key in sorted(counts)}
+
+
+def quality_diagnostics(candidates: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Return compact public diagnostics for deterministic quality scoring."""
+
+    scored_candidates = 0
+    for candidate in candidates:
+        value = candidate.get("quality_score")
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            scored_candidates += 1
+    return {
+        "scoring_version": SCORING_RUBRIC_VERSION,
+        "scored_candidates": scored_candidates,
+        "reason_counts": quality_reason_counts(candidates),
+    }
 
 
 def _candidate_timeline_kind(candidate: dict[str, Any]) -> str:
@@ -157,7 +227,8 @@ def _candidate_search_text(candidate: dict[str, Any]) -> str:
 
 
 def _engagement_score(candidate: dict[str, Any]) -> float:
-    engagement = candidate.get("engagement") if isinstance(candidate.get("engagement"), dict) else {}
+    raw_engagement = candidate.get("engagement")
+    engagement = raw_engagement if isinstance(raw_engagement, dict) else {}
     score = 0.0
     for field, weight in (
         ("likes", 1.0),
@@ -173,9 +244,31 @@ def _engagement_score(candidate: dict[str, Any]) -> float:
     return score
 
 
-def _has_concrete_detail(candidate: dict[str, Any]) -> bool:
+def _concrete_detail_count(candidate: dict[str, Any]) -> int:
     text = str(candidate.get("text") or candidate.get("title") or "")
-    return bool(_CONCRETE_DETAIL_RE.search(text))
+    return len({match.group(0).casefold() for match in _CONCRETE_DETAIL_RE.finditer(text)})
+
+
+def _has_first_hand_signal(candidate: dict[str, Any]) -> bool:
+    text = str(candidate.get("text") or candidate.get("title") or "")
+    return bool(_FIRST_HAND_SIGNAL_RE.search(text))
+
+
+def _has_observable_signal(candidate: dict[str, Any]) -> bool:
+    text = str(candidate.get("text") or candidate.get("title") or "")
+    return bool(candidate.get("media_references")) or bool(_OBSERVABLE_SIGNAL_RE.search(text))
+
+
+def _has_declared_diversity_signal(candidate: dict[str, Any]) -> bool:
+    raw_topics = candidate.get("coverage_topics")
+    if isinstance(raw_topics, list) and raw_topics:
+        return True
+    source_role = str(candidate.get("source_role") or "").strip().casefold()
+    return source_role == "coverage_gap_fill"
+
+
+def _has_strong_topic_fit(topic_bonus: float, topic_reasons: Sequence[str]) -> bool:
+    return topic_bonus >= 4.0 or any(reason in _STRONG_TOPIC_FIT_REASONS for reason in topic_reasons)
 
 
 def _text_without_urls(text: str) -> str:

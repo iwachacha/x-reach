@@ -220,12 +220,13 @@ def test_channels_contract_json_shape(capsys):
     assert payload["channels"][0]["operation_contracts"]["user_posts"]["input_kind"] == "profile"
 
 
-def test_plan_candidates_contract_json_shape(tmp_path, capsys):
+def test_plan_candidates_contract_json_shape(tmp_path, capsys, assert_candidate_plan_quality_contract):
     ledger_path = _write_candidate_fixture(tmp_path / "evidence.jsonl")
 
     assert main(["plan", "candidates", "--input", str(ledger_path), "--json"]) == 0
 
     payload = json.loads(capsys.readouterr().out)
+    assert_candidate_plan_quality_contract(payload)
     assert payload["schema_version"]
     assert payload["command"] == "plan candidates"
     assert payload["input"] == str(ledger_path)
@@ -237,6 +238,9 @@ def test_plan_candidates_contract_json_shape(tmp_path, capsys):
     assert payload["topic_fit"]["enabled"] is False
     assert payload["candidates"][0]["id"] == "tweet-1"
     assert payload["candidates"][0]["url"] == "https://x.com/openai/status/1"
+    assert "query_match" in payload["candidates"][0]["quality_reasons"]
+    assert "strong_query_match" in payload["candidates"][0]["quality_reasons"]
+    assert payload["summary"]["quality_reason_counts"]["query_match"] == 1
     assert payload["candidates"][0]["extras"]["seen_in"][0]["run_id"] == "contract-run"
 
 

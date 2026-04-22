@@ -110,7 +110,7 @@ The public CLI contract stays the same, but the implementation now lives under `
 - `batch` and `scout` are explicit opt-in helpers. They are not the default route for everyday collection.
 - Inspect `x-reach channels --json` `operation_contracts` before choosing `since` or `until`.
 - `x-reach plan candidates` keeps its default `--limit 20`; raise it only when the caller explicitly wants a wider candidate review set.
-- `x-reach plan candidates --json` includes deterministic `quality_score` and `quality_reasons` for review, but it does not make the caller's final selection.
+- `x-reach plan candidates --json` includes deterministic `quality_score`, compact `quality_reasons`, and summary quality diagnostics for review, but it does not make the caller's final selection. Reasons cover declared topic fit, concrete detail, first-hand or observable signals, evidence density, and declared diversity signals when those inputs are present.
 - `x-reach plan candidates --sort-by quality_score` is explicit opt-in utility ordering; the default remains first-seen order for compatibility.
 - `x-reach plan candidates --topic-fit topic-fit.json` applies caller-declared deterministic topic-fit rules and emits compact `topic_fit` match/drop diagnostics. When topic-fit rules are active, they take priority over the older query-token match fallback.
 - `x-reach posts` and `collect --operation user_posts` support caller-declared `--min-likes`, `--min-retweets`, `--min-views`, and `--topic-fit` filters as client-side timeline filters; they do not add search-tab semantics or hidden author expansion.
@@ -123,6 +123,7 @@ The public CLI contract stays the same, but the implementation now lives under `
 - For broad runs that use `--concurrency > 1`, add explicit pacing such as `--query-delay 1 --throttle-cooldown 30`; throttle-sensitive 409/429/conflict errors are reported in diagnostics and can trip the bounded throttle guard instead of continuing to start every remaining query.
 - Mission `coverage` is opt-in and fills only explicit topic gaps; ranked-count gaps are reported but do not trigger automatic query expansion.
 - Mission `topic_fit` lets the caller declare required, preferred, exact, negative, and synonym-based topic-fit rules. X Reach uses only those rules for deterministic filtering and diagnostics; it does not infer domain-specific truth or importance.
+- Mission `ranked.jsonl` and `mission-result.json` use the same deterministic quality reasons and aggregate counts as candidate planning. `diversity.require_topic_spread` remains separate quota logic over declared coverage topics; scoring only adds auditable supporting signals.
 - Mission `judge` is an opt-in forward-compatible contract. Until a judge runner is configured, it writes auditable fallback records and leaves deterministic `ranked.jsonl` unchanged.
 
 ## Docs

@@ -89,11 +89,16 @@ def test_x_reach_client_doctor_payload_contract(client: XReachClient, monkeypatc
     assert payload["channels"][0]["operation_statuses"]["search"]["status"] == "ok"
 
 
-def test_x_reach_client_plan_candidates_contract(client: XReachClient, tmp_path: Path):
+def test_x_reach_client_plan_candidates_contract(
+    client: XReachClient,
+    tmp_path: Path,
+    assert_candidate_plan_quality_contract,
+):
     ledger_path = _write_candidate_fixture(tmp_path / "evidence.jsonl")
 
     payload = client.plan_candidates(ledger_path, by="url", min_seen_in=1)
 
+    assert_candidate_plan_quality_contract(payload)
     assert payload["schema_version"]
     assert payload["generated_at"]
     assert payload["command"] == "plan candidates"
@@ -108,6 +113,8 @@ def test_x_reach_client_plan_candidates_contract(client: XReachClient, tmp_path:
     assert candidate["id"] == "tweet-1"
     assert candidate["url"] == "https://x.com/openai/status/1"
     assert candidate["seen_in_count"] == 1
+    assert "query_match" in candidate["quality_reasons"]
+    assert payload["summary"]["quality_reason_counts"]["strong_query_match"] == 1
     assert candidate["extras"]["seen_in"][0]["run_id"] == "sdk-contract-run"
 
 

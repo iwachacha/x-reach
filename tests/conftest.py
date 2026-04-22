@@ -42,6 +42,17 @@ _MISSION_PLAN_REQUIRED_OUTPUTS = {
     "ranked_jsonl",
     "manifest",
 }
+_CANDIDATE_PLAN_REQUIRED_KEYS = {
+    "schema_version",
+    "generated_at",
+    "command",
+    "input",
+    "by",
+    "sort_by",
+    "summary",
+    "topic_fit",
+    "candidates",
+}
 
 
 def assert_mission_plan_envelope_payload(
@@ -80,6 +91,34 @@ def assert_mission_plan_envelope_payload(
     assert _MISSION_PLAN_REQUIRED_OUTPUTS.issubset(payload["outputs"])
 
 
+def assert_candidate_plan_quality_contract_payload(payload: dict[str, Any]) -> None:
+    """Assert candidate planning quality diagnostics without freezing additive fields."""
+
+    assert _CANDIDATE_PLAN_REQUIRED_KEYS.issubset(payload)
+    assert payload["command"] == "plan candidates"
+    assert isinstance(payload["summary"], dict)
+    assert isinstance(payload["topic_fit"], dict)
+    assert isinstance(payload["candidates"], list)
+
+    summary = payload["summary"]
+    assert isinstance(summary.get("quality_reason_counts"), dict)
+    quality_diagnostics = summary.get("quality_diagnostics")
+    assert isinstance(quality_diagnostics, dict)
+    assert quality_diagnostics["scoring_version"] == "deterministic_evidence_v2"
+    assert isinstance(quality_diagnostics["scored_candidates"], int)
+    assert quality_diagnostics["reason_counts"] == summary["quality_reason_counts"]
+
+    for candidate in payload["candidates"]:
+        assert isinstance(candidate.get("quality_score"), (int, float))
+        assert isinstance(candidate.get("quality_reasons"), list)
+        assert all(isinstance(reason, str) for reason in candidate["quality_reasons"])
+
+
 @pytest.fixture()
 def assert_mission_plan_envelope() -> Callable[..., None]:
     return assert_mission_plan_envelope_payload
+
+
+@pytest.fixture()
+def assert_candidate_plan_quality_contract() -> Callable[[dict[str, Any]], None]:
+    return assert_candidate_plan_quality_contract_payload

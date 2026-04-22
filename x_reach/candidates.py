@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
-from x_reach.evidence_scoring import quality_reason_counts, score_candidate
+from x_reach.evidence_scoring import quality_diagnostics, quality_reason_counts, score_candidate
 from x_reach.high_signal import (
     analyze_item_quality,
     extract_query_tokens,
@@ -55,6 +55,7 @@ ALLOWED_CANDIDATE_FIELDS = {
     "quality_score",
     "quality_reasons",
     "topic_fit",
+    "coverage_topics",
     "extras",
 }
 
@@ -202,6 +203,7 @@ def build_candidates_payload(
     ordered_candidates = _sort_candidates(scored_candidates, sort_by=sort_by)
     returned = ordered_candidates[:limit]
     returned_quality_reason_counts = quality_reason_counts(returned)
+    returned_quality_diagnostics = quality_diagnostics(returned)
     returned_topic_fit_reason_counts = topic_fit_reason_counts(returned)
     max_seen_in = max((int(candidate.get("seen_in_count") or 0) for candidate in candidates), default=0)
     output_candidates = [] if summary_only else [_filter_candidate(candidate, selected_fields) for candidate in returned]
@@ -244,6 +246,7 @@ def build_candidates_payload(
             "filtered_candidate_count": len(filtered_candidates),
             "filter_drop_counts": filter_drop_counts,
             "quality_reason_counts": returned_quality_reason_counts,
+            "quality_diagnostics": returned_quality_diagnostics,
             "topic_fit_reason_counts": returned_topic_fit_reason_counts,
             "topic_fit": topic_fit_summary,
             "channel_counts": _count_summary_keys(channel_keys),
@@ -358,7 +361,7 @@ def _candidate_from_item(
     merged_extras = {**extras}
     if query_tokens:
         merged_extras["query_tokens"] = list(dict.fromkeys(str(token) for token in query_tokens))
-    return {
+    candidate = {
         "id": item.get("id"),
         "kind": item.get("kind"),
         "title": item.get("title"),
@@ -379,6 +382,10 @@ def _candidate_from_item(
         "extras": merged_extras,
         "_preference_rank": original_preference_rank(extras.get("timeline_item_kind")),
     }
+    coverage_topics = _candidate_coverage_topics(item, extras)
+    if coverage_topics:
+        candidate["coverage_topics"] = coverage_topics
+    return candidate
 
 
 def _metadata_value(
@@ -784,4 +791,17 @@ def _identifier_value(item: dict[str, Any], key: str) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _candidate_coverage_topics(item: dict[str, Any], extras: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_topics = item.get("coverage_topics")
+    if not isinstance(raw_topics, list):
+        raw_topics = extras.get("coverage_topics")
+    if not isinstance(raw_topics, list):
+        return []
+    topics: list[dict[str, Any]] = []
+    for topic in raw_topics:
+        if isinstance(topic, dict):
+            topics.append(dict(topic))
+    return topics
 

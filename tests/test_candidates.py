@@ -10,6 +10,11 @@ from x_reach.candidates import (
     build_candidates_payload,
     render_candidates_text,
 )
+from x_reach.evidence_scoring import (
+    SCORING_RUBRIC_VERSION,
+    quality_reason_counts,
+    score_candidate,
+)
 from x_reach.ledger import build_ledger_record
 from x_reach.results import build_item, build_result
 
@@ -196,6 +201,114 @@ def test_candidates_expose_quality_scores_without_reordering(tmp_path):
 
     projected = build_candidates_payload(path, by="post", limit=20, fields="id,quality_score,quality_reasons")
     assert sorted(projected["candidates"][0]) == ["id", "quality_reasons", "quality_score"]
+
+
+def test_evidence_scoring_v2_emits_principle_aligned_reasons():
+    candidate = {
+        "id": "rich",
+        "title": "OpenAI Codex deployment notes",
+        "url": "https://x.com/alice/status/1",
+        "text": (
+            "OpenAI Codex report: our team deployed v2.1 on 2026-04-10; "
+            "logs show p95 latency fell 37% after 12 runs. Screenshot attached."
+        ),
+        "author": "alice",
+        "seen_in_count": 2,
+        "engagement": {"likes": 8},
+        "media_references": [{"kind": "image", "url": "https://example.com/screenshot.png"}],
+        "coverage_topics": [{"topic_id": "codex", "label": "codex"}],
+        "topic_fit": {
+            "matched": True,
+            "match_reasons": ["topic_fit_required_any", "topic_fit_exact_phrase"],
+            "score_bonus": 4.0,
+        },
+        "extras": {
+            "timeline_item_kind": "original",
+            "query_tokens": ["openai", "codex"],
+        },
+    }
+
+    score, reasons = score_candidate(candidate)
+
+    assert score > 0
+    for reason in {
+        "topic_fit_strong",
+        "concrete_detail",
+        "first_hand_signal",
+        "observable_signal",
+        "evidence_dense",
+        "novel_signal",
+    }:
+        assert reason in reasons
+    counts = quality_reason_counts(
+        [
+            {"quality_reasons": reasons},
+            {"quality_reasons": ["first_hand_signal", "novel_signal"]},
+        ]
+    )
+    assert list(counts) == sorted(counts)
+    assert counts["first_hand_signal"] == 2
+    assert counts["novel_signal"] == 2
+
+
+def test_candidates_scoring_v2_reasons_and_counts_are_public(tmp_path):
+    path = tmp_path / "evidence.jsonl"
+    item = build_item(
+        item_id="rich",
+        kind="post",
+        title="OpenAI Codex deployment notes",
+        url="https://x.com/alice/status/1",
+        text=(
+            "OpenAI Codex report: our team deployed v2.1 on 2026-04-10; "
+            "logs show p95 latency fell 37% after 12 runs. Screenshot attached."
+        ),
+        author="alice",
+        published_at=None,
+        source="twitter",
+        extras={
+            "timeline_item_kind": "original",
+            "coverage_topics": [{"topic_id": "codex", "label": "codex"}],
+        },
+        media_references=[{"kind": "image", "url": "https://example.com/screenshot.png"}],
+    )
+    result = _result(
+        channel="twitter",
+        operation="search",
+        items=[item],
+        input_value="OpenAI Codex",
+        meta={"query_tokens": ["openai", "codex"]},
+    )
+    _write_jsonl(path, [build_ledger_record(result, run_id="run-1")])
+
+    payload = build_candidates_payload(
+        path,
+        by="post",
+        limit=20,
+        topic_fit={
+            "required_any_terms": ["codex"],
+            "exact_phrases": ["OpenAI Codex"],
+        },
+        fields="id,quality_score,quality_reasons,coverage_topics",
+    )
+
+    candidate = payload["candidates"][0]
+    assert sorted(candidate) == ["coverage_topics", "id", "quality_reasons", "quality_score"]
+    assert candidate["coverage_topics"] == [{"topic_id": "codex", "label": "codex"}]
+    for reason in {
+        "topic_fit_strong",
+        "concrete_detail",
+        "first_hand_signal",
+        "observable_signal",
+        "evidence_dense",
+        "novel_signal",
+    }:
+        assert reason in candidate["quality_reasons"]
+        assert payload["summary"]["quality_reason_counts"][reason] == 1
+    assert payload["summary"]["quality_diagnostics"] == {
+        "scoring_version": SCORING_RUBRIC_VERSION,
+        "scored_candidates": 1,
+        "reason_counts": payload["summary"]["quality_reason_counts"],
+    }
 
 
 def test_candidates_can_sort_by_quality_score_with_stable_ties(tmp_path):

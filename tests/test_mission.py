@@ -392,6 +392,97 @@ def test_mission_scoring_prefers_substantive_query_matched_evidence_over_viral_t
     assert payload["summary"]["quality_reason_counts"]["concrete_detail"] == 1
 
 
+def test_mission_curated_path_exposes_scoring_v2_quality_diagnostics(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    output_dir = tmp_path / "mission-output"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "OpenAI Codex field evidence",
+            "queries": ["OpenAI Codex"],
+            "target_posts": 1,
+            "quality_profile": "balanced",
+            "topic_fit": {
+                "required_any_terms": ["codex"],
+                "exact_phrases": ["OpenAI Codex"],
+            },
+            "coverage": {
+                "enabled": False,
+                "topics": [{"label": "codex", "terms": ["codex"], "min_posts": 1}],
+            },
+            "retention": {"raw_mode": "full", "item_text_mode": "full"},
+        },
+    )
+
+    class _FakeClient:
+        def collect(self, channel, operation, value, **kwargs):
+            item = build_item(
+                item_id="rich",
+                kind="post",
+                title="OpenAI Codex deployment notes",
+                url="https://x.com/alice/status/rich",
+                text=(
+                    "OpenAI Codex report: our team deployed v2.1 on 2026-04-10; "
+                    "logs show p95 latency fell 37% after 12 runs. Screenshot attached."
+                ),
+                author="alice",
+                published_at="2026-04-10T00:00:00Z",
+                source="twitter",
+                extras={
+                    "timeline_item_kind": "original",
+                    "author_handle": "alice",
+                    "post_id": "rich",
+                    "conversation_id": "thread-rich",
+                },
+                engagement={"likes": 12},
+                media_references=[{"kind": "image", "url": "https://example.com/screenshot.png"}],
+                identifiers={
+                    "author_handle": "alice",
+                    "post_id": "rich",
+                    "conversation_id": "thread-rich",
+                },
+            )
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=[item],
+                raw={"value": value, "kwargs": kwargs},
+                meta={"input": value, "count": 1, "query_tokens": ["openai", "codex"]},
+                error=None,
+            )
+
+    payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-scoring-v2-diagnostics",
+        client_factory=_FakeClient,
+    )
+
+    ranked = [
+        json.loads(line)
+        for line in (output_dir / "ranked.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    reasons = ranked[0]["quality_reasons"]
+
+    for reason in {
+        "topic_fit_strong",
+        "concrete_detail",
+        "first_hand_signal",
+        "observable_signal",
+        "evidence_dense",
+        "novel_signal",
+    }:
+        assert reason in reasons
+        assert payload["summary"]["quality_reason_counts"][reason] == 1
+    assert ranked[0]["coverage_topics"] == [{"topic_id": "codex", "label": "codex"}]
+    assert payload["summary"]["quality_scoring_version"] == "deterministic_evidence_v2"
+    assert payload["curation"]["quality_diagnostics"]["scoring_version"] == "deterministic_evidence_v2"
+    assert payload["diagnostics"]["curation"]["quality_diagnostics"]["reason_counts"] == payload["summary"][
+        "quality_reason_counts"
+    ]
+
+
 def test_mission_topic_fit_filters_and_reports_diagnostics(tmp_path):
     spec_path = tmp_path / "mission.json"
     output_dir = tmp_path / "mission-output"
@@ -756,6 +847,9 @@ def test_mission_topic_spread_promotes_declared_topic_buckets(tmp_path):
     assert [item["id"] for item in ranked] == ["cyber", "codex"]
     assert ranked[0]["coverage_topics"] == [{"topic_id": "cyber", "label": "cyber"}]
     assert ranked[1]["coverage_topics"] == [{"topic_id": "codex", "label": "codex"}]
+    assert "novel_signal" in ranked[0]["quality_reasons"]
+    assert "novel_signal" in ranked[1]["quality_reasons"]
+    assert payload["summary"]["quality_reason_counts"]["novel_signal"] == 2
     assert payload["summary"]["topic_spread_status"] == "applied"
     assert payload["curation"]["topic_spread"]["promoted_count"] == 1
     assert payload["curation"]["topic_spread"]["reordered"] is True
