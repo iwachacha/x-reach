@@ -55,10 +55,14 @@ def test_pytest_workflow_runs_lint_type_and_test_gates():
     assert "mypy --follow-imports skip" in workflow_text
     assert "x_reach/channels" in workflow_text
     assert "x_reach/candidates.py" in workflow_text
+    assert "x_reach/client.py" in workflow_text
+    assert "x_reach/core.py" in workflow_text
     assert "x_reach/doctor.py" in workflow_text
+    assert "x_reach/integrations/codex.py" in workflow_text
     assert "x_reach/ledger.py" in workflow_text
     assert "x_reach/results.py" in workflow_text
     assert "x_reach/schemas.py" in workflow_text
+    assert "x_reach/scout.py" in workflow_text
     assert "agent_reach/cli.py" in workflow_text
     assert "pytest -q" in workflow_text
     assert "windows-latest" in workflow_text
@@ -139,6 +143,7 @@ def test_export_runtime_minimal_omits_bootstrap_payloads():
     assert payload["channel_names"] == ["twitter"]
     assert any("--profile runtime-minimal" in command for command in payload["verification_commands"])
     assert any("runtime-minimal omits full channel contracts" in note for note in payload["notes"])
+    assert any("Python SDK quickstart" in note for note in payload["notes"])
 
 
 def test_export_renderers_support_twitter_only_payload():

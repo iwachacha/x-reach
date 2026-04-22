@@ -541,7 +541,7 @@ def _invalid_input_result(
     message: str,
     details: dict[str, object] | None = None,
 ) -> CollectionResult:
-    meta = {"input": input_value}
+    meta: dict[str, Any] = {"input": input_value}
     if limit is not None:
         meta["limit"] = limit
     return build_result(
@@ -594,14 +594,14 @@ def _shape_collection_result(
         effective_raw_mode = effective_raw_mode or "full"
         effective_item_text_mode = effective_item_text_mode or "full"
 
-    shaped = {
-        **payload,
-        "meta": dict(payload.get("meta") or {}),
-    }
+    shaped = payload.copy()
+    shaped["meta"] = dict(payload.get("meta") or {})
     if normalized_applied_defaults:
         shaped["meta"]["applied_defaults"] = normalized_applied_defaults
     if quality_profile is not None:
         shaped["meta"]["quality_profile"] = quality_profile
+    assert effective_item_text_mode is not None
+    assert effective_raw_mode is not None
     try:
         shaped = apply_item_text_mode(
             shaped,

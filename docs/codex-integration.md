@@ -21,6 +21,17 @@ x-reach collect --operation search --input "OpenAI" --limit 3 --json
 x-reach export-integration --client codex --format json --profile runtime-minimal
 ```
 
+## Integration export contract
+
+The public JSON export is:
+
+```powershell
+x-reach export-integration --client codex --format json
+x-reach export-integration --client codex --format json --profile runtime-minimal
+```
+
+The full profile includes the channel contracts, required commands, packaged skill metadata, Python SDK quickstart, and recommended docs. `runtime-minimal` keeps the runtime policy, channel names, required commands, skill metadata, and verification commands while omitting bulky bootstrap payloads and doc path lists. Non-full profiles are JSON-only.
+
 ## Supported channel
 
 - `twitter`

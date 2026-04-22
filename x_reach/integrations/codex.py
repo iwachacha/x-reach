@@ -384,7 +384,7 @@ def _runtime_minimal_export(payload: dict[str, Any]) -> dict[str, Any]:
         "codex_runtime_policy": payload["codex_runtime_policy"],
         "verification_commands": _verification_commands("runtime-minimal"),
         "notes": [
-            "runtime-minimal omits full channel contracts, inline Codex artifact payloads, and doc path lists to keep downstream runtime guidance compact.",
+            "runtime-minimal omits full channel contracts, inline Codex artifact payloads, Python SDK quickstart, and doc path lists to keep downstream runtime guidance compact.",
             "Use the default full profile when bootstrap tooling needs repo artifact paths or the complete channel contract.",
         ],
     }

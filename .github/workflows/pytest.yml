@@ -43,7 +43,7 @@ jobs:
 
       - name: Run scoped mypy gate
         run: |
-          mypy --follow-imports skip x_reach/cli x_reach/channels x_reach/candidates.py x_reach/doctor.py x_reach/ledger.py x_reach/results.py x_reach/schemas.py agent_reach/cli.py
+          mypy --follow-imports skip x_reach/cli x_reach/channels x_reach/candidates.py x_reach/client.py x_reach/core.py x_reach/doctor.py x_reach/integrations/codex.py x_reach/ledger.py x_reach/results.py x_reach/schemas.py x_reach/scout.py agent_reach/cli.py
 
   test:
     runs-on: ${{ matrix.os }}

@@ -240,6 +240,85 @@ def test_plan_candidates_contract_json_shape(tmp_path, capsys):
     assert payload["candidates"][0]["extras"]["seen_in"][0]["run_id"] == "contract-run"
 
 
+def test_export_integration_full_contract_json_shape(capsys):
+    assert main(["export-integration", "--client", "codex", "--format", "json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"]
+    assert payload["generated_at"]
+    assert payload["client"] == "codex"
+    assert payload["profile"] == "full"
+    assert payload["execution_context"] in {"checkout", "tool_install"}
+    assert payload["required_commands"] == ["twitter"]
+    assert payload["skill"]["names"]
+    assert Path(payload["skill"]["source"]).name == "skills"
+    assert payload["python_sdk"]["availability"] == "project_env_only"
+    assert payload["python_sdk"]["import"] == "from x_reach import XReachClient"
+    assert "client = XReachClient()" in payload["python_sdk"]["quickstart"]
+    assert any(_doc_path(path).endswith("docs/python-sdk.md") for path in payload["recommended_docs"])
+    assert any(_doc_path(path).endswith("docs/codex-integration.md") for path in payload["recommended_docs"])
+
+    channel_contracts = {channel["name"]: channel for channel in payload["channels"]}
+    assert list(channel_contracts) == ["twitter"]
+    twitter = channel_contracts["twitter"]
+    assert twitter["entrypoint_kind"] == "cli"
+    assert twitter["required_commands"] == ["twitter"]
+    assert twitter["operation_contracts"]["search"]["input_kind"] == "query"
+    assert twitter["operation_contracts"]["user_posts"]["input_kind"] == "profile"
+
+
+def test_export_integration_runtime_minimal_contract_json_shape(capsys):
+    assert (
+        main(
+            [
+                "export-integration",
+                "--client",
+                "codex",
+                "--format",
+                "json",
+                "--profile",
+                "runtime-minimal",
+            ]
+        )
+        == 0
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"]
+    assert payload["generated_at"]
+    assert payload["client"] == "codex"
+    assert payload["profile"] == "runtime-minimal"
+    assert payload["execution_context"] in {"checkout", "tool_install"}
+    assert payload["channel_names"] == ["twitter"]
+    assert payload["required_commands"] == ["twitter"]
+    assert payload["skill"]["names"]
+    assert Path(payload["skill"]["source"]).name == "skills"
+    assert "channels" not in payload
+    assert "recommended_docs" not in payload
+    assert "python_sdk" not in payload
+    assert any("runtime-minimal omits full channel contracts" in note for note in payload["notes"])
+    assert any("Python SDK quickstart" in note for note in payload["notes"])
+
+
+def test_export_integration_runtime_minimal_rejects_non_json_format(capsys):
+    result = main(
+        [
+            "export-integration",
+            "--client",
+            "codex",
+            "--format",
+            "text",
+            "--profile",
+            "runtime-minimal",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert captured.out == ""
+    assert "only supported with --format json" in captured.err
+
+
 def test_legacy_agent_reach_cli_help_contract(capsys):
     with pytest.raises(SystemExit) as exc_info:
         legacy_cli.main(["--help"])
@@ -273,3 +352,7 @@ def _write_candidate_fixture(path: Path) -> Path:
     record = build_ledger_record(result, run_id="contract-run", input_value="OpenAI")
     path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
+
+
+def _doc_path(value: str) -> str:
+    return Path(value).as_posix()

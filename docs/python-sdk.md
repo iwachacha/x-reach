@@ -2,6 +2,15 @@
 
 `XReachClient` is the primary SDK surface, and this fork only exposes the `twitter` namespace.
 
+## Public import contract
+
+```python
+from x_reach import XReachClient
+from x_reach import XReach
+```
+
+`XReach` is a subclass alias for the same SDK surface. `AgentReachClient` and `AgentReach` remain compatibility aliases for older import paths, but new code should prefer `x_reach`.
+
 ## Install
 
 CLI-only installs:
@@ -101,6 +110,8 @@ Use `items` for downstream automation and `raw` when you need backend-native det
 
 `XReachClient` also exposes thin wrappers around the evidence-ledger utilities:
 
+- `channels()`
+- `doctor_payload(probe=False, required_channels=None, require_all=False)`
 - `ledger_merge(input_path, output_path)`
 - `ledger_validate(input_path, require_metadata=False, filters=None)`
 - `ledger_summarize(input_path, filters=None)`
