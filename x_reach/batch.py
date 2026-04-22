@@ -9,12 +9,13 @@ import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Callable
 
 from x_reach import __version__
 from x_reach.client import AgentReachClient
-from x_reach.high_signal import is_broad_operation
+from x_reach.high_signal import is_broad_operation, merge_default_excludes
 from x_reach.ledger import (
     default_run_id,
     iter_ledger_records,
@@ -39,6 +40,15 @@ _DEFAULT_PACING = {
     "throttle_cooldown_seconds": 30.0,
     "throttle_error_limit": 3,
 }
+_RESUME_SCALAR_DEFAULT_FIELDS = frozenset(
+    {
+        "search_type",
+        "originals_only",
+        "raw_mode",
+        "item_text_mode",
+        "item_text_max_chars",
+    }
+)
 
 
 def normalize_pacing_config(
@@ -842,8 +852,82 @@ def _completed_query_keys(
             "item_text_max_chars": meta.get("item_text_max_chars"),
         }
         if query["channel"] and query["operation"] and query["input"]:
-            completed.add(_query_key(query))
+            for variant in _resume_identity_variants(query, meta.get("applied_defaults")):
+                completed.add(_query_key(variant))
     return completed
+
+
+def _resume_identity_variants(
+    query: dict[str, Any],
+    applied_defaults: Any,
+) -> list[dict[str, Any]]:
+    defaults = applied_defaults if isinstance(applied_defaults, dict) else {}
+    variants = [dict(query)]
+    if not defaults:
+        return variants
+
+    scalar_defaulted = _strip_scalar_defaulted_fields(query, defaults)
+    exclude_variants = _exclude_default_variants(query, defaults)
+    if scalar_defaulted != query:
+        variants.append(scalar_defaulted)
+    for exclude_value in exclude_variants:
+        exclude_variant = dict(query)
+        exclude_variant["exclude"] = exclude_value
+        variants.append(exclude_variant)
+        if scalar_defaulted != query:
+            combined = dict(scalar_defaulted)
+            combined["exclude"] = exclude_value
+            variants.append(combined)
+
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str | None, ...]] = set()
+    for variant in variants:
+        key = _query_key(variant)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(variant)
+    return deduped
+
+
+def _strip_scalar_defaulted_fields(
+    query: dict[str, Any],
+    defaults: dict[str, Any],
+) -> dict[str, Any]:
+    stripped = dict(query)
+    for field in _RESUME_SCALAR_DEFAULT_FIELDS:
+        if field in defaults and stripped.get(field) == defaults.get(field):
+            stripped[field] = None
+    return stripped
+
+
+def _exclude_default_variants(query: dict[str, Any], defaults: dict[str, Any]) -> list[list[str] | None]:
+    if "exclude" not in defaults or query.get("exclude") is None:
+        return []
+    raw_values = query.get("exclude")
+    values = [str(value) for value in raw_values] if isinstance(raw_values, list) else [str(raw_values)]
+    if not values:
+        return []
+
+    default_excludes, _defaulted = merge_default_excludes(None, query.get("quality_profile"))
+    default_set = set(default_excludes or [])
+    if not default_set:
+        return [None]
+
+    default_values = [value for value in values if value in default_set]
+    if not default_values:
+        return []
+    variants: list[list[str] | None] = []
+    for size in range(0, len(default_values)):
+        for combo in combinations(default_values, size):
+            kept_defaults = set(combo)
+            next_values = [
+                value
+                for value in values
+                if value not in default_set or value in kept_defaults
+            ]
+            variants.append(next_values or None)
+    return variants
 
 
 def _checkpoint_summary(

@@ -9,6 +9,7 @@ For narrow probes, readiness checks, or one-off reads, prefer `x-reach collect -
 ## Quick Start
 
 ```powershell
+x-reach doctor --json --probe --require-channel twitter
 x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --dry-run --json
 x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --json
 x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --concurrency 2 --query-delay 1 --throttle-cooldown 30 --json
@@ -22,6 +23,10 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resu
 The same envelope family is returned by `XReachClient.mission_plan()` and `XReachClient.collect_spec(..., dry_run=True)`. Consumers can rely on these top-level fields being present while allowing additive fields: `schema_version`, `generated_at`, `command`, `cli_version`, `dry_run`, `spec`, `output_dir`, `run_id`, `objective`, `quality_profile`, `target_posts`, `topic_fit`, `pacing`, `judge`, `query_count`, `normalized_spec`, `batch_plan`, and `outputs`.
 
 The `outputs` object is also additive. It includes at least the named artifact paths `raw_jsonl`, `canonical_jsonl`, `ranked_jsonl`, and `manifest` so downstream tools can preview where the write-producing mission run will place the raw, canonical, curated, and manifest layers.
+
+## Resume Safety
+
+`--resume` skips completed batch queries by comparing the caller-declared execution identity with ledger records already written under the mission output directory. Adapter-applied defaults recorded in result metadata, such as a default Twitter/X `search_type`, are treated as execution defaults rather than new caller intent, so rerunning the same mission plan with `--resume` does not replay already completed queries.
 
 ## Minimal Spec
 
@@ -141,13 +146,14 @@ Mission results include neutral diagnostics so callers can inspect the run witho
 - `diagnostics.query_yield[*]`: also includes query start/finish timestamps, duration, planned/applied wait seconds, error category, retryability, and throttle-sensitive status when available.
 - `diagnostics.curation.quality_reason_counts`: aggregate counts for ranked-candidate `quality_reasons`, including deterministic scoring facets such as declared topic fit, query match, concrete detail, first-hand or observable signals, evidence density, capped engagement, post shape, media, URL support, and declared diversity signals.
 - `diagnostics.curation.quality_diagnostics`: the deterministic scoring version, scored ranked-candidate count, and the same quality reason counts in a compact diagnostics object.
+- `diagnostics.curation.target_posts`: target/ranked/gap status plus compact shortfall reasons when the ranked set did not reach `target_posts`.
 - `diagnostics.curation.topic_fit`: normalized caller-declared topic-fit rules, evaluated/matched/dropped counts, match/drop reason counts, and missing required counts when `topic_fit` is configured.
 - `diagnostics.curation.topic_spread`: whether `diversity.require_topic_spread` was requested, applied, already satisfied, or skipped, plus selected topic ids, promoted count, and whether final order changed.
 - `diagnostics.curation.concentration`: author, thread, and URL concentration summaries for the final ranked set.
 - `diagnostics.curation.time_spread`: earliest/latest timestamps and date bucket counts when ranked candidates have timestamps.
-- `coverage.diagnostics`: gap-fill budget state, used and remaining query counts, whether query budget was exhausted, and whether ranked-count target gaps are report-only.
+- `coverage.diagnostics`: gap-fill budget state, used and remaining query counts, whether query budget was exhausted, and whether ranked-count target gaps are report-only. Ranked-count gaps do not trigger hidden query expansion; coverage gap fill only runs declared topic gaps.
 
-`summary.md` mirrors the most important diagnostics with `Quality Reasons`, `Topic Fit`, and `Topic Spread` sections. These sections are meant for audit and handoff, not synthesis.
+`summary.md` mirrors the most important diagnostics with `Target`, `Quality Reasons`, `Topic Fit`, and `Topic Spread` sections. These sections are meant for audit and handoff, not synthesis.
 
 ## Topic Fit
 

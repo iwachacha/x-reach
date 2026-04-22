@@ -10,8 +10,11 @@ from x_reach.cli.common import print_json
 
 
 def register_doctor_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = subparsers.add_parser("doctor", help="Check supported channel availability")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable diagnostics")
+    parser = subparsers.add_parser(
+        "doctor",
+        help="Check supported channel availability; exit-code readiness is diagnostic unless channels are required",
+    )
+    parser.add_argument("--json", action="store_true", help="Print machine-readable readiness diagnostics")
     parser.add_argument(
         "--probe",
         action="store_true",
@@ -21,16 +24,16 @@ def register_doctor_parser(subparsers: argparse._SubParsersAction[argparse.Argum
         "--require-channel",
         action="append",
         default=[],
-        help="Require this channel to be ready for exit-code purposes. Repeatable.",
+        help="Require this channel to be ready for exit-code/readiness purposes. Repeatable.",
     )
     parser.add_argument(
         "--require-channels",
-        help="Comma-separated channel names to require ready for exit-code purposes",
+        help="Comma-separated channel names to require ready for exit-code/readiness purposes",
     )
     parser.add_argument(
         "--require-all",
         action="store_true",
-        help="Require every registered channel to be ready for exit-code purposes",
+        help="Require every registered channel to be ready for exit-code/readiness purposes",
     )
     parser.set_defaults(handler=handle_doctor)
 

@@ -2,7 +2,7 @@
 
 This Twitter-only fork keeps the `x-reach` CLI and exposes `x_reach` as the primary Python package, but only ships the `twitter` channel.
 
-## Install the latest fork build
+## Installed CLI
 
 ```powershell
 uv tool install --force git+https://github.com/iwachacha/x-reach.git
@@ -18,7 +18,21 @@ x-reach skill --install
 x-reach version
 ```
 
-## Local install from source
+## Source checkout
+
+```powershell
+uv run x-reach version
+uv run x-reach doctor --json
+```
+
+Use `uv run x-reach ...` for development or an uninstalled checkout. Install the checkout as a PATH tool only when you want the local tree to replace the currently installed command:
+
+```powershell
+uv tool install --force .
+x-reach version
+```
+
+## Local install helpers
 
 ```powershell
 uv tool install .
@@ -59,7 +73,7 @@ $env:TWITTER_AUTH_TOKEN = "..."
 $env:TWITTER_CT0 = "..."
 ```
 
-Use `doctor --json --probe` before depending on Twitter/X search in downstream automation. `twitter status` confirms authentication, but it does not guarantee that live search still works.
+Use `doctor --json --probe --require-channel twitter` before depending on Twitter/X search in broad-run automation. `twitter status` confirms authentication, but it does not guarantee that live search still works. Plain `doctor --json` is diagnostic inventory unless you pass `--require-channel`, `--require-channels`, or `--require-all`.
 
 ## Integration discovery
 
@@ -69,6 +83,7 @@ x-reach doctor --json
 x-reach doctor --json --require-channel twitter
 x-reach doctor --json --require-all
 x-reach doctor --json --probe
+x-reach doctor --json --probe --require-channel twitter
 x-reach export-integration --client codex --format json
 x-reach export-integration --client codex --format json --profile runtime-minimal
 ```

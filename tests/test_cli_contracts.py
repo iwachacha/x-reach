@@ -162,6 +162,8 @@ def test_doctor_contract_json_shape(capsys, monkeypatch):
     assert payload["schema_version"]
     assert payload["summary"]["ready"] == 1
     assert payload["summary"]["exit_code"] == 0
+    assert payload["summary"]["exit_code_policy"] == "diagnostic_only"
+    assert "readiness" in payload["summary"]["readiness_hint"]
     assert payload["channels"][0]["name"] == "twitter"
     assert payload["channels"][0]["supports_probe"] is True
     assert payload["channels"][0]["probe_run_coverage"] == "not_run"

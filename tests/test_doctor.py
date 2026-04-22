@@ -118,6 +118,28 @@ def test_format_report_lists_required_markers():
     assert "Readiness policy: required channels = twitter" in plain
 
 
+def test_format_report_explains_diagnostic_only_exit_code():
+    report = doctor.format_report(
+        {
+            "twitter": {
+                "status": "warn",
+                "name": "twitter",
+                "description": "Twitter/X",
+                "message": "not authenticated",
+                "backends": ["twitter-cli"],
+                "supports_probe": True,
+                "probe_coverage": "partial",
+                "probe_run_coverage": "not_run",
+                "unprobed_operations": ["search", "user"],
+            },
+        },
+    )
+
+    plain = re.sub(r"\[[^\]]*\]", "", report)
+    assert "Readiness policy: diagnostic only" in plain
+    assert "Exit code: diagnostic only" in plain
+
+
 def test_doctor_payload_and_exit_code():
     results = {
         "twitter": {
@@ -130,7 +152,27 @@ def test_doctor_payload_and_exit_code():
 
     payload = doctor.make_doctor_payload(results, probe=True, required_channels=["twitter"])
     assert payload["summary"]["required_not_ready"] == ["twitter"]
+    assert payload["summary"]["exit_code_policy"] == "required_channels"
+    assert "required channels: twitter" in payload["summary"]["readiness_hint"]
     assert doctor.doctor_exit_code(results, required_channels=["twitter"]) == 1
+
+
+def test_doctor_payload_explains_ready_zero_exit_zero_without_required_channels():
+    results = {
+        "twitter": {
+            "name": "twitter",
+            "description": "Twitter/X",
+            "status": "warn",
+            "message": "auth missing",
+        },
+    }
+
+    payload = doctor.make_doctor_payload(results)
+
+    assert payload["summary"]["ready"] == 0
+    assert payload["summary"]["exit_code"] == 0
+    assert payload["summary"]["exit_code_policy"] == "diagnostic_only"
+    assert "--require-channel twitter" in payload["summary"]["readiness_hint"]
 
 
 def test_doctor_rejects_unknown_required_channel():

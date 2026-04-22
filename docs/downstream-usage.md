@@ -17,6 +17,7 @@ x-reach skill --install
 x-reach channels --json
 x-reach doctor --json
 x-reach doctor --json --probe
+x-reach doctor --json --probe --require-channel twitter
 x-reach collect --operation search --input "OpenAI" --limit 5 --json
 x-reach collect --operation user --input "openai" --json
 x-reach posts "openai" --limit 20 --min-likes 10 --topic-fit topic-fit.json --json
@@ -44,6 +45,7 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 - Keep narrow asks narrow and avoid auto-escalate behavior.
 - Large-scale collection is explicit opt-in.
 - Use `collect --spec` for broad, resumable, artifact-heavy X runs instead of ad hoc shell orchestration.
+- For broad-run readiness gates, use `doctor --json --probe --require-channel twitter`. Plain `doctor --json` reports diagnostic inventory; without a required channel, an informational not-ready channel does not necessarily make the command fail.
 - For broad runs with `--concurrency > 1`, set explicit pacing such as `--query-delay 1 --throttle-cooldown 30`; 409/429/conflict-style failures remain normal errors but can slow or stop unstarted queries through the throttle guard.
 - `plan candidates` keeps the default `--limit 20` unless the caller asks for more.
 - `plan candidates --json` exposes deterministic `quality_score`, `quality_reasons`, and aggregate reason counts so downstream review can audit utility signals without treating them as final judgment.
@@ -64,7 +66,7 @@ x-reach plan candidates --input .x-reach/evidence.jsonl --by post --max-per-auth
 ## Notes
 
 - For ordinary lightweight searches or one-off web lookups, use Codex's built-in browsing/search instead of X Reach.
-- Use `doctor --json --probe` when the caller needs operation-level readiness instead of authenticated-only Twitter/X status.
+- Use `doctor --json --probe --require-channel twitter` when the caller needs operation-level Twitter/X readiness to affect exit code.
 - Downstream projects do not need `.codex-plugin`, `.mcp.json`, or `x_reach/skills` files when they are using the CLI.
 
 

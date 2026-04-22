@@ -202,6 +202,10 @@ def summarize_results(
     )
     probe_attention = _probe_attention(results, probe=probe)
     readiness_mode = "all" if require_all else ("selected" if normalized_required else "none")
+    exit_code_policy, readiness_hint = _readiness_policy_summary(
+        readiness_mode,
+        normalized_required,
+    )
     return {
         "total": len(values),
         "ready": sum(1 for item in values if item["status"] == "ok"),
@@ -212,6 +216,8 @@ def summarize_results(
         "readiness_mode": readiness_mode,
         "required_channels": normalized_required,
         "exit_code": exit_code,
+        "exit_code_policy": exit_code_policy,
+        "readiness_hint": readiness_hint,
         "required_not_ready": _not_ready_names(required_items),
         "informational_not_ready": _not_ready_names(informational_items),
         "required": {
@@ -224,6 +230,27 @@ def summarize_results(
         },
         "probe_attention": probe_attention,
     }
+
+
+def _readiness_policy_summary(readiness_mode: str, required_channels: Sequence[str]) -> tuple[str, str]:
+    if readiness_mode == "none":
+        return (
+            "diagnostic_only",
+            (
+                "No channels are required for readiness exit-code purposes; warnings/off "
+                "statuses are informational. Use --require-channel twitter or --require-all "
+                "before broad mission runs."
+            ),
+        )
+    if readiness_mode == "all":
+        return (
+            "all_channels_required",
+            "Exit code reflects readiness for every registered channel.",
+        )
+    return (
+        "required_channels",
+        f"Exit code reflects readiness for required channels: {', '.join(required_channels)}.",
+    )
 
 
 def doctor_exit_code(
@@ -332,6 +359,10 @@ def format_report(
         )
     else:
         lines.append("[cyan]Readiness policy: diagnostic only (no required channels)[/cyan]")
+        lines.append(
+            "[cyan]Exit code: diagnostic only; add --require-channel twitter or --require-all "
+            "before broad mission runs[/cyan]"
+        )
     lines.extend(["", "[bold]Channels[/bold]"])
 
     for result in results.values():

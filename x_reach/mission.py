@@ -799,18 +799,26 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
     quality_reason_counts = count_quality_reasons(ranked)
     ranked_quality_diagnostics = quality_diagnostics(ranked)
     ranked_topic_fit_reason_counts = topic_fit_reason_counts(ranked)
+    filter_drop_counts = dict(candidate_payload["summary"].get("filter_drop_counts") or {})
+    for reason, count in keyword_drops.items():
+        filter_drop_counts[reason] = filter_drop_counts.get(reason, 0) + count
+    for reason, count in diversity_drops.items():
+        filter_drop_counts[reason] = filter_drop_counts.get(reason, 0) + count
+    target_posts_diagnostics = _target_posts_diagnostics(
+        target_posts=int(spec["target_posts"]),
+        ranked_count=len(ranked),
+        candidate_summary=candidate_payload.get("summary") or {},
+        filter_drop_counts=filter_drop_counts,
+        topic_spread=topic_spread,
+    )
     diagnostics = _build_curation_diagnostics(
         ranked,
         topic_spread=topic_spread,
         quality_reason_counts=quality_reason_counts,
         quality_diagnostics=ranked_quality_diagnostics,
         topic_fit=candidate_payload["summary"].get("topic_fit") or {},
+        target_posts=target_posts_diagnostics,
     )
-    filter_drop_counts = dict(candidate_payload["summary"].get("filter_drop_counts") or {})
-    for reason, count in keyword_drops.items():
-        filter_drop_counts[reason] = filter_drop_counts.get(reason, 0) + count
-    for reason, count in diversity_drops.items():
-        filter_drop_counts[reason] = filter_drop_counts.get(reason, 0) + count
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": utc_timestamp(),
@@ -823,6 +831,7 @@ def _build_curated_payload(raw_jsonl: Path, spec: dict[str, Any]) -> dict[str, A
         "topic_fit_reason_counts": ranked_topic_fit_reason_counts,
         "topic_fit": candidate_payload["summary"].get("topic_fit") or {},
         "topic_spread": topic_spread,
+        "target_posts_diagnostics": target_posts_diagnostics,
         "diagnostics": diagnostics,
         "ranked_count": len(ranked),
         "ranked_candidates": ranked,
@@ -1207,9 +1216,16 @@ def _build_coverage_payload(
             ),
             "gap_fill_disabled": not bool(initial.get("enabled")),
             "target_gap_report_only": target_gap > 0,
+            "target_gap_reason": _coverage_target_gap_reason(target_gap),
             "final_topic_gap_count": final_topic_gap_count,
         },
     }
+
+
+def _coverage_target_gap_reason(target_gap: int) -> str | None:
+    if target_gap <= 0:
+        return None
+    return "ranked_count_below_target; coverage gap fill only runs declared topic gaps"
 
 
 def _combine_batch_payloads(primary: dict[str, Any], secondary: dict[str, Any] | None) -> dict[str, Any]:
@@ -1543,8 +1559,10 @@ def _build_curation_diagnostics(
     quality_reason_counts: dict[str, int],
     quality_diagnostics: dict[str, Any],
     topic_fit: dict[str, Any],
+    target_posts: dict[str, Any],
 ) -> dict[str, Any]:
     return {
+        "target_posts": target_posts,
         "quality_reason_counts": quality_reason_counts,
         "quality_diagnostics": quality_diagnostics,
         "topic_fit": topic_fit,
@@ -1561,6 +1579,49 @@ def _build_curation_diagnostics(
             ),
         },
         "time_spread": _time_spread_summary(candidates),
+    }
+
+
+def _target_posts_diagnostics(
+    *,
+    target_posts: int,
+    ranked_count: int,
+    candidate_summary: dict[str, Any],
+    filter_drop_counts: dict[str, int],
+    topic_spread: dict[str, Any],
+) -> dict[str, Any]:
+    gap = max(target_posts - ranked_count, 0)
+    reasons: list[str] = []
+    if gap > 0:
+        candidate_count = int(candidate_summary.get("candidate_count") or 0)
+        filtered_count = int(candidate_summary.get("filtered_candidate_count") or 0)
+        if candidate_count < target_posts:
+            reasons.append("collection_yield_below_target")
+        if filter_drop_counts:
+            reasons.append("filters_dropped_candidates")
+        if any(str(reason).startswith("topic_fit_") for reason in filter_drop_counts):
+            reasons.append("topic_fit_filters_dropped_candidates")
+        if any(str(reason).startswith("max_posts_per_") for reason in filter_drop_counts):
+            reasons.append("diversity_limits_dropped_candidates")
+        if filtered_count > ranked_count:
+            reasons.append("post_filter_ranking_pool_larger_than_final_ranked")
+        if topic_spread.get("requested") and topic_spread.get("status") not in {
+            "not_requested",
+            "already_satisfied",
+            "applied",
+        }:
+            reasons.append("topic_spread_not_fully_applied")
+        if not reasons:
+            reasons.append("insufficient_ranked_candidates")
+    return {
+        "target": target_posts,
+        "ranked": ranked_count,
+        "gap": gap,
+        "status": "met" if gap == 0 else "short",
+        "reasons": reasons,
+        "candidate_count": int(candidate_summary.get("candidate_count") or 0),
+        "filtered_candidate_count": int(candidate_summary.get("filtered_candidate_count") or 0),
+        "filter_drop_counts": {key: filter_drop_counts[key] for key in sorted(filter_drop_counts)},
     }
 
 
@@ -1706,6 +1767,7 @@ def _build_result_payload(
     batch_summary = batch_payload.get("summary") or {}
     candidate_summary = curated_payload.get("candidate_summary") or {}
     quality_diagnostics = curated_payload.get("quality_diagnostics") or {}
+    target_diagnostics = curated_payload.get("target_posts_diagnostics") or {}
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": utc_timestamp(),
@@ -1738,6 +1800,9 @@ def _build_result_payload(
             "unique_candidates": candidate_summary.get("candidate_count", 0),
             "filtered_candidates": candidate_summary.get("filtered_candidate_count", 0),
             "ranked_candidates": curated_payload.get("ranked_count", 0),
+            "ranked_target_gap": target_diagnostics.get("gap", 0),
+            "ranked_target_met": target_diagnostics.get("status") == "met",
+            "ranked_shortfall_reasons": target_diagnostics.get("reasons", []),
             "filter_drop_counts": curated_payload.get("filter_drop_counts", {}),
             "quality_reason_counts": curated_payload.get("quality_reason_counts", {}),
             "quality_scoring_version": quality_diagnostics.get("scoring_version"),
@@ -1749,6 +1814,10 @@ def _build_result_payload(
             "coverage_initial_gaps": (coverage_payload.get("initial") or {}).get("gap_count", 0),
             "coverage_final_gaps": (coverage_payload.get("final") or {}).get("gap_count", 0),
             "coverage_target_gap": (coverage_payload.get("final") or {}).get("target_gap", 0),
+            "coverage_target_gap_report_only": (coverage_payload.get("diagnostics") or {}).get(
+                "target_gap_report_only",
+                False,
+            ),
             "coverage_query_budget_exhausted": (coverage_payload.get("diagnostics") or {}).get(
                 "query_budget_exhausted",
                 False,
@@ -1818,9 +1887,28 @@ def _render_summary_markdown(
         f"- Canonical items: {canonical_summary.get('items', 0)}",
         f"- Ranked candidates: {curated_payload.get('ranked_count', 0)}",
         "",
-        "## Filter Drops",
+        "## Target",
         "",
     ]
+    target_diagnostics = curated_payload.get("target_posts_diagnostics") or {}
+    target_reasons = target_diagnostics.get("reasons") or []
+    lines.extend(
+        [
+            f"- Target posts: {target_diagnostics.get('target', plan_payload['target_posts'])}",
+            f"- Ranked candidates: {target_diagnostics.get('ranked', curated_payload.get('ranked_count', 0))}",
+            f"- Ranked target gap: {target_diagnostics.get('gap', 0)}",
+            f"- Status: {target_diagnostics.get('status') or 'unknown'}",
+        ]
+    )
+    if target_reasons:
+        lines.append(f"- Shortfall reasons: {', '.join(str(reason) for reason in target_reasons)}")
+    lines.extend(
+        [
+            "",
+            "## Filter Drops",
+            "",
+        ]
+    )
     filter_drop_counts = curated_payload.get("filter_drop_counts") or {}
     if filter_drop_counts:
         lines.extend(f"- {reason}: {count}" for reason, count in filter_drop_counts.items())

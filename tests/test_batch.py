@@ -329,3 +329,61 @@ def test_batch_resume_ignores_pacing_changes(tmp_path):
     assert resumed_exit == 0
     assert resumed_payload["queries"][0]["status"] == "skipped"
     assert resumed_payload["queries"][0]["reason"] == "resume_existing"
+
+
+def test_batch_resume_ignores_adapter_applied_search_defaults(tmp_path):
+    plan_path = tmp_path / "plan.json"
+    save_path = tmp_path / "ledger.jsonl"
+    _write_plan(plan_path, ["OpenAI"])
+    calls = []
+
+    class _InitialClient:
+        def collect(self, channel, operation, value, **kwargs):
+            calls.append(value)
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=[],
+                raw={"value": value, "kwargs": kwargs},
+                meta={
+                    "input": value,
+                    "requested_limit": kwargs.get("limit"),
+                    "quality_profile": kwargs.get("quality_profile"),
+                    "search_type": "top",
+                    "raw_mode": "none",
+                    "item_text_mode": "snippet",
+                    "item_text_max_chars": 280,
+                    "applied_defaults": {
+                        "search_type": "top",
+                        "raw_mode": "none",
+                        "item_text_mode": "snippet",
+                        "item_text_max_chars": 280,
+                    },
+                },
+                error=None,
+            )
+
+    first_payload, first_exit = run_batch_plan(
+        plan_path,
+        save_path=save_path,
+        client_factory=_InitialClient,
+    )
+    assert first_exit == 0
+    assert first_payload["summary"]["ok"] == 1
+
+    class _FailingClient:
+        def collect(self, channel, operation, value, **kwargs):
+            raise AssertionError("resume should not replay adapter-defaulted queries")
+
+    resumed_payload, resumed_exit = run_batch_plan(
+        plan_path,
+        save_path=save_path,
+        resume=True,
+        client_factory=_FailingClient,
+    )
+
+    assert calls == ["OpenAI"]
+    assert resumed_exit == 0
+    assert resumed_payload["queries"][0]["status"] == "skipped"
+    assert resumed_payload["queries"][0]["reason"] == "resume_existing"

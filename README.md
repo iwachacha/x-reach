@@ -28,7 +28,7 @@ Supported channels:
 
 The live contract is always `x-reach channels --json`.
 
-## Install the latest fork build
+## Installed CLI
 
 ```powershell
 uv tool install --force git+https://github.com/iwachacha/x-reach.git
@@ -44,7 +44,15 @@ x-reach skill --install
 x-reach version
 ```
 
-For a source checkout:
+## Source Checkout
+
+```powershell
+uv run x-reach version
+uv run x-reach doctor --json
+uv run x-reach collect --spec mission.json --output-dir .x-reach/missions/openai-research --dry-run --json
+```
+
+Use `uv run x-reach ...` when you are working from an uninstalled checkout or testing local edits. If you want the checkout installed as the `x-reach` tool on your PATH, install it explicitly:
 
 ```powershell
 uv tool install --force .
@@ -58,6 +66,7 @@ x-reach --help
 x-reach channels --json
 x-reach doctor --json
 x-reach doctor --json --probe
+x-reach doctor --json --probe --require-channel twitter
 x-reach search "OpenAI" --limit 5 --json
 x-reach search "AI agent" --limit 5 --quality-profile precision --json
 x-reach hashtag "OpenAI" --limit 5 --json
@@ -120,6 +129,7 @@ The public CLI contract stays the same, but the implementation now lives under `
 - Quality filtering exposes `quality_filter.dropped_samples` diagnostics so filter thresholds can be audited from a small sample of dropped posts.
 - `plan candidates --drop-noise` and mission `exclude.drop_low_content_posts` remove obvious low-content quote posts before ranking.
 - For declarative large-scale X collection, use `collect --spec`: it runs a mission plan, writes raw/canonical/ranked artifacts, and leaves a manifest for resumable handoff.
+- Before a broad mission run, treat plain `doctor --json` as diagnostic inventory. Use `doctor --json --probe --require-channel twitter` when exit code should gate Twitter/X readiness; without a required channel, `summary.ready=0` can still pair with `summary.exit_code=0`.
 - For broad runs that use `--concurrency > 1`, add explicit pacing such as `--query-delay 1 --throttle-cooldown 30`; throttle-sensitive 409/429/conflict errors are reported in diagnostics and can trip the bounded throttle guard instead of continuing to start every remaining query.
 - Mission `coverage` is opt-in and fills only explicit topic gaps; ranked-count gaps are reported but do not trigger automatic query expansion.
 - Mission `topic_fit` lets the caller declare required, preferred, exact, negative, and synonym-based topic-fit rules. X Reach uses only those rules for deterministic filtering and diagnostics; it does not infer domain-specific truth or importance.

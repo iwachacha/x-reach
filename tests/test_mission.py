@@ -243,10 +243,13 @@ def test_mission_run_writes_raw_canonical_ranked_and_summary(tmp_path):
     assert payload["summary"]["items_seen"] == 3
     assert payload["summary"]["canonical_items"] == 3
     assert payload["summary"]["ranked_candidates"] == 2
+    assert payload["summary"]["ranked_target_met"] is True
+    assert payload["summary"]["ranked_target_gap"] == 0
     assert payload["summary"]["filter_drop_counts"]["excluded_keyword"] == 1
     assert payload["summary"]["quality_reason_counts"]["original"] == 2
     assert payload["summary"]["topic_spread_status"] == "not_requested"
     assert payload["diagnostics"]["query_yield"][0]["query_id"] == "q01"
+    assert payload["diagnostics"]["curation"]["target_posts"]["status"] == "met"
     assert payload["diagnostics"]["curation"]["concentration"]["authors"]["unique"] == 1
     assert (output_dir / "raw.jsonl").exists()
     assert (output_dir / "canonical.jsonl").exists()
@@ -262,6 +265,78 @@ def test_mission_run_writes_raw_canonical_ranked_and_summary(tmp_path):
     assert ranked[0]["quality_score"] > ranked[1]["quality_score"]
     assert calls[0]["kwargs"]["raw_mode"] == "full"
     assert calls[0]["kwargs"]["item_text_mode"] == "full"
+
+
+def test_mission_resume_skips_plan_with_adapter_defaulted_search_type(tmp_path):
+    spec_path = tmp_path / "mission.json"
+    output_dir = tmp_path / "mission-output"
+    _write_spec(
+        spec_path,
+        {
+            "objective": "OpenAI resume safety",
+            "queries": ["OpenAI resume"],
+            "target_posts": 1,
+            "quality_profile": "balanced",
+            "exclude": {"drop_low_content_posts": False},
+            "retention": {"raw_mode": "full", "item_text_mode": "full"},
+        },
+    )
+    calls = []
+
+    class _InitialClient:
+        def collect(self, channel, operation, value, **kwargs):
+            calls.append(value)
+            return build_result(
+                ok=True,
+                channel=channel,
+                operation=operation,
+                items=[
+                    _post(
+                        "resume",
+                        "alice",
+                        "OpenAI resume safety report with concrete operational notes",
+                        likes=25,
+                    )
+                ],
+                raw={"value": value, "kwargs": kwargs},
+                meta={
+                    "input": value,
+                    "requested_limit": kwargs.get("limit"),
+                    "search_type": "top",
+                    "exclude": kwargs.get("exclude"),
+                    "quality_profile": kwargs.get("quality_profile"),
+                    "raw_mode": kwargs.get("raw_mode"),
+                    "item_text_mode": kwargs.get("item_text_mode"),
+                    "query_tokens": ["openai", "resume"],
+                    "applied_defaults": {"search_type": "top"},
+                },
+                error=None,
+            )
+
+    first_payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-resume-defaults",
+        client_factory=_InitialClient,
+    )
+    assert first_payload["summary"]["queries_ok"] == 1
+
+    class _FailingClient:
+        def collect(self, channel, operation, value, **kwargs):
+            raise AssertionError("mission resume should not replay the completed plan")
+
+    resumed_payload = run_mission_spec(
+        spec_path,
+        output_dir=output_dir,
+        run_id="run-resume-defaults",
+        resume=True,
+        client_factory=_FailingClient,
+    )
+
+    assert calls == ["OpenAI resume"]
+    assert resumed_payload["summary"]["queries_skipped"] == 1
+    assert resumed_payload["batch"]["queries"][0]["reason"] == "resume_existing"
+    assert resumed_payload["summary"]["ranked_candidates"] == 1
 
 
 def test_mission_run_writes_topic_agnostic_judge_fallback_artifact(tmp_path):
@@ -946,6 +1021,16 @@ def test_mission_coverage_target_gap_is_report_only(tmp_path):
     assert payload["summary"]["coverage_final_gaps"] == 0
     assert payload["coverage"]["initial"]["target_gap"] == 2
     assert payload["coverage"]["initial"]["topic_gap_count"] == 0
+    assert payload["coverage"]["diagnostics"]["target_gap_report_only"] is True
+    assert payload["coverage"]["diagnostics"]["target_gap_reason"] == (
+        "ranked_count_below_target; coverage gap fill only runs declared topic gaps"
+    )
+    assert payload["summary"]["ranked_target_gap"] == 2
+    assert payload["summary"]["ranked_target_met"] is False
+    assert payload["summary"]["ranked_shortfall_reasons"] == ["collection_yield_below_target"]
+    assert payload["summary"]["coverage_target_gap_report_only"] is True
+    assert payload["diagnostics"]["curation"]["target_posts"]["status"] == "short"
+    assert payload["diagnostics"]["curation"]["target_posts"]["gap"] == 2
     assert payload["coverage"]["executed"] is False
     assert not (output_dir / "mission.coverage.batch.json").exists()
 

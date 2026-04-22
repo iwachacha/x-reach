@@ -20,6 +20,7 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 - `x-reach channels --json`
 - `x-reach doctor --json`
 - `x-reach doctor --json --probe`
+- `x-reach doctor --json --probe --require-channel twitter`
 - `x-reach collect --operation <op> --input <value> --json`
 - `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`
 - `x-reach schema collection-result --json`
@@ -40,6 +41,7 @@ X Reach is the X/Twitter-only split of Agent Reach for Codex-style workflows.
 - X Reach does not choose final request scope, synthesis, publishing, or final selection
 - X Reach is topic-agnostic; examples should not become domain-specific runtime defaults
 - Use `collect --json` for narrow collection and `collect --spec` for broad, resumable, artifact-heavy X research runs
+- Use `doctor --json --probe --require-channel twitter` when broad-run readiness should affect exit code
 - Broad collection exposes deterministic diagnostics such as `quality_filter.dropped_samples`, `low_content` drops, and opt-in mission `coverage`
 - Mission `coverage` fills only explicit topic gaps; ranked-count gaps are report-only
 - Mission `judge` is schema-first and falls back to deterministic ranked candidates until an explicit judge runner exists
