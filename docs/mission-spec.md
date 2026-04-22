@@ -15,6 +15,14 @@ x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --conc
 x-reach collect --spec mission.json --output-dir .x-reach/missions/my-run --resume --json
 ```
 
+## Dry-Run JSON Contract
+
+`x-reach collect --spec mission.json --dry-run --json` is a public JSON-first planning contract. It validates and normalizes the mission spec, applies CLI pacing overrides, returns the deterministic plan envelope, and does not create mission output files.
+
+The same envelope family is returned by `XReachClient.mission_plan()` and `XReachClient.collect_spec(..., dry_run=True)`. Consumers can rely on these top-level fields being present while allowing additive fields: `schema_version`, `generated_at`, `command`, `cli_version`, `dry_run`, `spec`, `output_dir`, `run_id`, `objective`, `quality_profile`, `target_posts`, `topic_fit`, `pacing`, `judge`, `query_count`, `normalized_spec`, `batch_plan`, and `outputs`.
+
+The `outputs` object is also additive. It includes at least the named artifact paths `raw_jsonl`, `canonical_jsonl`, `ranked_jsonl`, and `manifest` so downstream tools can preview where the write-producing mission run will place the raw, canonical, curated, and manifest layers.
+
 ## Minimal Spec
 
 ```json
@@ -238,7 +246,8 @@ No LLM/VLM call is made by this release. If `judge.enabled=true`, x-reach writes
 - One-round deterministic coverage gap fill for explicit coverage topics. Ranked-count gaps remain report-only unless a missing topic can generate a follow-up query.
 - `x-reach schema mission-spec --json`.
 - `x-reach schema judge-result --json` plus judge fallback records for opt-in mission specs.
-- SDK helpers: `XReachClient.mission_plan()` and `XReachClient.collect_spec()`.
+- Public dry-run plan envelope for `x-reach collect --spec ... --dry-run --json`.
+- SDK helpers: `XReachClient.mission_plan()` and `XReachClient.collect_spec()` return the same deterministic plan envelope for mission planning and dry runs.
 
 ## Still Deferred
 

@@ -10,6 +10,7 @@ Its design center is agent-assisted, reproducible X collection: stable JSON cont
 - `x-reach doctor --json`
 - `x-reach doctor --json --probe`
 - `x-reach collect --operation <op> --input <value> --json`
+- `x-reach collect --spec mission.json --dry-run --json`
 - `x-reach collect --spec mission.json --output-dir .x-reach/missions/<run> --json`
 - `x-reach schema collection-result --json`
 - `x-reach schema mission-spec --json`
@@ -80,7 +81,7 @@ x-reach collect --operation tweet --input "https://x.com/OpenAI/status/204229604
 
 Pull requests and pushes run `.github/workflows/pytest.yml` as the required CI gate. It keeps three pillars live: `ruff check`, scoped `mypy` over the contract-bearing `x_reach/` modules, and `pytest`.
 
-Those gates are intended to protect the stable public surface: `x-reach --help`, `x-reach channels --json`, `x-reach doctor --json`, `x-reach doctor --json --probe`, the packaged schema commands, `x-reach plan candidates --input ... --json`, `x-reach export-integration --client codex --format json`, and the documented `from x_reach import XReachClient` SDK surface.
+Those gates are intended to protect the stable public surface: `x-reach --help`, `x-reach channels --json`, `x-reach doctor --json`, `x-reach doctor --json --probe`, the packaged schema commands, `x-reach collect --spec ... --dry-run --json`, `x-reach plan candidates --input ... --json`, `x-reach export-integration --client codex --format json`, and the documented `from x_reach import XReachClient` SDK surface.
 
 `.github/workflows/x-reach-smoke.yml` is a manual observational workflow, not a required release gate. It always captures `channels --json`, `doctor --json`, ledger summary, and candidate-planning artifacts. Live `doctor --json --probe` and `collect` are soft-fail observational checks because auth state and Twitter/X runtime behavior can vary outside the repository.
 

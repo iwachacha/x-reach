@@ -111,13 +111,24 @@ def test_x_reach_client_plan_candidates_contract(client: XReachClient, tmp_path:
     assert candidate["extras"]["seen_in"][0]["run_id"] == "sdk-contract-run"
 
 
-def test_x_reach_client_mission_plan_contract(client: XReachClient, tmp_path: Path):
+def test_x_reach_client_mission_plan_contract(
+    client: XReachClient,
+    tmp_path: Path,
+    assert_mission_plan_envelope,
+):
     spec_path = _write_mission_spec(tmp_path / "mission.json")
     output_dir = tmp_path / "mission-output"
 
     payload = client.mission_plan(spec_path, output_dir=output_dir, run_id="sdk-mission-run")
 
-    _assert_mission_plan_envelope(payload, spec_path=spec_path, output_dir=output_dir)
+    assert_mission_plan_envelope(
+        payload,
+        spec_path=spec_path,
+        output_dir=output_dir,
+        objective="SDK contract mission",
+        quality_profile="balanced",
+        target_posts=5,
+    )
     assert payload["run_id"] == "sdk-mission-run"
     assert payload["query_count"] == 1
     assert payload["normalized_spec"]["queries"][0]["input"] == "OpenAI"
@@ -126,7 +137,11 @@ def test_x_reach_client_mission_plan_contract(client: XReachClient, tmp_path: Pa
     assert payload["outputs"]["manifest"] == str(output_dir / "mission-result.json")
 
 
-def test_x_reach_client_collect_spec_dry_run_contract(client: XReachClient, tmp_path: Path):
+def test_x_reach_client_collect_spec_dry_run_contract(
+    client: XReachClient,
+    tmp_path: Path,
+    assert_mission_plan_envelope,
+):
     spec_path = _write_mission_spec(tmp_path / "mission.json")
     output_dir = tmp_path / "mission-output"
 
@@ -139,35 +154,18 @@ def test_x_reach_client_collect_spec_dry_run_contract(client: XReachClient, tmp_
         throttle_cooldown_seconds=30,
     )
 
-    _assert_mission_plan_envelope(payload, spec_path=spec_path, output_dir=output_dir)
+    assert_mission_plan_envelope(
+        payload,
+        spec_path=spec_path,
+        output_dir=output_dir,
+        objective="SDK contract mission",
+        quality_profile="balanced",
+        target_posts=5,
+    )
     assert payload["dry_run"] is True
     assert payload["pacing"]["query_delay_seconds"] == 1
     assert payload["pacing"]["throttle_cooldown_seconds"] == 30
     assert not output_dir.exists()
-
-
-def _assert_mission_plan_envelope(
-    payload: dict[str, Any],
-    *,
-    spec_path: Path,
-    output_dir: Path,
-) -> None:
-    assert payload["schema_version"]
-    assert payload["generated_at"]
-    assert payload["command"] == "collect spec"
-    assert payload["cli_version"]
-    assert payload["dry_run"] is True
-    assert payload["spec"] == str(spec_path)
-    assert payload["output_dir"] == str(output_dir)
-    assert payload["objective"] == "SDK contract mission"
-    assert payload["quality_profile"] == "balanced"
-    assert payload["target_posts"] == 5
-    assert isinstance(payload["topic_fit"], dict)
-    assert isinstance(payload["pacing"], dict)
-    assert isinstance(payload["judge"], dict)
-    assert isinstance(payload["normalized_spec"], dict)
-    assert isinstance(payload["batch_plan"], dict)
-    assert {"raw_jsonl", "canonical_jsonl", "ranked_jsonl", "manifest"}.issubset(payload["outputs"])
 
 
 def _write_candidate_fixture(path: Path) -> Path:

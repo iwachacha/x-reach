@@ -240,6 +240,71 @@ def test_plan_candidates_contract_json_shape(tmp_path, capsys):
     assert payload["candidates"][0]["extras"]["seen_in"][0]["run_id"] == "contract-run"
 
 
+def test_collect_spec_dry_run_json_contract(tmp_path, capsys, assert_mission_plan_envelope):
+    spec_path = _write_mission_spec(tmp_path / "mission.json")
+    output_dir = tmp_path / "mission-output"
+
+    assert (
+        main(
+            [
+                "collect",
+                "--spec",
+                str(spec_path),
+                "--output-dir",
+                str(output_dir),
+                "--run-id",
+                "cli-contract-run",
+                "--dry-run",
+                "--query-delay",
+                "1",
+                "--throttle-cooldown",
+                "30",
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert_mission_plan_envelope(
+        payload,
+        spec_path=spec_path,
+        output_dir=output_dir,
+        objective="CLI contract mission",
+        quality_profile="balanced",
+        target_posts=5,
+    )
+    assert payload["run_id"] == "cli-contract-run"
+    assert payload["query_count"] == 1
+    assert payload["normalized_spec"]["queries"][0]["input"] == "OpenAI"
+    assert payload["batch_plan"]["queries"][0]["input"] == "OpenAI"
+    assert payload["pacing"]["query_delay_seconds"] == 1.0
+    assert payload["pacing"]["throttle_cooldown_seconds"] == 30.0
+    assert not output_dir.exists()
+
+
+def test_collect_spec_dry_run_json_rejects_invalid_spec_without_stdout(tmp_path, capsys):
+    spec_path = tmp_path / "mission.json"
+    spec_path.write_text("{", encoding="utf-8")
+
+    result = main(
+        [
+            "collect",
+            "--spec",
+            str(spec_path),
+            "--dry-run",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert captured.out == ""
+    assert "Could not run mission spec:" in captured.err
+
+
 def test_export_integration_full_contract_json_shape(capsys):
     assert main(["export-integration", "--client", "codex", "--format", "json"]) == 0
 
@@ -351,6 +416,21 @@ def _write_candidate_fixture(path: Path) -> Path:
     )
     record = build_ledger_record(result, run_id="contract-run", input_value="OpenAI")
     path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
+def _write_mission_spec(path: Path) -> Path:
+    path.write_text(
+        json.dumps(
+            {
+                "objective": "CLI contract mission",
+                "queries": ["OpenAI"],
+                "target_posts": 5,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     return path
 
 
